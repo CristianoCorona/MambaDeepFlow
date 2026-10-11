@@ -47,6 +47,8 @@ def load_eval(run, split):
 
 
 def groups(a_runs, b_runs, split, k):
+    if len(a_runs) < 2 or len(b_runs) < 2:
+        sys.exit("Need at least 2 runs per group (sample std)")
     ea = [load_eval(r, split) for r in a_runs]
     eb = [load_eval(r, split) for r in b_runs]
     print(f"Group A (n={len(ea)}): " + ", ".join(Path(r).name for r in a_runs))

@@ -156,3 +156,37 @@ p, vx, vy are exactly 0 inside the airfoil (raw and after normalisation). This i
 *normalised* input channels (runTrain.py, runTest.py); `scripts/evaluate.py` reproduces this for
 `L1_denorm` so that the number is comparable with the original "Denormalized error", but that metric is
 therefore not in physical units.
+
+---
+
+## 2026-10-11 — Independent code review (fresh-context agent) and corrections
+
+**Context / why.** Before the long runs, a fresh-context agent compared the new code with `train/*.py`,
+limited to correctness (normalisation, loss, optimiser, LR decay, split, denormalisation, metrics,
+model, seeding, `run_original.py`), and cross-checked the notebook numbers against `setup-log.md` and
+a re-run of `scripts/verify_loader.py`.
+
+**Result.** No correctness issue found; D1-D9 implemented as declared. Confirmed among others: same
+normalisation order and maxima; `nn.L1Loss` mean; Adam created after `.cuda()` with betas (0.5, 0.999);
+`computeLR` imported from `train/utils.py`, 17 epochs for 10k iterations (6e-4 for epochs 0-8, then
+4.83e-4 ... 7.38e-5); split 6000/400 with no overlap, equal to `splits/val_seed0.txt`; model has
+2332035 parameters; `run_original.py` derived seed for seed 0 = 3626764237, equal to the seed printed by
+the unmodified `runTrain.py` in a mechanics test (scratch run, not part of 6c), and nothing written to `train/`.
+All notebook numbers of the setup and 6a entries matched their sources.
+
+**Minor findings, fixed in this commit:**
+1. `mdf/data.py`: the split-file check was silently skipped if the file was missing; now raises.
+2. `scripts/evaluate.py --split val` read the split file without verifying it; it now recomputes the split,
+   compares it with the file and with `val_files_sha256` in the run's `config.json`.
+3. `scripts/compare_runs.py groups`: with a single run per group the sample std is NaN and the verdict
+   was misleading; now requires >= 2 runs per group.
+
+**Corrections to earlier entries (not rewritten):**
+- 6a entry: "at most 2 float32 ulps for values below 1" is wrong. Measured by the reviewer: inputs <= 1 ulp,
+  vx/vy targets <= 4 ulps, pressure up to ~1.2e6 ulps at values near zero after mean subtraction (rounding
+  of the subtraction dominates). The correct statement is the absolute bound: max |new - original cast to
+  float32| <= 2.4e-7 for all channels. "2294028 of 3276800" is the number of pressure values that differ
+  at all (1306013 of them by exactly 1 ulp).
+- Pipeline-design entry: "peak RSS ~7.9 GB" should read ~7.5 GiB (7908624 kB).
+
+**Open questions.** None.

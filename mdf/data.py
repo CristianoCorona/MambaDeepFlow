@@ -146,7 +146,9 @@ def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None):
     """Return (train_ds, val_ds, split_info). If split_file is given, it must match the computed split."""
     all_files = list_files(train_dir)
     train_files, val_files = split_files(all_files, split_seed)
-    if split_file is not None and Path(split_file).exists():
+    if split_file is not None:
+        if not Path(split_file).exists():
+            raise FileNotFoundError(f"Split file {split_file} not found")
         committed = read_split_file(split_file)
         if committed != val_files:
             raise RuntimeError(f"Computed validation split differs from {split_file}")
@@ -160,6 +162,14 @@ def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None):
         "split_file": str(Path(split_file).relative_to(REPO_ROOT)) if split_file else None,
     }
     return FlowDataset(train_dir, train_files), FlowDataset(train_dir, val_files), info
+
+
+def load_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None):
+    """Validation set only, checked against the committed split file (if given)."""
+    _, val_files = split_files(list_files(train_dir), split_seed)
+    if split_file is not None and read_split_file(split_file) != val_files:
+        raise RuntimeError(f"Computed validation split differs from {split_file}")
+    return FlowDataset(train_dir, val_files)
 
 
 def load_test(test_dir=TEST_DIR):

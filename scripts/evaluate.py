@@ -89,8 +89,10 @@ def main():
         print("NOTE: test set - for the equivalence check and final results only, never for selection.")
         ds = mdata.load_test()
     else:
-        files = mdata.read_split_file(mdata.SPLITS_DIR / f"val_seed{mdata.SPLIT_SEED}.txt")
-        ds = mdata.FlowDataset(mdata.TRAIN_DIR, files)
+        ds = mdata.load_val(split_file=mdata.SPLITS_DIR / f"val_seed{mdata.SPLIT_SEED}.txt")
+        expected = cfg.get("split", {}).get("val_files_sha256")
+        if expected and expected != mdata.file_list_sha256(ds.files):
+            sys.exit("Validation split differs from the one recorded in config.json")
     loader = DataLoader(ds, batch_size=1, shuffle=False)
 
     net = models.build_model(model_name, expo=expo)
