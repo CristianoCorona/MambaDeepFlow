@@ -310,3 +310,14 @@ baseline runs wrote nothing into `train/`.
 
 **Open questions.** Calibration of the number of iterations (10k / 40k / 80k) on validation L1: next step,
 not started.
+
+---
+
+## 2026-10-11 — Correction to the 6b/6c entry
+
+- "Group B shows a slightly higher mean on 5 of 7 metrics" is wrong: in the table B is higher on 6 of 7
+  (all except rel_p, where A is higher). The conclusion (differences far below one run-to-run std,
+  not interpretable with n = 3) is unchanged.
+- "GPU idle at 40 C before the runs": that reading (40 C, P8, 12 MiB used) was taken before the 6b runs,
+  not immediately before the 6c runs, which followed the 6b runs after a pause of a few minutes.
+- Peak RSS of the original runs: 7736928-7938784 kB = 7.38-7.57 GiB (written as "~7.4 GiB").
