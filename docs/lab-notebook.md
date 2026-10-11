@@ -321,3 +321,70 @@ not started.
 - "GPU idle at 40 C before the runs": that reading (40 C, P8, 12 MiB used) was taken before the 6b runs,
   not immediately before the 6c runs, which followed the 6b runs after a pause of a few minutes.
 - Peak RSS of the original runs: 7736928-7938784 kB = 7.38-7.57 GiB (written as "~7.4 GiB").
+
+---
+
+## 2026-10-11 — Airfoil profiles in the training, validation and test files (read-only check)
+
+**Context / why.** Before calibrating the training budget on validation, we need to know what the validation
+set measures: generalisation to unseen airfoil shapes, or to unseen flow conditions on shapes seen in training.
+
+**Action.** `data/dataGen.py` names each sample `<airfoil>_<int(fsX*100)>_<int(fsY*100)>.npz`, where `<airfoil>`
+is the basename of the airfoil coordinate file; so the profile is `name.rsplit("_", 2)[0]` (6 training files have
+underscores in the airfoil name: `davis_corrected`, `hybrid_1`). `data/shearAirfoils.py` would append a
+`_<shear*1000>` suffix (950-1050) to sheared variants; no file name has that extra field, so the 6.4k set contains
+no sheared variants identifiable by name. New read-only script `scripts/airfoil_overlap.py` (file names only; it
+recomputes the fixed split and checks it against `splits/val_seed0.txt`; the split is not changed).
+
+**Evidence.** `python scripts/airfoil_overlap.py`:
+
+| Set              | Files | Distinct profiles | Files per profile (min / median / max) |
+|------------------|-------|-------------------|----------------------------------------|
+| train + val      | 6400  | 1456              | 1 / 4 / 12                             |
+| train            | 6000  | 1448              | 1 / 4 / 12                             |
+| val              | 400   | 341               | 1 / 1 / 4                              |
+| test             | 90    | 30                | 3 / 3 / 3                              |
+
+- Validation: 333 of 341 profiles also occur in train; **390 of 400 validation files share their profile with
+  at least one training file** (only 8 profiles / 10 files are unseen: ag46c03, e855, goe590, naca65210, s6061,
+  s8035, s9026, sd7034).
+- Test: **0 of 30 profiles occur in train or val**; the test set is profile-disjoint from the 6.4k set.
+
+**Consequence.** Validation (as in the original, which also splits by file) mostly measures interpolation to
+new flow conditions (velocity, angle) on known shapes; test measures generalisation to unseen shapes. Validation
+numbers are therefore lower than test numbers and may not reveal overfitting to shapes. The calibration below
+still uses validation only (test-set rule); this is a declared limitation of it.
+
+**Limitation of the check.** Equal names imply the same coordinate file; different names may still be
+near-identical shapes (variants of one family), which a name-based check cannot detect.
+
+**Open questions.** Whether a profile-disjoint validation split should be used for later model selection
+(not changed now; to be decided).
+
+---
+
+## 2026-10-11 — Independent recomputation of 6c (ddof convention)
+
+**Context / why.** Check the 6c numbers from the raw per-sample CSVs with a separate script, and make the
+standard-deviation convention explicit.
+
+**Action.** New `scripts/recheck_groups.py` (does not import `compare_runs.py`): recomputes each run's means from
+`eval_test_samples.csv`, compares them with `eval_test.json`, then group means and std with ddof=1 and ddof=0.
+`scripts/compare_runs.py groups` uses `np.std(ddof=1)` (sample std), and the pre-registered 6c criterion
+specifies ddof=1.
+
+**Evidence.** `python scripts/recheck_groups.py --a new_s0_a new_s1 new_s2 --b orig_s0 orig_s1 orig_s2 --split test --k 2`
+(run dirs in `~/runs/tinfra/`). Per-run CSV means equal the JSON means within 4.9e-12. In %:
+
+| Metric  | mean A  | std A (1 / 0)   | mean B  | std B (1 / 0)   | abs diff | 2*max std (1 / 0) |
+|---------|---------|-----------------|---------|-----------------|----------|-------------------|
+| rel_p   | 17.8690 | 0.7194 / 0.5874 | 17.7143 | 0.7955 / 0.6495 | 0.1548   | 1.5910 / 1.2990   |
+| rel_vx  | 2.1804  | 0.0616 / 0.0503 | 2.2215  | 0.1455 / 0.1188 | 0.0411   | (info)            |
+| rel_vy  | 8.4304  | 0.1774 / 0.1448 | 8.4577  | 0.1016 / 0.0829 | 0.0273   | (info)            |
+| rel_v   | 2.8672  | 0.0875 / 0.0715 | 2.9194  | 0.1233 / 0.1007 | 0.0522   | 0.2466 / 0.2014   |
+| rel_all | 3.4462  | 0.0825 / 0.0674 | 3.5192  | 0.1657 / 0.1353 | 0.0730   | 0.3315 / 0.2707   |
+
+All values with ddof=1 equal the 6c entry. Verdict: compatible with ddof=1 (the registered convention) and
+also with ddof=0; the verdict does not depend on the convention.
+
+**Open questions.** None.
