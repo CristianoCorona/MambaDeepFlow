@@ -522,3 +522,37 @@ SwapFree sampled every second; both evaluated on val. Compared with the sequenti
 total wall time, it/s (training loop), combined peak RAM, val metrics (expected within noise, i.e. within the
 17-epoch spread, sigma_ref = 0.0823 points). Guard: if MemAvailable < 9000 MB at the start, the test is skipped
 and recorded as not run. Model-cost timings will still come from isolated runs, whatever the outcome.
+
+---
+
+## 2026-10-11 — Parallelism test: results
+
+**Action.** `scripts/run_parallel_test.sh` at commit `ca1a4d9` (clean tree), 17:33 UTC, after the calibration runs.
+Start state: AC online, `platform_profile` performance, MemAvailable 10922 MB (>= 9000, test run), swap used
+514 MB, GPU 38 C / P3. Runs `~/runs/par/par_s0`, `par_s1` (17 epochs, 10200 iterations each).
+
+**Evidence.** Parallel vs. the sequential runs with the same seeds (`new_s0_a`, `new_s1`):
+
+| Quantity                          | Sequential (2 runs)       | Parallel (2 processes)    |
+|-----------------------------------|---------------------------|---------------------------|
+| Total wall clock for both runs    | 209.8 s (1:45.2 + 1:44.7) | 179.7 s                   |
+| it/s per process (training loop)  | 116.3 / 115.1             | 62.8 / 62.8               |
+| Combined training throughput      | ~115.7 it/s               | 125.6 it/s                |
+| Training loop per run             | 87.7 / 88.6 s             | 162.3 / 162.5 s           |
+| Peak RSS                          | 3.73 GiB per run          | 3.72 + 3.70 GiB (max RSS) |
+| MemAvailable drop / swap growth   | n/a                       | 5076 MB / 24 MB           |
+| Val rel_all (%) seed 0 / seed 1   | 2.8884 / 3.0440           | 2.9280 / 3.1150           |
+| Val rel_p (%) seed 0 / seed 1     | 16.354 / 16.194           | 17.195 / 16.041           |
+
+Total time -14 % (the data-loading phases, ~11 s each, also overlap); training-loop throughput +8.5 %.
+Mean val rel_all 3.0215 (parallel) vs 2.9662 (sequential): difference 0.055, below sigma_ref (0.0823);
+`par_s1` (3.115) is 0.07 above the highest of the four sequential 17-epoch runs. Within noise.
+
+**Conclusion / recommendation.** Two processes share the GPU without errors or swapping, but the gain is small:
+~8.5 % throughput, so for 133-epoch runs (where data loading is ~1.5 % of the time) the saving is expected to be
+roughly 8-10 % (extrapolation, not measured), at the cost of double RAM (~7.4 GiB of 15 GiB) and per-process
+timings that are not usable as model-cost measurements. Not worth using by default; acceptable for batches of
+seed repetitions when RAM is free. Model-cost timings must still come from isolated sequential runs.
+
+**Open questions.** Gain at 133 epochs and with heavier (Mamba) models not measured; with more GPU-bound models the
+gain may be smaller.
