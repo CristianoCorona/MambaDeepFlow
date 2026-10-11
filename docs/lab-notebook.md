@@ -124,3 +124,35 @@ Verification plan:
   correctness-relevant differences, before the long runs.
 
 **Open questions.** None yet; results in the following entries.
+
+---
+
+## 2026-10-11 — Verification 6a: float32 loader vs. original loader
+
+**Context / why.** The new loader re-implements the original normalisation in float32 (D2); it must
+produce the same normalised tensors within float32 rounding.
+
+**Action.** `python scripts/verify_loader.py` (defaults: 200 training files sampled with sample seed 0,
+all 90 test files; tolerance 1e-6 on max |new - original float64|). The original `TurbDataset`
+(train mode with `shuffle=0`, and test mode) is run on a temporary directory of symlinks to the same files.
+The script also checks all 6490 raw files for the mask convention.
+
+**Evidence.** Max |new - original float64| per channel (relative to the channel's max |value| in brackets):
+
+| Set   | vx_in    | vy_in    | mask | p                   | vx                  | vy                  |
+|-------|----------|----------|------|---------------------|---------------------|---------------------|
+| train | 6.67e-08 | 5.48e-08 | 0    | 1.59e-07 (1.83e-07) | 1.48e-07 (1.55e-07) | 1.09e-07 (1.18e-07) |
+| test  | 8.38e-08 | 5.63e-08 | 0    | 2.18e-07 (2.57e-07) | 1.41e-07 (1.47e-07) | 1.08e-07 (1.26e-07) |
+
+Against the original cast to float32 (what the original network sees) the max differences are
+5.96e-08 to 2.38e-07, i.e. at most 2 float32 ulps for values below 1; a large fraction of elements
+differ by one ulp (e.g. 2294028 of 3276800 training pressure values), as expected from rounding in a
+different precision. Denormalisation (`mdf.data.denormalize` vs. `TurbDataset.denormalize`): identical (0.0).
+Mask check: 6490 files, 0 violations: input channel 2 is exactly 0 (fluid) or 1 (airfoil interior), and
+p, vx, vy are exactly 0 inside the airfoil (raw and after normalisation). This is the basis of the
+`fluid_*` secondary metrics (mask == 0). Result: PASS.
+
+**Open questions.** None. Note: the original scripts compute `v_norm` for denormalisation from the
+*normalised* input channels (runTrain.py, runTest.py); `scripts/evaluate.py` reproduces this for
+`L1_denorm` so that the number is comparable with the original "Denormalized error", but that metric is
+therefore not in physical units.
