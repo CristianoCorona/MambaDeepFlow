@@ -635,3 +635,52 @@ current run (status interrupted) and the queue. Refuses to start on a dirty tree
 timestamps, start/end of each run, estimates, val metrics and machine state.
 
 The night session runs under `systemd-inhibit` so the laptop does not suspend (see the launch entry).
+
+---
+
+## 2026-10-11 — Night queue: smoke test
+
+**Action.** `scripts/run_queue.py` at commit `fe8b22c` (clean tree), out root `~/runs/smoke-queue`, 1-epoch runs
+(`--epochs 1`, grouped split: 599 batches, 599 effective iterations, 402 validation samples, 85 profiles).
+
+**Evidence (queue.log).**
+- (a) Queue with `s1`, `s2`; while `s2` was training, the queue process and its `train.py` were killed with
+  SIGKILL (simulated crash / power loss). `s1` status `finished`; `s2` left with status `running`.
+- (b) Same queue restarted: "s1: already finished and evaluated - skipped"; "s2: found with status 'running' -
+  treated as interrupted, moved to s2.interrupted-20261011T212121Z, redone from scratch"; `s2` then finished
+  (18 s training, 3 s evaluation). The estimate for `s2` came from `s1` (0.4 min), not from `est=2m`.
+- (c) Queue `s3` (no `est=`, same configuration as `s1`), `s4 est=10m --epochs 2`, `s5`, cutoff 23:24 at 23:21:49:
+  `s3` ran (estimate 0.4 min from 2 finished runs); "s4: not started - estimated 10.0 min ... would end at
+  23:32:10, after the cutoff 23:24:00; queue stopped"; `s5` not tried.
+- (d) SIGINT to the queue during `s6`: training terminated (exit -15), `s6` status `interrupted`, "queue stopped by
+  SIGINT", no `train.py` left running. `touch STOP` then restart: "STOP file found before s6: queue stopped",
+  file renamed to `STOP.consumed-*`.
+
+1-epoch val rel_all (grouped split): 9.61 / 9.62 / 10.87 % (seeds 0 / 1 / 2) - smoke only, not results.
+
+---
+
+## 2026-10-11 — Pre-registered criterion: protocol confirmation on the profile-disjoint split
+
+**Context / why.** The 133-epoch protocol was calibrated on the random validation split (profile overlap). Written
+and committed before the night runs.
+
+**Criterion.** On the profile-disjoint validation split (`splits/val_grouped_seed0.txt`), if the mean of val
+`rel_all` at 133 epochs (seeds 0 and 1) is lower than the mean at 67 epochs (seeds 0 and 1), the protocol stays at
+133 epochs; otherwise this is reported and the decision is taken together by the team (no automatic change).
+`rel_all` = mean over validation samples of the original "combined" relative error (`scripts/evaluate.py`,
+`eval_val.json`). Seed 2 at 133 epochs is not part of the criterion.
+
+---
+
+## 2026-10-11 — Night 1: queue and launch
+
+**Queue** (`queues/night1.txt`, order fixed): `ep133_s0`, `ep67_s0`, `ep133_s1`, `ep67_s1`, `ep133_s2`, all
+`--epochs`, grouped split, out root `~/runs/night1`, cutoff 07:00. Expected ~51 min sequential (13 + 7 + 13 + 7 +
+13 min from the calibration timings).
+
+**Launch** (detached tmux session, TMPDIR as in CLAUDE.md, sleep / idle / lid switch inhibited):
+`tmux new -d -s night "export TMPDIR=\$HOME/.cache/pip-tmp; systemd-inhibit --what=sleep:idle:handle-lid-switch
+--why=night-queue <mdf python> scripts/run_queue.py queues/night1.txt --out-root ~/runs/night1 --cutoff 07:00"`.
+Monitor: `tail -f ~/runs/night1/queue.log`. Stop after the current run: `touch ~/runs/night1/STOP`; stop now:
+`tmux send-keys -t night C-c` (current run marked interrupted, redone at the next launch).

@@ -1,0 +1,8 @@
+# Night 1 (2026-10-11/12): protocol confirmation on the profile-disjoint validation split.
+# Order fixed by the team. est= is used only until a run with the same configuration has finished.
+# Launch: see docs/lab-notebook.md, "Night 1: launch".
+ep133_s0  est=13m  --seed 0 --epochs 133
+ep67_s0   est=7m   --seed 0 --epochs 67
+ep133_s1  est=13m  --seed 1 --epochs 133
+ep67_s1   est=7m   --seed 1 --epochs 67
+ep133_s2  est=13m  --seed 2 --epochs 133
