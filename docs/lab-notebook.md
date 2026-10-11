@@ -190,3 +190,36 @@ All notebook numbers of the setup and 6a entries matched their sources.
 - Pipeline-design entry: "peak RSS ~7.9 GB" should read ~7.5 GiB (7908624 kB).
 
 **Open questions.** None.
+
+---
+
+## 2026-10-11 — Pre-registered compatibility criterion for verification 6c
+
+**Context / why.** 6c compares 3 runs of `scripts/train.py` with 3 runs of the unmodified `train/runTrain.py`
+(via `scripts/run_original.py`). The criterion is fixed here, before any 6c result exists, and will not be
+changed after seeing the results.
+
+**Design.**
+- Group A (new): `scripts/train.py --seed {0,1,2} --iterations 10000` (the seed-0 run is the first 6b run).
+- Group B (original): `scripts/run_original.py --seed {0,1,2}` (10k requested iterations, 10200 effective, as A).
+- Runs executed sequentially (never in parallel), same machine, AC power, `performance` platform profile.
+- All six checkpoints evaluated with `scripts/evaluate.py --split test` (90 samples). The test set is used
+  here only because the original's validation set changes with the seed and overlaps our training set.
+  No decision other than the compatibility verdict is taken from these numbers.
+
+**Criterion.** For each primary metric m in {rel_p, rel_v, rel_all} (the original runTest.py
+"p", "v", "combined" relative errors, mean over the 90 test samples):
+compatible if |mean_A(m) - mean_B(m)| <= 2 * max(std_A(m), std_B(m)), where std is the sample standard
+deviation across the 3 runs of a group (ddof = 1). The pipelines are called *compatible* only if all three
+metrics pass; otherwise *not compatible*, and the cause must be investigated before any further experiment.
+vx, vy, fluid-only metrics and L1 are reported for information only. Computed by
+`python scripts/compare_runs.py groups --a <A runs> --b <B runs> --split test --k 2`.
+
+**Limitations (declared in advance).** With n = 3 per group the standard deviations are themselves very
+uncertain (a std estimated from 3 values can easily be off by a factor of 2), so this test can only exclude
+gross differences (e.g. a normalisation or loss bug shifting the error by several run-to-run standard
+deviations); it cannot establish equivalence. Group B has extra variance by design (its training set changes
+with the seed, D1). The primary evidence for equivalence is verification 6a (identical tensors within
+float32 rounding) plus the independent code review; 6c is a coarse end-to-end sanity check.
+
+**Open questions.** None.
