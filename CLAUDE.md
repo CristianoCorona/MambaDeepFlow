@@ -42,3 +42,11 @@ Full details (versions, checksums, measured numbers): docs/setup-log.md.
   from source: system nvcc 12.6 needs GCC <= 13 but the system has GCC 16; no wheels exist for Python 3.14
   or torch >= 2.11 (hence Python 3.12 + torch 2.10). `pip install --dry-run` first to make sure torch/triton are not replaced.
 - Large downloads can fail mid-way: use `pip install --resume-retries 20`.
+
+## Lab notebook (standing rule)
+- Keep docs/lab-notebook.md as a chronological log (newest entry last). Add an entry for every decision, experiment, change of plan or notable finding, BEFORE committing the related code, and commit it together with the code.
+- Entry format: date (YYYY-MM-DD) and title; Context / why; Decision or action (with alternatives considered); Evidence (commands, key numbers, run IDs, commit hash); Open questions.
+- Record negative results and abandoned approaches, with the reason.
+- Never rewrite past entries; add a correction entry instead.
+- English only. The repo is public: no personal paths, names or credentials.
+- docs/setup-log.md remains the environment record; the notebook links to it.
