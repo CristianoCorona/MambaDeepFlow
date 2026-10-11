@@ -104,3 +104,13 @@ venv.bak/
 .mypy_cache/
 
 .DS_Store
+
+# Local data (symlinks to ~/data/dfp), never committed
+data/train
+data/test
+
+# Outputs of train/runTrain.py and train/runTest.py
+train/modelG*
+train/results_train/
+train/results_test/
+train/testout*.txt
