@@ -16,6 +16,8 @@ Base code: thunil/Deep-Flow-Prediction (Apache-2.0), remote `upstream`. Keep LIC
 - DfpNet expo=5: 128 -> 64 -> 32 -> 16 -> 8 -> 4 -> 2 -> 1 (bottleneck 1x1); channels 32/64/64/128/256/256/256.
 - Candidate global-mixer positions: 8x8, 16x16, 32x32 (optionally 64x64).
 - Repo defaults: 10k iterations, batch 10, lr 6e-4; paper: 80k iterations, lr 4e-4.
+- Budget calibration (validation, docs/lab-notebook.md 2026-10-11): rule outcome 133 epochs
+  (`--iterations 80000`, ~12 min/run); protocols are named by epochs (17 / 67 / 133).
 
 # How to run
 Full details (versions, checksums, measured numbers): docs/setup-log.md.

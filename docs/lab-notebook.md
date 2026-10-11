@@ -437,3 +437,74 @@ average, plus a visual check of the curves.
 With 2 seeds per budget the means carry noise of the order of sigma_ref / sqrt(2).
 
 **Open questions.** None before the runs.
+
+---
+
+## 2026-10-11 — Training-budget calibration: results (rule outcome: 133 epochs)
+
+**Context / why.** Application of the pre-registered criterion (previous entry, commit `06f4bc1`).
+
+**Action.** `nohup scripts/run_calibration.sh` (runs `ep67_s0`, `ep67_s1`, `ep133_s0`, `ep133_s1` in
+`~/runs/calib/`, sequential, 14:44-15:21 UTC, all at commit `06f4bc1`, clean tree, val split sha256 `7f6bc466...`).
+Machine state logged before each run: AC online, `platform_profile` performance, available RAM 10808-11123 MB,
+swap used 514 MB; GPU 43 C / P3 before the first run, 58 C / P0 before the later ones (runs back to back).
+Summary: `python scripts/calibration_summary.py` (writes `docs/results/calibration.csv`,
+`docs/figures/calibration.png`). Test set not used.
+
+**Evidence.** Per run, val, %:
+
+| Run      | Epochs | Seed | rel_all | rel_p  | rel_vx | rel_vy | it/s  | Wall (time -v) |
+|----------|--------|------|---------|--------|--------|--------|-------|----------------|
+| new_s0_a | 17     | 0    | 2.8884  | 16.354 | 1.756  | 7.957  | 116.3 | 1:45.2         |
+| new_s1   | 17     | 1    | 3.0440  | 16.194 | 1.935  | 7.701  | 115.1 | 1:44.7         |
+| ep67_s0  | 67     | 0    | 1.9955  | 10.555 | 1.226  | 5.132  | 115.7 | 6:11.7         |
+| ep67_s1  | 67     | 1    | 2.0483  | 10.681 | 1.251  | 5.557  | 116.0 | 6:08.3         |
+| ep133_s0 | 133    | 0    | 1.8700  | 10.755 | 1.124  | 4.831  | 116.2 | 11:58.1        |
+| ep133_s1 | 133    | 1    | 1.8303  | 9.631  | 1.113  | 4.786  | 116.4 | 11:56.8        |
+
+(`new_s0_b` 2.9564 and `new_s2` 2.8586 enter only sigma_ref.) Per budget, mean over seeds 0 and 1 (|s0 - s1|):
+
+| Epochs | rel_all         | rel_p            | rel_vx          | rel_vy          | fluid_rel_all |
+|--------|-----------------|------------------|-----------------|-----------------|---------------|
+| 17     | 2.9662 (0.1556) | 16.2741 (0.1594) | 1.8455 (0.1790) | 7.8288 (0.2556) | 2.8035        |
+| 67     | 2.0219 (0.0528) | 10.6181 (0.1259) | 1.2385 (0.0258) | 5.3444 (0.4255) | 1.9266        |
+| 133    | 1.8502 (0.0397) | 10.1930 (1.1237) | 1.1184 (0.0108) | 4.8084 (0.0443) | 1.7823        |
+
+Resources per run (identical across budgets apart from time): 115.7 / 115.8 / 116.3 it/s (training loop only),
+peak RSS 3.73 GiB (`/usr/bin/time`), peak VRAM 147 MiB allocated / 188 MiB reserved. Wall clock per run
+1:44.9 / 6:10.0 / 11:57.5 (17 / 67 / 133 epochs); validation evaluation adds ~3 s (log timestamps).
+
+**Rule.** sigma_ref = 0.0823; Delta1 = 2.9662 - 2.0219 = 0.9443 >= sigma_ref; Delta2 = 2.0219 - 1.8502 =
+0.1717 >= sigma_ref. **Outcome: 133 epochs** (`--iterations 80000`, 79800 effective iterations).
+
+**Overfitting check (pre-registered, not part of the rule).** No run flagged. For the chosen budget (k = 20):
+mean val_L1 of the last 20 epochs / min of the 20-epoch moving average = 1.0000 (seed 0), 1.0005 (seed 1),
+threshold 1.05; train_L1 still decreasing in both; raw ratio final val_L1 / min moving average = 1.0133 and
+1.0002. The minimum of the moving average is at the end of the run (epoch index 132 and 131). Visually
+(figure, left) the 133-epoch curves flatten after ~100 epochs without rising.
+
+**Independent check.** A fresh-context agent recomputed all numbers from `eval_val_samples.csv`, `metrics.csv`,
+`config.json` and the time logs (without the summary scripts) and applied the rule from the criterion text:
+no discrepancy; same sigma_ref, means, Deltas, outcome and overfitting result; all 8 runs finished with the
+expected epochs, seeds, clean tree and validation split.
+
+**Cost estimate for the chosen protocol (scenarios, not measurements).** One baseline run at 133 epochs:
+~12.0 min including validation evaluation (720 s). For 7 configurations x 3 seeds = 21 runs, sequential:
+
+| Variant cost vs. baseline | All 21 runs at that cost | Baseline 3 runs at 1x + 18 variant runs |
+|---------------------------|--------------------------|-----------------------------------------|
+| 1x                        | 4.2 GPU-h                | 4.2 GPU-h                               |
+| 2x                        | 8.4 GPU-h                | 7.8 GPU-h                               |
+| 3x                        | 12.6 GPU-h               | 11.4 GPU-h                              |
+
+**Additional considerations (not part of the rule).**
+- Delta2 is ~2.1 sigma_ref; the noise on a difference of two 2-seed means is of order sigma_ref, so the
+  67 -> 133 step clears the threshold, but not by a wide margin. The 67 -> 133 gain (0.17 points, ~8 %) is much
+  smaller than the 17 -> 67 gain (0.94 points, ~32 %), at about twice the cost.
+- At 133 epochs the seeds differ by 1.12 points in rel_p (10.75 vs 9.63), against 0.13 at 67 epochs; rel_p is
+  secondary. Whether pressure error is more seed-sensitive at long budgets is not established with 2 seeds.
+- Validation shares airfoil profiles with training (390 / 400 files); generalisation to unseen shapes (the test
+  setting) may benefit less, or more, from longer training. Not measured (test set not used).
+
+**Open questions.** Final choice of protocol given its cost (to be decided with the team; the rule gives 133
+epochs). Whether 3 seeds per configuration suffice at this noise level.
