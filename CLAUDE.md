@@ -32,6 +32,11 @@ Full details (versions, checksums, measured numbers): docs/setup-log.md.
   (exits non-zero unless the `selective_scan_cuda` / `causal_conv1d_cuda` kernels are actually used; expect `OK`).
 - Original baseline: `cd train && python runTrain.py` then `python runTest.py` (~2 min train, ~440 MiB VRAM;
   random seed, so indicative only).
+- Controlled pipeline (fixed split `splits/val_seed0.txt`, runs in `~/runs/<id>/`, see docs/lab-notebook.md):
+  `python scripts/train.py --seed 0 --iterations 10000 [--out-dir DIR]`,
+  `python scripts/evaluate.py --run-dir DIR --split val` (test split only for final results),
+  original baseline with a seed: `python scripts/run_original.py --seed 0 [--out-dir DIR]`,
+  checks: `scripts/verify_loader.py`, `scripts/compare_runs.py {curves,groups}`.
 
 ## Lessons learned
 - `/tmp` is a tmpfs with a ~6 GB per-user quota. pip unpacks wheels there; the ~900 MB torch wheel plus

@@ -223,3 +223,90 @@ with the seed, D1). The primary evidence for equivalence is verification 6a (ide
 float32 rounding) plus the independent code review; 6c is a coarse end-to-end sanity check.
 
 **Open questions.** None.
+
+---
+
+## 2026-10-11 — Verification 6b: same seed twice
+
+**Context / why.** Measure run-to-run variation at a fixed `--seed` (bitwise determinism not assumed;
+cuDNN is non-deterministic, as in the original).
+
+**Action.** `python scripts/train.py --seed 0 --iterations 10000` twice (run IDs `new_s0_a`, `new_s0_b`,
+sequential), then `python scripts/compare_runs.py curves`. Commits recorded in config.json: `c7ee905` (a) and
+`706fcd2` (b; the only change in between is a notebook entry); working tree clean (`dirty: false`) for both.
+
+**Evidence.**
+- 17 epochs, 10200 iterations; LR schedule identical in all 17 epochs.
+- train L1 (mean of batches): no epoch identical; max |a-b| 5.34e-4 (max rel 2.6 %, epoch 1);
+  final 0.0066620 vs 0.0067779 (rel 1.7 %).
+- val L1 (mean of 40 batches): no epoch identical; max |a-b| 1.67e-3 (max rel 15.6 %, epoch 5);
+  final 0.0056389 vs 0.0057735 (rel 2.4 %).
+- Validation metrics (`evaluate.py --split val`), combined relative error: 2.888 % vs 2.956 %; p: 16.35 % vs 16.60 %.
+- Diagnosis: with `seed_everything(0)` twice, initial weights are identical and the first three batches
+  are identical (first batch indices [2933, 4210, ...]); the same forward/backward on the GPU twice with
+  identical input gives gradients differing by up to 2.9e-6. The divergence therefore comes from
+  non-deterministic CUDA kernels (atomic accumulation in backward), amplified over 10200 steps, not from seeding.
+
+**Conclusion.** A fixed `--seed` fixes initialisation and batch order but not the trajectory: at the end of
+training, two runs with the same seed differ by roughly as much as runs with different seeds (cf. 6c,
+std of combined test error across seeds ~0.08-0.17 percentage points). Consequence for the project: model
+comparisons need several seeds and must be reported with dispersion; single-run differences of a few
+percent are noise.
+
+**Open questions.** Whether `--deterministic` (cudnn.deterministic) or `torch.use_deterministic_algorithms`
+gives bitwise-reproducible runs and at what speed cost was not tested (bilinear upsampling backward may have
+no deterministic CUDA implementation).
+
+---
+
+## 2026-10-11 — Verification 6c: new pipeline vs. original runTrain.py (3 + 3 runs) and 6d
+
+**Action.** Sequential runs, AC power, `performance` platform profile, GPU idle at 40 C before the runs:
+`scripts/train.py --seed {1,2}` (seed 0 = `new_s0_a` from 6b) and `scripts/run_original.py --seed {0,1,2}`
+(derived seeds 3626764237, 3280387012, 242886303; each equal to the seed printed by the unmodified
+`runTrain.py`). All at commit `706fcd2` (except `new_s0_a`, `c7ee905`), clean tree. Each checkpoint
+evaluated with `scripts/evaluate.py --split test`; criterion as pre-registered in the previous entry:
+`scripts/compare_runs.py groups --a new_s0_a new_s1 new_s2 --b orig_s0 orig_s1 orig_s2 --split test --k 2`.
+
+**Evidence.** Test relative errors in %, mean (sample std) over 3 runs; per-run values in run order (seed 0, 1, 2):
+
+| Metric        | New (A)          | Original (B)     | abs diff | 2 * max std | Verdict    |
+|---------------|------------------|------------------|----------|-------------|------------|
+| rel_p         | 17.869 (0.719)   | 17.714 (0.796)   | 0.155    | 1.591       | compatible |
+| rel_v         | 2.867 (0.088)    | 2.919 (0.123)    | 0.052    | 0.247       | compatible |
+| rel_all       | 3.446 (0.083)    | 3.519 (0.166)    | 0.073    | 0.332       | compatible |
+| rel_vx (info) | 2.180 (0.062)    | 2.222 (0.146)    | 0.041    |             |            |
+| rel_vy (info) | 8.430 (0.177)    | 8.458 (0.102)    | 0.027    |             |            |
+| fluid_rel_all | 3.301 (0.040)    | 3.386 (0.167)    | 0.085    |             |            |
+| L1 (info)     | 0.0069 (0.0002)  | 0.0070 (0.0004)  | 0.0002   |             |            |
+
+Per run, rel_all: A 3.4756, 3.5100, 3.3530; B 3.6912, 3.5060, 3.3605. rel_p: A 18.6909, 17.5630, 17.3532;
+B 18.5257, 17.6814, 16.9357. The single setup-log run of the original (random seed) had p / v / combined
+17.43 / 2.76 / 3.37 %, inside the range of both groups.
+
+**Verdict.** By the pre-registered criterion the two pipelines are **compatible** on rel_p, rel_v and rel_all.
+This is a weak statement: n = 3 per group only excludes gross differences; the evidence for equivalence is
+mainly 6a and the code review. Group B shows a slightly higher mean on 5 of 7 metrics, by far less than one
+run-to-run std; not interpretable with n = 3.
+
+**Resources (per run; time = wall clock).**
+- New: total 1:44.45-1:45.17 (`/usr/bin/time`), in-script 102.2-102.9 s, of which data load 10.2-11.7 s,
+  training loop 87.7-89.4 s, validation 2.5 s, checkpoint < 0.01 s; 114.1-116.3 it/s (training loop only,
+  definition in `scripts/train.py`), 111.0-113.0 it/s including validation. Peak RSS 3909004-3909460 kB
+  (`/usr/bin/time`; 3817-3818 MiB from `ru_maxrss` inside the script); peak VRAM 147 MiB allocated /
+  188 MiB reserved (`torch.cuda`, excludes the CUDA context).
+- Original (via `run_original.py`): total 2:02.78-2:05.92, runTrain.py 119.7-122.6 s; peak RSS 7736928-7938784 kB;
+  peak VRAM 223 MiB allocated / 306 MiB reserved. Its training-loop throughput was not measured separately
+  (no per-phase timers in the unmodified script; setup-log measured 106.5 it/s from log timestamps).
+- The float32 loader halves peak RAM (~3.7 GiB vs ~7.4 GiB).
+
+**6d.** `git diff --quiet master -- train/` exits 0 and `git diff --stat master -- train/` is empty: no file in
+`train/` modified. `find train -newer docs/setup-log.md` (excluding `__pycache__`) lists nothing: the original
+baseline runs wrote nothing into `train/`.
+
+**Not verified.** Bitwise reproducibility (see 6b); the original's training-loop it/s; compatibility at
+40k/80k iterations or with other `--lr`/`--batch-size` values (only defaults tested); the `--no-lr-decay` and
+`--deterministic` options were not exercised in any run.
+
+**Open questions.** Calibration of the number of iterations (10k / 40k / 80k) on validation L1: next step,
+not started.
