@@ -1,4 +1,4 @@
-"""Evaluate a checkpoint on the fixed validation split or on the test set.
+"""Evaluate a checkpoint on the validation split of its run (config.json split_mode) or on the test set.
 
 Primary metrics reproduce train/runTest.py exactly (normalised fields, whole 128x128 grid
 including the airfoil interior, ratio of sums per sample, then mean over samples):
@@ -89,7 +89,10 @@ def main():
         print("NOTE: test set - for the equivalence check and final results only, never for selection.")
         ds = mdata.load_test()
     else:
-        ds = mdata.load_val(split_file=mdata.SPLITS_DIR / f"val_seed{mdata.SPLIT_SEED}.txt")
+        # split of the run (config.json); runs from before the grouped split have no split_mode: random
+        split_mode = cfg.get("split", {}).get("split_mode", "random") if cfg else "grouped"
+        ds = mdata.load_val(split_file=mdata.split_file_path(split_mode), split_mode=split_mode)
+        print(f"Validation split: {split_mode} ({len(ds)} samples)")
         expected = cfg.get("split", {}).get("val_files_sha256")
         if expected and expected != mdata.file_list_sha256(ds.files):
             sys.exit("Validation split differs from the one recorded in config.json")
@@ -134,6 +137,7 @@ def main():
     means = {m: float(np.mean([r[m] for r in rows])) for m in METRICS}
     summary = {
         "split": args.split,
+        "split_mode": split_mode if args.split == "val" else None,
         "n_samples": len(rows),
         "checkpoint": str(ckpt),
         "model": model_name,

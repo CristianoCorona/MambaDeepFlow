@@ -24,8 +24,12 @@ host-to-device copies, forward, backward, optimiser step, loss .item(); excludes
 and data loading). it_per_s_incl_val additionally includes the validation passes in the denominator.
 
 Usage:
-    python scripts/train.py --seed 0 [--iterations 10000] [--lr 6e-4] [--batch-size 10] [--expo 5]
-                            [--model dfpnet] [--out-dir DIR] [--deterministic]
+    python scripts/train.py --seed 0 [--epochs 133 | --iterations 10000] [--split-mode {grouped,random}]
+                            [--lr 6e-4] [--batch-size 10] [--expo 5] [--model dfpnet] [--out-dir DIR]
+                            [--deterministic]
+
+The protocol is defined in epochs (docs/lab-notebook.md, 2026-10-11): --epochs takes precedence over
+--iterations, which is kept to reproduce earlier runs. Default split: profile-disjoint ("grouped").
 """
 
 import argparse
@@ -53,6 +57,9 @@ def parse_args():
     ap.add_argument("--seed", type=int, required=True, help="weights init + batch order (not the split)")
     ap.add_argument("--iterations", type=int, default=10000,
                     help="requested; epochs = int(iterations / batches_per_epoch + 0.5) as in the original")
+    ap.add_argument("--epochs", type=int, default=None, help="number of epochs; overrides --iterations")
+    ap.add_argument("--split-mode", default="grouped", choices=sorted(mdata.SPLIT_MODES),
+                    help="grouped: profile-disjoint validation (default); random: original-style split (D1)")
     ap.add_argument("--lr", type=float, default=6e-4)
     ap.add_argument("--batch-size", type=int, default=10)
     ap.add_argument("--expo", type=int, default=5, help="channel exponent of TurbNetG")
@@ -69,7 +76,8 @@ def main():
     timers = runinfo.Timers()
     started = runinfo.utc_now()
 
-    run_id = f"{args.model}_e{args.expo}_it{args.iterations}_s{args.seed}_{time.strftime('%Y%m%d-%H%M%S')}"
+    budget = f"ep{args.epochs}" if args.epochs is not None else f"it{args.iterations}"
+    run_id = f"{args.model}_e{args.expo}_{budget}_{args.split_mode}_s{args.seed}_{time.strftime('%Y%m%d-%H%M%S')}"
     run_dir = args.out_dir or Path.home() / "runs" / run_id
     if run_dir.exists() and any(run_dir.iterdir()):
         sys.exit(f"Run directory {run_dir} exists and is not empty")
@@ -83,14 +91,17 @@ def main():
 
     with timers("data_load"):
         train_ds, val_ds, split_info = mdata.load_train_val(
-            split_file=mdata.SPLITS_DIR / f"val_seed{mdata.SPLIT_SEED}.txt")
+            split_file=mdata.split_file_path(args.split_mode), split_mode=args.split_mode)
     print(f"Train / validation samples: {len(train_ds)} / {len(val_ds)}; "
           f"val sha256 {split_info['val_files_sha256']}")
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, drop_last=True,
                               generator=loader_gen)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, drop_last=True)
-    epochs = int(args.iterations / len(train_loader) + 0.5)
+    if args.epochs is not None:
+        epochs = args.epochs
+    else:
+        epochs = int(args.iterations / len(train_loader) + 0.5)
     effective_iterations = epochs * len(train_loader)
     print(f"Batches train / val: {len(train_loader)} / {len(val_loader)}; "
           f"epochs {epochs}, effective iterations {effective_iterations}")
@@ -116,7 +127,9 @@ def main():
         "lr_decay": None if args.no_lr_decay else "train/utils.py computeLR(epoch, epochs, 0.1*lr, lr)",
         "loss": "nn.L1Loss (mean)",
         "batch_size": args.batch_size,
-        "requested_iterations": args.iterations,
+        "requested_iterations": None if args.epochs is not None else args.iterations,
+        "requested_epochs": args.epochs,
+        "split_mode": args.split_mode,
         "epochs": epochs,
         "batches_per_epoch": len(train_loader),
         "effective_iterations": effective_iterations,

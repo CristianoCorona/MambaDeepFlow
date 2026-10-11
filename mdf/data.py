@@ -49,6 +49,46 @@ def split_files(files, split_seed=SPLIT_SEED):
     return files[:n_train], files[n_train:]
 
 
+def profile(name):
+    """Airfoil profile of a sample file: "<airfoil>_<fsX>_<fsY>.npz" -> "<airfoil>" (data/dataGen.py naming)."""
+    airfoil, fsx, fsy = name[:-len(".npz")].rsplit("_", 2)
+    int(fsx), int(fsy)  # both must be integers, else the naming assumption is wrong
+    return airfoil
+
+
+def split_files_grouped(files, split_seed=SPLIT_SEED):
+    """Profile-disjoint split: whole profiles go to validation until it holds at least MAX_VAL files.
+
+    The sorted list of unique profiles is shuffled once with split_seed; profiles are taken in that
+    order until the validation set reaches MAX_VAL files (it may exceed it by part of one profile).
+    No profile appears in both sets. Both lists are returned sorted by file name.
+    """
+    files = sorted(files)
+    profiles = sorted({profile(f) for f in files})
+    random.Random(split_seed).shuffle(profiles)
+    by_profile = {}
+    for f in files:
+        by_profile.setdefault(profile(f), []).append(f)
+    val_profiles, n_val = set(), 0
+    for p in profiles:
+        if n_val >= MAX_VAL:
+            break
+        val_profiles.add(p)
+        n_val += len(by_profile[p])
+    val = [f for f in files if profile(f) in val_profiles]
+    train = [f for f in files if profile(f) not in val_profiles]
+    return train, val
+
+
+SPLIT_MODES = {"random": split_files, "grouped": split_files_grouped}
+
+
+def split_file_path(split_mode, split_seed=SPLIT_SEED):
+    """Committed validation list for a split mode (random keeps its historical name)."""
+    name = f"val_seed{split_seed}.txt" if split_mode == "random" else f"val_grouped_seed{split_seed}.txt"
+    return SPLITS_DIR / name
+
+
 def file_list_sha256(files):
     """sha256 of the newline-joined file list (each name followed by '\\n')."""
     return hashlib.sha256("".join(f + "\n" for f in files).encode()).hexdigest()
@@ -142,10 +182,10 @@ class FlowDataset(Dataset):
         return self.inputs[idx], self.targets[idx]
 
 
-def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None):
+def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None, split_mode="random"):
     """Return (train_ds, val_ds, split_info). If split_file is given, it must match the computed split."""
     all_files = list_files(train_dir)
-    train_files, val_files = split_files(all_files, split_seed)
+    train_files, val_files = SPLIT_MODES[split_mode](all_files, split_seed)
     if split_file is not None:
         if not Path(split_file).exists():
             raise FileNotFoundError(f"Split file {split_file} not found")
@@ -153,6 +193,7 @@ def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None):
         if committed != val_files:
             raise RuntimeError(f"Computed validation split differs from {split_file}")
     info = {
+        "split_mode": split_mode,
         "split_seed": split_seed,
         "n_files": len(all_files),
         "n_train": len(train_files),
@@ -160,13 +201,15 @@ def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None):
         "val_files_sha256": file_list_sha256(val_files),
         "train_files_sha256": file_list_sha256(train_files),
         "split_file": str(Path(split_file).relative_to(REPO_ROOT)) if split_file else None,
+        "n_train_profiles": len({profile(f) for f in train_files}),
+        "n_val_profiles": len({profile(f) for f in val_files}),
     }
     return FlowDataset(train_dir, train_files), FlowDataset(train_dir, val_files), info
 
 
-def load_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None):
+def load_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None, split_mode="random"):
     """Validation set only, checked against the committed split file (if given)."""
-    _, val_files = split_files(list_files(train_dir), split_seed)
+    _, val_files = SPLIT_MODES[split_mode](list_files(train_dir), split_seed)
     if split_file is not None and read_split_file(split_file) != val_files:
         raise RuntimeError(f"Computed validation split differs from {split_file}")
     return FlowDataset(train_dir, val_files)

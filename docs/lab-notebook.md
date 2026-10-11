@@ -556,3 +556,82 @@ seed repetitions when RAM is free. Model-cost timings must still come from isola
 
 **Open questions.** Gain at 133 epochs and with heavier (Mamba) models not measured; with more GPU-bound models the
 gain may be smaller.
+
+---
+
+## 2026-10-11 — Plan decisions: epoch-defined protocol, profile-disjoint validation, night queue, scope cuts
+
+**Context / why.** The calibration (entry above) gave 133 epochs on the random validation split, which shares the
+airfoil profile with training for 390 / 400 files, so it says little about generalisation to unseen shapes.
+The PC is available for long runs only at night. Project deadline: 2026-10-18.
+
+**Decisions (taken by the team).**
+- **Protocol defined in epochs**: 133 epochs for final runs, 67 for pilots / comparisons. New `--epochs` option of
+  `scripts/train.py`, which takes precedence over `--iterations` (kept to reproduce earlier runs). With the
+  profile-disjoint split there are 599 batches per epoch (5998 training files), i.e. 79 667 / 40 133 effective
+  iterations, 0.17 % fewer than in the calibration (79 800 / 40 200). `--iterations 80000` would instead give
+  134 epochs (int(80000 / 599 + 0.5)); alternatives considered: keep `--iterations 80000` (134 epochs) or force
+  exactly 400 validation files (would break the "at least 400" rule). `config.json` records epochs, batches per
+  epoch and effective iterations.
+- **D1 amended: profile-disjoint validation split** (default from now on, `--split-mode grouped`). Profile =
+  `name.rsplit("_", 2)[0]`. With split seed 0 the sorted unique profiles are shuffled once and whole profiles are
+  taken until validation holds at least 400 files; no profile in both sets. The random split stays reproducible
+  (`--split-mode random`, `splits/val_seed0.txt`). Runs from before this entry have no `split_mode` in
+  `config.json`; `scripts/evaluate.py` treats them as random.
+- **Night queue** (`scripts/run_queue.py`): one run at a time, validation evaluation right after each run,
+  completed runs skipped, interrupted runs redone from scratch, no run started if its estimated end is after a
+  cutoff (default 07:00). No resuming in the middle of a run.
+- **Scope.** No position study: final configurations B, B-large (parameter-matched), CBAM, SA at 8x8,
+  M-D (Mamba SS2D at 8x8), 3 seeds each. M-E (Mamba at 64x64) only as a stretch goal. Cut: data-efficiency study,
+  scan-order ablation, OOD on free-stream conditions.
+
+**Open questions.** Whether 133 epochs still beats 67 on the profile-disjoint split (pre-registered criterion in a
+later entry, before the night runs).
+
+---
+
+## 2026-10-11 — Profile-disjoint validation split: implementation and check
+
+**Action.** `mdf/data.py`: `profile()`, `split_files_grouped()`, `split_file_path()`; `load_train_val` / `load_val`
+take `split_mode` (default stays `random` at library level, so old callers are unchanged); `split_info` gains
+`split_mode`, `n_train_profiles`, `n_val_profiles`. `scripts/train.py`: `--split-mode {grouped,random}` (default
+grouped), `--epochs`; run IDs now contain the budget and split mode. `scripts/evaluate.py --split val` uses the
+split recorded in the run's `config.json`. New `scripts/make_split.py` writes `splits/val_grouped_seed0.txt` and
+checks overlaps.
+
+**Evidence.** `python scripts/make_split.py --split-mode grouped --write`:
+- 6400 files, 1456 profiles; train 5998 files / 1371 profiles; val 402 files / 85 profiles.
+- Files in both sets: 0; train + val = all files: True; **profiles shared by train and val: 0**.
+- val sha256 `3b26466ac7ccc1ad6db6f9a0f2cbaffee01d11784e7d537d5e139e5af085e2e6`,
+  train sha256 `351af04002f93ec247b049967c82f3053fabe1881eb89855909d437fff1e5daf`.
+
+`python scripts/make_split.py --split-mode random`: recomputed random split identical to `splits/val_seed0.txt`
+(val sha256 `7f6bc466...` as in the calibration runs); it shares 333 of its 341 validation profiles with training.
+`scripts/verify_loader.py`: OK (unchanged loader).
+
+Validation loss curve in `metrics.csv` uses 40 batches of 10 (drop_last), i.e. 400 of the 402 files;
+`scripts/evaluate.py` uses all 402.
+
+**Open questions.** Profiles with different names may still be near-identical shapes (same limitation as
+`scripts/airfoil_overlap.py`).
+
+---
+
+## 2026-10-11 — Night queue: design
+
+**Context / why.** Runs happen only at night, unattended; a run must not run past the morning cutoff, and a crash
+or power loss must not leave a half-finished run counted as done.
+
+**Design.** `scripts/run_queue.py QUEUE_FILE --out-root DIR [--cutoff HH:MM]` (stdlib only; calls `train.py` and
+`evaluate.py` with the same interpreter). Queue file: `<name> [est=13m] <train.py args>` per line. Per line:
+`finished` + `eval_val.json` -> skipped; `finished` without evaluation -> evaluation only; `running` / `interrupted`
+/ no config -> interrupted: directory moved to `<name>.interrupted-<UTC>` (kept as evidence, not deleted) and the run
+redone from scratch. Estimated duration: maximum wall time (train + eval) of finished runs in the same out root with
+the same arguments apart from `--seed` (`queue_timing.json`), otherwise the line's `est=`; if
+`now + estimate > cutoff` (next occurrence of HH:MM after the queue starts) the queue **stops** (later runs are not
+tried, to keep the order; team choice over "skip and try the next one"). Non-zero exit of training -> status
+`interrupted` and the queue continues. `touch DIR/STOP` stops after the current run; SIGINT / SIGTERM stop the
+current run (status interrupted) and the queue. Refuses to start on a dirty tree. `queue.log` with local
+timestamps, start/end of each run, estimates, val metrics and machine state.
+
+The night session runs under `systemd-inhibit` so the laptop does not suspend (see the launch entry).
