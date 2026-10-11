@@ -508,3 +508,17 @@ expected epochs, seeds, clean tree and validation split.
 
 **Open questions.** Final choice of protocol given its cost (to be decided with the team; the rule gives 133
 epochs). Whether 3 seeds per configuration suffice at this noise level.
+
+---
+
+## 2026-10-11 — Parallelism test: design
+
+**Context / why.** Can two training processes share the GPU to cut total time for multi-seed experiments?
+Run only after the calibration runs, so it cannot disturb their timings.
+
+**Design.** New `scripts/run_parallel_test.sh`: two `scripts/train.py --iterations 10000` (17 epochs) processes at the
+same time, seeds 0 and 1, run dirs `~/runs/par/par_s{0,1}`, each under `/usr/bin/time -v`; MemAvailable and
+SwapFree sampled every second; both evaluated on val. Compared with the sequential runs `new_s0_a` / `new_s1`:
+total wall time, it/s (training loop), combined peak RAM, val metrics (expected within noise, i.e. within the
+17-epoch spread, sigma_ref = 0.0823 points). Guard: if MemAvailable < 9000 MB at the start, the test is skipped
+and recorded as not run. Model-cost timings will still come from isolated runs, whatever the outcome.
