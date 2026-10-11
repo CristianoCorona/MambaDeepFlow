@@ -388,3 +388,52 @@ All values with ddof=1 equal the 6c entry. Verdict: compatible with ddof=1 (the 
 also with ddof=0; the verdict does not depend on the convention.
 
 **Open questions.** None.
+
+---
+
+## 2026-10-11 — Pre-registered criterion for training-budget calibration
+
+**Context / why.** The number of training epochs for all further experiments is chosen here, on validation only.
+Candidates: 17 epochs (10k requested iterations, 10200 effective), 67 epochs (40k, 40200) and 133 epochs
+(80k, 79800); from now on the protocol is named by epochs. The LR decay (`computeLR`) depends on the total number
+of epochs, so a shorter run is not a prefix of a longer one: each budget needs its own runs. This entry is
+written before any 67- or 133-epoch run exists and will not be changed afterwards.
+
+**Runs.**
+- 17 epochs: existing `new_s0_a` (seed 0) and `new_s1` (seed 1) in `~/runs/tinfra/`.
+- 67 and 133 epochs: seeds 0 and 1, `scripts/train.py --seed S --iterations {40000,80000}` (unchanged code path;
+  `--iterations` gives 67 / 133 epochs with the existing rule), launched sequentially, one process at a time,
+  by `scripts/run_calibration.sh` (refuses a dirty tree; logs AC state, `platform_profile`, available RAM, swap
+  used and GPU state before each run; each run followed by `scripts/evaluate.py --split val`). Run dirs
+  `~/runs/calib/ep{67,133}_s{0,1}`.
+
+**Metric.** Every run is evaluated on the fixed validation split (`evaluate.py --split val`, 400 samples).
+Primary metric: val `rel_all` (original "combined" definition, whole grid). Secondary, reported but not part of
+the criterion: `rel_p`, `rel_vx`, `rel_vy` and the `fluid_*` versions.
+
+**Reference noise.** sigma_ref = sample std (ddof=1) of val rel_all over the four existing 17-epoch runs
+(`new_s0_a`, `new_s0_b`, `new_s1`, `new_s2`). Measured before the calibration runs (`new_s1`, `new_s2` evaluated
+on val now, at commit `c623758`): val rel_all = 2.8884, 2.9564, 3.0440, 2.8586 %, mean 2.9368 %,
+**sigma_ref = 0.0823 percentage points**.
+
+**Decision rule.** With means over seeds 0 and 1 of val rel_all:
+Delta1 = mean(17 ep.) - mean(67 ep.), Delta2 = mean(67 ep.) - mean(133 ep.).
+If Delta1 < sigma_ref choose 17 epochs; otherwise, if Delta2 < sigma_ref choose 67 epochs; otherwise 133 epochs.
+A negative Delta counts as "less than sigma_ref". No compute budget enters the rule; the cost is reported and
+decided separately.
+
+**Overfitting check (reported, does not change the rule).** For each run of the chosen budget, with
+k = max(3, round(0.15 * epochs)) (17 -> 3, 67 -> 10, 133 -> 20) and moving averages of window k over epochs:
+flag "possible overfitting" if (a) the mean val_L1 over the last k epochs exceeds by more than 5 % the minimum of
+the val_L1 moving average over the whole run, AND (b) the mean train_L1 over the last k epochs is lower than the
+mean over the k epochs before. The 5 % threshold is about twice the final val_L1 difference between two runs with
+the same seed in 6b (2.4 %). Also reported per run: the raw ratio final val_L1 / minimum of the val_L1 moving
+average, plus a visual check of the curves.
+
+**Test set.** Not used in this phase.
+
+**Limitation (declared in advance).** 390 of 400 validation files share their airfoil profile with training files
+(entry "Airfoil profiles ..."): validation mostly measures generalisation to new flow conditions on known shapes.
+With 2 seeds per budget the means carry noise of the order of sigma_ref / sqrt(2).
+
+**Open questions.** None before the runs.
