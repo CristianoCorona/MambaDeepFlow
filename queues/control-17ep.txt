@@ -1,0 +1,10 @@
+# Control runs (2026-10-12): 17 epochs, seed 0, grouped split. Purpose: find faults only;
+# results are not used for comparisons or decisions. Pre-registered in docs/lab-notebook.md.
+# Order fixed: B first (reference for criterion (c)).
+B       est=3m  --seed 0 --epochs 17 --variant B
+MD8     est=8m  --seed 0 --epochs 17 --variant MD --level 8
+SA8     est=8m  --seed 0 --epochs 17 --variant SA --level 8
+CBAM8   est=8m  --seed 0 --epochs 17 --variant CBAM --level 8
+B-large est=4m  --seed 0 --epochs 17 --variant B-large
+MD32    est=10m --seed 0 --epochs 17 --variant MD --level 32
+SA32    est=10m --seed 0 --epochs 17 --variant SA --level 32

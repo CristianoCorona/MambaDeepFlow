@@ -920,3 +920,25 @@ than 8: no block, level irrelevant), 13 s.
    ~17k), MD 116 736 / 32 768 (~117k / ~33k), CBAM 2 282 (~2k; 678 at 32x32).
 
 `git diff --stat master -- train/` empty.
+
+---
+
+## 2026-10-12 — Pre-registered control runs (17 epochs): purpose and pass criterion
+
+**Context / why.** Before the long queue, each configuration is trained once briefly to catch faults (divergence,
+NaN, a block that breaks training). Written and committed before any control run.
+
+**Runs.** 7 configurations, seed 0, 17 epochs (`--epochs 17`), profile-disjoint split, in this order:
+B, MD8, SA8, CBAM8, B-large, MD32, SA32 (`queues/control-17ep.txt`, `scripts/run_queue.py`, out root
+`~/runs/control-2026-10-12`, one run at a time, validation evaluation after each run). **Purpose: only to find
+faults; the results are not used for comparisons or decisions.**
+
+**Pass criterion per variant** (`scripts/control_gates.py`):
+(a) no NaN / Inf in the loss (per-epoch train and val L1 means in `metrics.csv`; one NaN / Inf batch makes its
+epoch mean NaN / Inf);
+(b) training loss decreasing: mean train L1 of the last 3 epochs < mean of the first 3;
+(c) final val L1 (`val_L1_mean_of_batches`, last epoch) <= 1.15 x the final val L1 of B at 17 epochs (B runs first).
+
+The mean training it/s of each run (`it_per_s_train` in `config.json`) is the official measure of training cost
+and is used to estimate the durations in the final queue. A variant that fails is diagnosed; only evident bugs
+are fixed (recorded here), then re-run; if it still fails it is excluded from the queue.
