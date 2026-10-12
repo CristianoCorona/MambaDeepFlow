@@ -813,3 +813,110 @@ outcome (2.42621 < 2.56033: 133 epochs), the grouped / random ratios, the second
   |angle| in validation) and `rae5214_8305_-3198` (-21.1 deg, 94.5th); `pfcm_7006_-2167` is at -17.2 deg (76th
   percentile), so it is not a high-angle case relative to the set.
 - Grouped 133 seed-pair Spearman: 0.905-0.915 (stated as 0.91-0.92).
+
+---
+
+## 2026-10-12 — Global-mixing blocks: implementation, deviations D10-D13, change of plan
+
+**Context / why.** B (DfpNet, 133 epochs, grouped split, 3 seeds) is done: val rel_all 2.421 +- 0.021 %.
+The variants with a global-mixing block are implemented here; all are built by one factory so that training,
+evaluation and the queue use exactly the same model.
+
+**Implementation.**
+- `mdf/models.py`: `build_from_cfg({variant, level, channels, mamba_impl})`, variant in {B, B-large, CBAM, SA, MD}
+  (`identity` for tests only). B and B-large go through the unchanged `build_dfpnet` (original `TurbNetG` +
+  `weights_init`): B is bit-for-bit the model of the earlier runs (2 332 035 params, same initial weights at the
+  same seed, same outputs; unit tests 2-3). The other variants use `TurbNetGMixer`, a subclass of `TurbNetG` with
+  the forward copied; the block output replaces the output of the encoder layer of the chosen level and feeds
+  both the next layer and the skip connection. Level -> layer (channels with 32 base channels): 64 -> `layer1`
+  (32), 32 -> `layer2` (64), 16 -> `layer2b` (64), 8 -> `layer3` (128); default level 8.
+- **Initialisation.** `TurbNetGMixer.__init__` applies `weights_init` to the skeleton *before* the block exists,
+  then creates the block. So `weights_init` never touches a block (unit test 8), and with the same `--seed` the
+  skeleton gets exactly the same initial weights as B (the block draws from the RNG afterwards). Blocks keep
+  PyTorch defaults, Mamba's internal init and the zero output projections.
+- **Base channels as an integer** (`--channels`, B-large = 33). The original constructor only takes an exponent
+  (`int(2**e + 0.5)` channels), so internally `e = log2(channels)` is passed and checked to give exactly
+  `channels` (and `layer1` is checked to have 33 output channels). B-large: **2 479 755 params (+147 720 vs B)**.
+- `mdf/blocks.py`:
+  - **SA** `y = x + Wo(SDPA(qkv(LN(x) + PE)))`: LayerNorm over channels on `(B, HW, C)`; fixed 2D sin/cos PE
+    (first C/2 channels row index, last C/2 column index; frequencies 1/10000^(2i/(C/2))), a non-persistent
+    buffer (not a parameter, not in the checkpoint); qkv Linear C -> 3C; 4 heads; `F.scaled_dot_product_attention`;
+    Wo Linear C -> C, weight and bias zero. No MLP, no dropout. Params: 66 304 at 8x8, 16 768 at 32x32.
+  - **MD** (simplified SS2D) `y = x + sum_k unscan_k(Mamba(scan_k(LN(x))))`, k in rows, rows reversed, columns,
+    columns reversed; one shared `mamba_ssm.Mamba(d_model=C, d_state=16, d_conv=4, expand=2)`, the 4 sequences
+    stacked in the batch `(4B, HW, C)`, one call; outputs mapped back to 2D and summed. `out_proj.weight` zeroed
+    (Mamba's out_proj has no bias with the default `bias=False`); no other Mamba init touched. Params: 116 736 at
+    8x8, 32 768 at 32x32.
+  - **CBAM** (Woo et al. 2018, multiplicative, no residual): channel attention (spatial avg- and max-pool, shared
+    MLP Linear C -> max(C//16, 1) -> C with biases and ReLU, sum, sigmoid), then spatial attention (channel mean
+    and max, Conv2d 2 -> 1, 7x7, padding 3, no bias, sigmoid). Choices: MLP biases and bias-free conv as in the
+    official CBAM code; the BatchNorm of the official spatial branch is omitted (not in the specification).
+    Params: 2 282 at 8x8. Not an identity at initialisation (multiplicative).
+  - `mdf/mamba_ref.py` (`--mamba-impl ref`): the non-fused path of `Mamba.forward` with the module's own parameters,
+    PyTorch `nn.Conv1d` and `selective_scan_ref` copied from mamba_ssm 2.3.2 (Apache-2.0, attribution in the file;
+    copied because `mamba_ssm.ops.selective_scan_interface` imports the CUDA extension at load time). Runs on
+    CPU tensors. Limitation: constructing the block still imports `mamba_ssm.Mamba`, so a machine without the
+    mamba_ssm wheel cannot use it.
+- `scripts/train.py`: `--variant` (default B), `--level` (default 8), `--channels`, `--mamba-impl` (default cuda);
+  `--model dfpnet` / `--expo` kept as legacy aliases of B. `config.json` adds `variant`, `level` (null for B /
+  B-large), `channels`, `mamba_impl`, `block_params`, `params_B_reference`, `params_added_vs_B`,
+  `evaluated_checkpoint`. Training loop unchanged.
+- `scripts/evaluate.py` rebuilds the model from `config.json` (`models.model_cfg_from_run_config`); runs without a
+  `variant` field (all earlier runs) are read as B with `2**expo` channels. `scripts/run_queue.py` unchanged: it
+  calls `train.py` and `evaluate.py`.
+- **Protocol unchanged for all variants**: Adam lr 6e-4, betas (0.5, 0.999), L1, original `computeLR`, batch 10,
+  dropout 0, `--split-mode grouped` (split seed 0). **The evaluated model is the final-epoch model** (`model.pt`);
+  validation is only for monitoring, no checkpoint selection (as stated on 2026-10-11, decision 5).
+
+**Deviations from the planning report** (numbering continues D1-D9):
+
+| #   | Item | Planning report | Now |
+|-----|------|-----------------|-----|
+| D10 | Mamba 2D block | SS2D as in VMamba | simplified SS2D: one Mamba module shared by the 4 scan directions (in_proj, gating, conv1d, SSM, out_proj all shared), outputs summed; no separate per-direction parameters, no extra output norm / gating of VMamba's SS2D |
+| D11 | Parameter matching | B-large parameter-matched to the Mamba variant | partial: B-large (33 base channels, +147 720) is a "more parameters, no global mixing" control; added params per variant: MD8 +116 736, SA8 +66 304, CBAM8 +2 282, MD32 +32 768, SA32 +16 768. No matching at 32x32 |
+| D12 | M-E (Mamba at 64x64) | stretch goal | replaced by a block-level micro-benchmark (time / memory vs number of tokens, 64 to 16 384) |
+| D13 | Self-attention variant | not a main configuration | SA added as the natural global-mixing comparison for Mamba (same position, same residual form, same zero-initialised output projection); it was already listed among the final configurations on 2026-10-11, the reason is recorded here |
+
+**Change of plan.** The 2026-10-11 entry said "no position study". Two 32x32 variants (MD32, SA32) are added at the end of
+the queue as exploratory runs (where the sequence is 1024 tokens instead of 64).
+
+**Inaccuracy in the planning report.** CBAM was planned on "skip connections / bottleneck"; at the 1x1 bottleneck
+spatial attention is meaningless (one pixel). CBAM is placed at 8x8, the same point as the other variants.
+
+**Declared limitation.** Same optimiser and learning rate for all variants (tuned for the U-Net): fair as a
+protocol, but it may disadvantage SA and Mamba, which are often trained with other optimisers / LR schedules.
+
+---
+
+## 2026-10-12 — Unit tests of the blocks and the factory: all pass
+
+**Action.** `pytest` 9.1.1 added to the env (`setup-log.md` section 7). `tests/test_blocks.py`, run with
+`conda run -n mdf python -m pytest -s -q tests/test_blocks.py`: **43 passed, 6 skipped** (B / B-large at levels other
+than 8: no block, level irrelevant), 13 s.
+
+**Tests and evidence.**
+1. Shapes: every variant at levels 64/32/16/8, batch 2, train mode -> `(2, 3, 128, 128)`, finite.
+2. B from the factory vs original `TurbNetG`: 2 332 035 params both, same initial weights at seed 0, identical
+   output (`torch.equal`, CPU) with the same weights. B-large: 33 channels, 2 479 755 params.
+3. `nn.Identity` as the block at each level, original weights: identical output (eval and train mode).
+4. SA and MD (levels 8 and 32) at initialisation with B's skeleton weights vs B: max |diff| 0 (SA, MD-ref on CPU),
+   1.49e-8 (MD-cuda on GPU; the two GPU forwards are not bitwise identical), tolerance 1e-6.
+5. `unscan_k(scan_k(x)) == x` for the 4 orders on a non-square 5x7 grid; the 4 orders differ pairwise; explicit
+   order checked on a 2x3 grid.
+6. `selective_scan_fn` (CUDA) vs reference (b=4, d=32, n=16, L=256, random inputs, z, D, delta bias, softplus):
+   output max |diff| 2.9e-4; all gradients within rtol 6e-4 / atol 2e-3 (the float32 tolerances of the official
+   mamba_ssm tests; largest absolute gradient diff 0.18 on dA with values up to 4.3e4). The vendored reference
+   equals the upstream `selective_scan_ref` exactly. Full MD block cuda vs ref with out_proj randomised
+   (std 0.05): mixing term max |diff| 2.4e-7 (8x8, C=128) and 4.8e-7 (32x32, C=64) for terms of order 1; input and
+   parameter gradients within the same tolerances (atol scaled by the gradient magnitude), observed <= 3.2e-5.
+7. After two Adam steps (lr 6e-4, betas (0.5, 0.999), L1) every parameter of the SA, MD, CBAM blocks (levels 8,
+   32) has a non-zero gradient. At the first step only the output projection of SA / MD has a gradient (asserted):
+   expected, since the zero projection blocks the gradient to everything before it.
+8. `weights_init` does not touch the blocks: the block rebuilt from the same RNG state (seed -> skeleton +
+   weights_init -> block) equals the block inside the model, and the skeleton equals B at the same seed;
+   output projections are exactly zero. Negative control: applying `weights_init` to the MD / CBAM block does
+   change it (conv1d / conv), so the test can detect it. (SA has no Conv / BatchNorm module.)
+9. SA's PE is not a parameter and not in the state_dict. Block params vs estimates: SA 66 304 / 16 768 (~66k /
+   ~17k), MD 116 736 / 32 768 (~117k / ~33k), CBAM 2 282 (~2k; 678 at 32x32).
+
+`git diff --stat master -- train/` empty.

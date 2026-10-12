@@ -25,8 +25,13 @@ and data loading). it_per_s_incl_val additionally includes the validation passes
 
 Usage:
     python scripts/train.py --seed 0 [--epochs 133 | --iterations 10000] [--split-mode {grouped,random}]
-                            [--lr 6e-4] [--batch-size 10] [--expo 5] [--model dfpnet] [--out-dir DIR]
+                            [--variant {B,B-large,CBAM,SA,MD}] [--level {64,32,16,8}] [--channels N]
+                            [--mamba-impl {cuda,ref}] [--lr 6e-4] [--batch-size 10] [--out-dir DIR]
                             [--deterministic]
+
+The model is built by mdf.models.build_from_cfg (the single factory, also used by evaluate.py).
+--model dfpnet / --expo E are kept only to reproduce earlier commands; they mean variant B with 2**E channels.
+The evaluated checkpoint is always the final-epoch model (no selection on validation).
 
 The protocol is defined in epochs (docs/lab-notebook.md, 2026-10-11): --epochs takes precedence over
 --iterations, which is kept to reproduce earlier runs. Default split: profile-disjoint ("grouped").
@@ -62,22 +67,40 @@ def parse_args():
                     help="grouped: profile-disjoint validation (default); random: original-style split (D1)")
     ap.add_argument("--lr", type=float, default=6e-4)
     ap.add_argument("--batch-size", type=int, default=10)
-    ap.add_argument("--expo", type=int, default=5, help="channel exponent of TurbNetG")
-    ap.add_argument("--model", default="dfpnet", choices=sorted(models.MODELS))
+    ap.add_argument("--variant", default=None, choices=models.VARIANTS, help="model variant (default B)")
+    ap.add_argument("--level", type=int, default=None, choices=models.LEVELS,
+                    help="feature-map size where the block sits (default 8; ignored for B, B-large)")
+    ap.add_argument("--channels", type=int, default=None, help="base channels (default 32; B-large: 33)")
+    ap.add_argument("--mamba-impl", default=None, choices=["cuda", "ref"], help="MD only (default cuda)")
+    ap.add_argument("--expo", type=int, default=None, help="legacy: B with 2**expo base channels")
+    ap.add_argument("--model", default=None, choices=sorted(models.MODELS), help="legacy alias of variant B")
     ap.add_argument("--no-lr-decay", action="store_true", help="disable the original LR decay (default: on)")
     ap.add_argument("--out-dir", type=Path, default=None, help="run directory (default ~/runs/<run-id>)")
     ap.add_argument("--deterministic", action="store_true", help="cudnn.deterministic (off in the original)")
-    return ap.parse_args()
+    args = ap.parse_args()
+    if (args.model or args.expo is not None) and args.variant not in (None, "B"):
+        ap.error("--model / --expo are legacy options for variant B only")
+    if args.expo is not None and args.channels is not None:
+        ap.error("give --channels or --expo, not both")
+    return args
+
+
+def model_cfg_from_args(args):
+    channels = args.channels if args.expo is None else int(2 ** args.expo + 0.5)
+    return models.normalize_cfg({"variant": args.variant or "B", "level": args.level, "channels": channels,
+                                 "mamba_impl": args.mamba_impl})
 
 
 def main():
     args = parse_args()
+    mcfg = model_cfg_from_args(args)
     t_start = time.perf_counter()
     timers = runinfo.Timers()
     started = runinfo.utc_now()
 
     budget = f"ep{args.epochs}" if args.epochs is not None else f"it{args.iterations}"
-    run_id = f"{args.model}_e{args.expo}_{budget}_{args.split_mode}_s{args.seed}_{time.strftime('%Y%m%d-%H%M%S')}"
+    tag = mcfg["variant"] + (f"{mcfg['level']}" if mcfg["level"] else "") + f"_c{mcfg['channels']}"
+    run_id = f"{tag}_{budget}_{args.split_mode}_s{args.seed}_{time.strftime('%Y%m%d-%H%M%S')}"
     run_dir = args.out_dir or Path.home() / "runs" / run_id
     if run_dir.exists() and any(run_dir.iterdir()):
         sys.exit(f"Run directory {run_dir} exists and is not empty")
@@ -107,12 +130,13 @@ def main():
           f"epochs {epochs}, effective iterations {effective_iterations}")
 
     with timers("setup"):
-        net = models.build_model(args.model, expo=args.expo)
+        net = models.build_from_cfg(mcfg)
         n_params = models.count_params(net)
+        n_block = models.block_params(net)
         net.cuda()
         criterion = nn.L1Loss().cuda()
         optimizer = optim.Adam(net.parameters(), lr=args.lr, betas=(0.5, 0.999), weight_decay=0.0)
-    print(f"Model {args.model}: {n_params} trainable params")
+    print(f"Model {mcfg}: {n_params} trainable params ({n_params - models.B_PARAMS:+d} vs B, block {n_block})")
 
     config = {
         "run_id": run_dir.name,
@@ -121,8 +145,16 @@ def main():
         "command": runinfo.command_line(),
         "args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
         "seed": args.seed,
-        "model": args.model,
+        "model": mcfg["variant"],
+        "variant": mcfg["variant"],
+        "level": mcfg["level"],
+        "channels": mcfg["channels"],
+        "mamba_impl": mcfg["mamba_impl"],
         "trainable_params": n_params,
+        "block_params": n_block,
+        "params_B_reference": models.B_PARAMS,
+        "params_added_vs_B": n_params - models.B_PARAMS,
+        "evaluated_checkpoint": "final epoch (model.pt); validation is for monitoring only",
         "optimizer": {"name": "Adam", "lr": args.lr, "betas": [0.5, 0.999], "weight_decay": 0.0},
         "lr_decay": None if args.no_lr_decay else "train/utils.py computeLR(epoch, epochs, 0.1*lr, lr)",
         "loss": "nn.L1Loss (mean)",

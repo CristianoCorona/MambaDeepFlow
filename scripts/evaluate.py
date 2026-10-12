@@ -26,6 +26,9 @@ metrics) and eval_<split>.json (means over samples, metadata).
 Usage:
     python scripts/evaluate.py --run-dir DIR --split {val,test}
     python scripts/evaluate.py --checkpoint FILE --out-dir DIR --split {val,test} [--model dfpnet --expo 5]
+
+The model is rebuilt with mdf.models.build_from_cfg from the run's config.json (variant, level, channels,
+mamba_impl); runs from before the variants (no `variant` field) are read as B.
 """
 
 import argparse
@@ -86,8 +89,8 @@ def parse_args():
     ap.add_argument("--run-dir", type=Path, help="run directory with model.pt (+ config.json)")
     ap.add_argument("--checkpoint", type=Path, help="state_dict file (alternative to --run-dir)")
     ap.add_argument("--out-dir", type=Path, help="output directory (default: the run directory)")
-    ap.add_argument("--model", default=None, help="default: from config.json, else dfpnet")
-    ap.add_argument("--expo", type=int, default=None, help="default: from config.json, else 5")
+    ap.add_argument("--model", default=None, help="legacy (B only); default: from config.json")
+    ap.add_argument("--expo", type=int, default=None, help="legacy (B only); default: from config.json, else 5")
     return ap.parse_args()
 
 
@@ -103,8 +106,14 @@ def main():
     cfg_path = (args.run_dir or ckpt.parent) / "config.json"
     if cfg_path.exists():
         cfg = json.loads(cfg_path.read_text())
-    model_name = args.model or cfg.get("model", "dfpnet")
-    expo = args.expo if args.expo is not None else cfg.get("args", {}).get("expo", 5)
+    if args.model or args.expo is not None:
+        if cfg.get("variant") not in (None, "B"):
+            sys.exit("--model / --expo only apply to variant B")
+        expo = args.expo if args.expo is not None else 5
+        mcfg = models.normalize_cfg({"variant": "B", "channels": int(2 ** expo + 0.5)})
+    else:
+        mcfg = models.model_cfg_from_run_config(cfg)
+    print(f"Model: {mcfg}")
 
     if args.split == "test":
         print("NOTE: test set - for the equivalence check and final results only, never for selection.")
@@ -119,7 +128,7 @@ def main():
             sys.exit("Validation split differs from the one recorded in config.json")
     loader = DataLoader(ds, batch_size=1, shuffle=False)
 
-    net = models.build_model(model_name, expo=expo)
+    net = models.build_from_cfg(mcfg)
     net.load_state_dict(torch.load(ckpt, map_location="cpu", weights_only=True))
     net.cuda().eval()
     criterion = nn.L1Loss().cuda()
@@ -170,8 +179,9 @@ def main():
         "split_mode": split_mode if args.split == "val" else None,
         "n_samples": len(rows),
         "checkpoint": str(ckpt),
-        "model": model_name,
-        "expo": expo,
+        "model": mcfg["variant"],
+        "model_cfg": mcfg,
+        "trainable_params": models.count_params(net),
         "means": means,
         "secondary": secondary,
         "definitions": {
