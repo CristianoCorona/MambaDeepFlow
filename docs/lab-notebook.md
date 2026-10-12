@@ -717,3 +717,18 @@ Mean of seeds 0 and 1 (|s0 - s1|): 67 epochs rel_all 2.5603 (0.0171), rel_p 13.5
   calibration on the random split.
 
 **Open questions.** Pressure analysis follows (next entries).
+
+---
+
+## 2026-10-12 — Secondary evaluation metrics: median and aggregate ratio
+
+**Context / why.** The primary metrics (mean over samples of per-sample ratios, as `train/runTest.py`) weight every
+sample equally, so a few samples with small sum|t| can dominate (notably rel_p). Two secondary views are added; the
+primary metrics, their definitions and their role in decisions are unchanged.
+
+**Change.** `scripts/evaluate.py`: `eval_<split>.json` gains `secondary` with `median_rel_<c>` /
+`median_fluid_rel_<c>` (median over samples of the per-sample ratio) and `agg_rel_<c>` / `agg_fluid_rel_<c>`
+(sum over all samples of sum|o-t| / sum over all samples of sum|t|, float64), for c in p, vx, vy, all (all = the
+three channels pooled, as the original "combined"). The per-sample CSV gains the sums it is built from
+(`abs_err_<c>`, `abs_tgt_<c>`, `fluid_abs_err_<c>`, `fluid_abs_tgt_<c>`). Recomputed on the existing runs
+(validation only) in the next entry; previous outputs kept as `eval_val.v1.json` / `eval_val_samples.v1.csv`.

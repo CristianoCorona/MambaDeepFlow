@@ -10,6 +10,12 @@ including the airfoil interior, ratio of sums per sample, then mean over samples
                           v_norm taken from the normalised inputs, as in the original)
 Secondary metrics, prefixed fluid_: the same ratios restricted to fluid cells (input channel 2 == 0;
 the channel is 1 inside the airfoil, where all targets are 0).
+Further secondary metrics (eval_<split>.json "secondary"; the primary ones are unchanged):
+  median_<metric>         median over samples of the per-sample ratio (rel_* and fluid_rel_*; p, vx, vy, all)
+  agg_<metric>            aggregate ratio over the whole set: sum over samples of sum|o-t| / sum over samples
+                          of sum|t| (float64 sums), whole grid and fluid-only
+The per-sample CSV also stores the sums (abs_err_<c>, abs_tgt_<c>, fluid_abs_err_<c>, fluid_abs_tgt_<c>,
+float64) that the aggregate ratios are built from.
 
 The test set is only for the pipeline equivalence check and for final results; never use it
 to select protocols, hyper-parameters or designs (docs/lab-notebook.md).
@@ -40,6 +46,21 @@ from mdf import models, runinfo
 
 CHANNELS = {"p": [0], "vx": [1], "vy": [2], "v": [1, 2], "all": [0, 1, 2]}
 METRICS = ([f"rel_{k}" for k in CHANNELS] + [f"fluid_rel_{k}" for k in CHANNELS] + ["L1", "L1_denorm"])
+SECONDARY_CHANNELS = ["p", "vx", "vy", "all"]
+SUMS = [f"{pre}abs_{kind}_{k}" for pre in ("", "fluid_") for kind in ("err", "tgt") for k in SECONDARY_CHANNELS]
+
+
+def abs_sums(out, tgt, chans, mask=None):
+    """(sum|o-t|, sum|t|) over the given channels, float64 accumulation."""
+    err = tot = 0.0
+    for c in chans:
+        d = np.abs(out[c].astype(np.float64) - tgt[c].astype(np.float64))
+        t = np.abs(tgt[c].astype(np.float64))
+        if mask is not None:
+            d, t = d[mask], t[mask]
+        err += float(d.sum())
+        tot += float(t.sum())
+    return err, tot
 
 
 def rel_error(out, tgt, chans, mask=None):
@@ -118,6 +139,9 @@ def main():
             for k, chans in CHANNELS.items():
                 row[f"rel_{k}"] = rel_error(out, tgt, chans)
                 row[f"fluid_rel_{k}"] = rel_error(out, tgt, chans, fluid)
+            for k in SECONDARY_CHANNELS:
+                for pre, mask in (("", None), ("fluid_", fluid)):
+                    row[f"{pre}abs_err_{k}"], row[f"{pre}abs_tgt_{k}"] = abs_sums(out, tgt, CHANNELS[k], mask)
             row["L1"] = l1
 
             v_norm = mdata.v_norm_from_normalized_input(inp)
@@ -129,12 +153,18 @@ def main():
 
     csv_path = out_dir / f"eval_{args.split}_samples.csv"
     with open(csv_path, "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=["index", "file", *METRICS, "fluid_cells"])
+        w = csv.DictWriter(fh, fieldnames=["index", "file", *METRICS, "fluid_cells", *SUMS])
         w.writeheader()
         for r in rows:
             w.writerow({k: (f"{v:.10g}" if isinstance(v, float) else v) for k, v in r.items()})
 
     means = {m: float(np.mean([r[m] for r in rows])) for m in METRICS}
+    secondary = {}
+    for pre in ("", "fluid_"):
+        for k in SECONDARY_CHANNELS:
+            secondary[f"median_{pre}rel_{k}"] = float(np.median([r[f"{pre}rel_{k}"] for r in rows]))
+            secondary[f"agg_{pre}rel_{k}"] = (sum(r[f"{pre}abs_err_{k}"] for r in rows)
+                                             / sum(r[f"{pre}abs_tgt_{k}"] for r in rows))
     summary = {
         "split": args.split,
         "split_mode": split_mode if args.split == "val" else None,
@@ -143,12 +173,15 @@ def main():
         "model": model_name,
         "expo": expo,
         "means": means,
+        "secondary": secondary,
         "definitions": {
             "rel_*": "per-sample sum|o-t|/sum|t| on normalised fields, whole grid incl. airfoil interior "
                      "(train/runTest.py), averaged over samples",
             "fluid_rel_*": "same, restricted to cells with input mask channel == 0 (fluid)",
             "rel_v": "vx and vy pooled (original 'v')",
             "rel_all": "p, vx, vy pooled (original 'combined')",
+            "median_*": "median over samples of the per-sample ratio (secondary)",
+            "agg_*": "sum over all samples of sum|o-t| / sum over all samples of sum|t|, float64 (secondary)",
         },
         "git": runinfo.git_info(),
         "env": runinfo.env_info(),
@@ -164,6 +197,10 @@ def main():
     print("  p {:.6f}  vx {:.6f}  vy {:.6f}  v {:.6f}  combined {:.6f}".format(
         *(100 * means[f"fluid_rel_{k}"] for k in CHANNELS)))
     print(f"L1 {means['L1']:.6f}  denormalized L1 {means['L1_denorm']:.6f}")
+    for pre, label in (("", "whole grid"), ("fluid_", "fluid only")):
+        for kind in ("median", "agg"):
+            print(f"Secondary {kind} ({label}) %: " + "  ".join(
+                f"{k} {100 * secondary[f'{kind}_{pre}rel_{k}']:.6f}" for k in SECONDARY_CHANNELS))
     print(f"Wrote {csv_path}")
 
 
