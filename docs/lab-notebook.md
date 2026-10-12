@@ -790,3 +790,26 @@ Median and aggregate rel_p (previous entry) are less sensitive to the tail and a
 
 **Open questions.** Whether the high-angle `pfcm` / `rae5214` cases are physically unsteady (RANS targets
 less reliable). Not examined.
+
+---
+
+## 2026-10-12 — Independent check of night 1; correction to the pressure-analysis entry
+
+**Action.** Fresh-context agent, read-only, recomputed everything from the raw files (`ls data/train`, split file,
+`config.json`, `queue_timing.json`, `eval_val*.json`, `eval_val_samples*.csv`, `queue.log`) with its own scripts,
+without the repo's summary scripts or the `mdf` package; test data not read.
+
+**Result.** Split: 402 / 5998 files, 85 / 1371 profiles, 0 shared profiles, both sha256 match, the rule re-derived
+independently gives the same list, all night-1 runs use it. Night-1 per-run and per-budget numbers, the criterion
+outcome (2.42621 < 2.56033: 133 epochs), the grouped / random ratios, the secondary metrics (max |diff| vs
+`eval_val.json` 2e-11; old vs new primary 7.45e-10 over 15 runs), `docs/results/night1.csv` and
+`docs/results/pressure_top10.csv`: no discrepancy.
+
+**Corrections to "Pressure error: per-sample analysis"** (text not rewritten):
+- `pfcm_6703_-2724`: rel_p 180-186 % in all 5 grouped runs (not 182-186; `ep67_s1` 180.23).
+- The Spearman ranges (-0.21 to -0.30; +0.75 to +0.77) are on seed-mean per-sample values; per run they are
+  -0.18 to -0.33 and +0.73 to +0.78.
+- "High angle of attack" (from fsX / fsY in the file name) holds for `pfcm_6703` (-22.1 deg, 98.8th percentile of
+  |angle| in validation) and `rae5214_8305_-3198` (-21.1 deg, 94.5th); `pfcm_7006_-2167` is at -17.2 deg (76th
+  percentile), so it is not a high-angle case relative to the set.
+- Grouped 133 seed-pair Spearman: 0.905-0.915 (stated as 0.91-0.92).
