@@ -942,3 +942,71 @@ epoch mean NaN / Inf);
 The mean training it/s of each run (`it_per_s_train` in `config.json`) is the official measure of training cost
 and is used to estimate the durations in the final queue. A variant that fails is diagnosed; only evident bugs
 are fixed (recorded here), then re-run; if it still fails it is excluded from the queue.
+
+---
+
+## 2026-10-12 — Control runs (17 epochs): all 7 configurations pass
+
+**Action.** `scripts/run_queue.py queues/control-17ep.txt --out-root ~/runs/control-2026-10-12 --cutoff 08:30` in a
+detached tmux session under `systemd-inhibit`, commit `c370a1d` (clean tree), 23:29-23:45 local time, one run at a time,
+no interruption. Gates: `python scripts/control_gates.py --root ~/runs/control-2026-10-12 --csv docs/results/control.csv`.
+Machine state before B: AC online, `platform_profile` performance, GPU 42 C / P3. Test set not used.
+
+**Evidence.** 17 epochs, 10 183 iterations each, seed 0. it/s = `it_per_s_train` (training loop only).
+
+| Run     | Params    | Added vs B | it/s  | Train L1 first 3 / last 3 | Val L1 final | / B   | a | b | c | Result |
+|---------|-----------|------------|-------|---------------------------|--------------|-------|---|---|---|--------|
+| B       | 2 332 035 | 0          | 115.0 | 0.023897 / 0.006655       | 0.006324     | 1.000 | Y | Y | Y | pass   |
+| MD8     | 2 448 771 | +116 736   | 92.8  | 0.023364 / 0.006425       | 0.006229     | 0.985 | Y | Y | Y | pass   |
+| SA8     | 2 398 339 | +66 304    | 110.0 | 0.024270 / 0.006861       | 0.006499     | 1.028 | Y | Y | Y | pass   |
+| CBAM8   | 2 334 317 | +2 282     | 110.0 | 0.024491 / 0.006526       | 0.006371     | 1.007 | Y | Y | Y | pass   |
+| B-large | 2 479 755 | +147 720   | 86.2  | 0.023635 / 0.006588       | 0.006266     | 0.991 | Y | Y | Y | pass   |
+| MD32    | 2 364 803 | +32 768    | 64.7  | 0.023670 / 0.006709       | 0.006349     | 1.004 | Y | Y | Y | pass   |
+| SA32    | 2 348 803 | +16 768    | 55.7  | 0.023845 / 0.006626       | 0.006371     | 1.007 | Y | Y | Y | pass   |
+
+Peak VRAM allocated (training): B 147, MD8 179, SA8 167, CBAM8 165, B-large 156, MD32 349, SA32 182 MiB.
+B's it/s (115.0) matches the earlier B runs (115.6-116.3), so the factory adds no overhead to B.
+
+As pre-registered, the val numbers are not used for comparisons (one seed, 17 epochs).
+
+**Observation (cost, not part of the gates).** B-large (33 base channels) is the slowest of the 8x8 variants
+(86.2 it/s, -25 % vs B for +6 % parameters), slower than MD8. A plausible cause is channel counts that are not
+multiples of 8 (33, 66, 132, 264), which are less efficient for cuDNN kernels; not verified. Its training-time cost
+is therefore not representative of its FLOPs (cost measurement in isolation pending).
+
+---
+
+## 2026-10-12 — Night 2: pre-registered queue, schedule and draft analysis plan
+
+**Queue** (`queues/night2.txt`, order fixed; out root `~/runs/night2`; 133 epochs, grouped split; B not re-run, its
+three 133-epoch runs are `~/runs/night1/ep133_s{0,1,2}`). All 7 configurations passed the gates, none excluded:
+seed 0: MD8, SA8, B-large, CBAM8; seed 1: the same; seed 2: the same; then MD32 s0, SA32 s0, MD32 s1, SA32 s1,
+MD32 s2, SA32 s2.
+
+**Durations** estimated from the control runs: (training loop + validation of the 17-epoch run) x 133/17 + fixed
+overhead (data loading, setup; 12-18 s) + validation evaluation (3-8 s): MD8 15.1, SA8 12.7, B-large 16.1, CBAM8 12.7,
+MD32 21.4, SA32 24.6 min. The `est=` values in the queue file add ~10 % margin (17 / 14 / 18 / 14 / 24 / 27 min) and
+are used only for the cutoff check. Total ~308 min. With a start at ~23:55 the expected ends are: 8x8 block of
+seed 0 00:51, seed 1 01:48, seed 2 02:44; MD32 / SA32 s0 03:06 / 03:30, s1 03:52 / 04:16, s2 04:38 / 05:02.
+Cutoff 08:30 (PC available until then): **all 18 runs are expected to finish tonight**. If not, the queue stops
+before a run that would end after the cutoff and the rest resumes the next night (completed runs are skipped).
+
+**Draft analysis plan (to be confirmed before the test set is opened).**
+- Primary metric: `rel_all`; key secondary: `rel_p`; also reported: `rel_vx`, `rel_vy`.
+- Primary summary: mean +- standard deviation (ddof=1) over the 3 seeds per configuration. Secondary: paired
+  per-sample comparison with a bootstrap over airfoil profiles (resampling profiles, not samples, because samples of
+  one profile are correlated). For pressure also the median and the aggregate ratio (secondary metrics of
+  `evaluate.py`).
+- Main comparisons (8x8): M-D vs B, M-D vs SA, M-D vs B-large. Exploratory: M-D32 vs M-D8, SA32 vs SA8,
+  M-D32 vs SA32, CBAM vs B.
+- With 3 seeds: no formal correction for multiple comparisons; results are descriptive.
+
+**Declared limitation** (repeated from the implementation entry): same optimiser and LR for all variants.
+
+**Launch** as night 1: `tmux new -d -s night2 "export TMPDIR=\$HOME/.cache/pip-tmp; systemd-inhibit
+--what=sleep:idle:handle-lid-switch --why=night2-queue <mdf python> scripts/run_queue.py queues/night2.txt --out-root
+~/runs/night2 --cutoff 08:30"`. Monitor: `tail -f ~/runs/night2/queue.log`; stop after the current run:
+`touch ~/runs/night2/STOP`.
+
+**Not yet done (never in parallel with a training run):** cost in isolation (`scripts/cost.py`) and block
+micro-benchmark (`scripts/microbench.py`); both scripts are committed here but have not been run.
