@@ -684,3 +684,36 @@ and committed before the night runs.
 --why=night-queue <mdf python> scripts/run_queue.py queues/night1.txt --out-root ~/runs/night1 --cutoff 07:00"`.
 Monitor: `tail -f ~/runs/night1/queue.log`. Stop after the current run: `touch ~/runs/night1/STOP`; stop now:
 `tmux send-keys -t night C-c` (current run marked interrupted, redone at the next launch).
+
+---
+
+## 2026-10-12 — Night 1: results (criterion outcome: protocol stays at 133 epochs)
+
+**Action.** Queue `queues/night1.txt` in tmux session `night` under `systemd-inhibit`, commit `3e69402` (clean tree),
+2026-10-11 23:23 to 2026-10-12 00:11 local time; all 5 runs finished and evaluated, none interrupted, cutoff not
+reached. Validation split: profile-disjoint (sha256 `3b26466a...`, 402 samples). Summary:
+`python scripts/night_summary.py` (writes `docs/results/night1.csv`). Test set not used.
+
+**Evidence.** Val, %; training wall time from `queue_timing.json` (evaluation 3 s each):
+- `ep133_s0`: rel_all 2.4453, rel_p 12.6203, rel_vx 1.5783, rel_vy 5.9287; 12.01 min, 115.6 it/s
+- `ep67_s0`: rel_all 2.5689, rel_p 13.7390, rel_vx 1.6461, rel_vy 6.3566; 6.13 min, 116.0 it/s
+- `ep133_s1`: rel_all 2.4071, rel_p 12.4800, rel_vx 1.5337, rel_vy 6.0938; 11.94 min, 116.2 it/s
+- `ep67_s1`: rel_all 2.5518, rel_p 13.3516, rel_vx 1.6492, rel_vy 6.2313; 6.11 min, 116.3 it/s
+- `ep133_s2`: rel_all 2.4110, rel_p 12.1626, rel_vx 1.5420, rel_vy 5.9535; 11.94 min, 116.3 it/s
+
+Mean of seeds 0 and 1 (|s0 - s1|): 67 epochs rel_all 2.5603 (0.0171), rel_p 13.5453 (0.3874), rel_vx 1.6476
+(0.0031), rel_vy 6.2939 (0.1253); 133 epochs rel_all 2.4262 (0.0381), rel_p 12.5501 (0.1403), rel_vx 1.5560
+(0.0445), rel_vy 6.0112 (0.1651). 133 epochs, seeds 0-2: rel_all 2.4212 (sd 0.0210), rel_p 12.4210 (sd 0.2345).
+
+**Criterion (pre-registered).** 2.4262 (133) < 2.5603 (67): **protocol stays at 133 epochs.**
+
+**Additional observations (not part of the criterion).**
+- Error level, profile-disjoint vs random validation (calibration runs, mean of seeds 0 and 1): rel_all x1.27
+  (67 ep) and x1.31 (133 ep); rel_p x1.28 / x1.23; rel_vx x1.33 / x1.39; rel_vy x1.18 / x1.25. The two sets
+  contain different samples, so the ratio mixes profile novelty with sample difficulty.
+- Gain 67 -> 133 epochs in rel_all: 0.134 points (5.2 %) on the profile-disjoint split vs 0.172 (8.5 %) on the
+  random one; larger than both seed differences (0.017, 0.038).
+- Seed spread of rel_p at 133 epochs is 0.14 (s0 vs s1), 0.46 over 3 seeds, smaller than the 1.12 seen in the
+  calibration on the random split.
+
+**Open questions.** Pressure analysis follows (next entries).
