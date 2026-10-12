@@ -732,3 +732,61 @@ primary metrics, their definitions and their role in decisions are unchanged.
 three channels pooled, as the original "combined"). The per-sample CSV gains the sums it is built from
 (`abs_err_<c>`, `abs_tgt_<c>`, `fluid_abs_err_<c>`, `fluid_abs_tgt_<c>`). Recomputed on the existing runs
 (validation only) in the next entry; previous outputs kept as `eval_val.v1.json` / `eval_val_samples.v1.csv`.
+
+---
+
+## 2026-10-12 — Secondary metrics recomputed on existing runs
+
+**Action.** `scripts/reevaluate.sh` (new; keeps the previous outputs as `eval_val.v1.*`) with `scripts/evaluate.py`
+at commit `38a8a88`, validation only, on `calib/ep{67,133}_s{0,1}`, `night1/*` (5), `tinfra/new_{s0_a,s0_b,s1,s2}`,
+`par/par_s{0,1}` (15 runs). Each run is evaluated on the split recorded in its `config.json` (random for all runs
+before night 1). Test set not used.
+
+**Evidence.** Primary metrics unchanged: max |new - old| over all means and runs 7.5e-10 (CSV rounding).
+Secondary metrics, mean of seeds 0 and 1, %:
+- 67 ep, random val: median rel_all 1.4709, rel_p 9.0535; aggregate rel_all 2.0939, rel_p 9.9898 (fluid 1.9976 / 9.5095)
+- 133 ep, random val: median rel_all 1.2554, rel_p 8.4883; aggregate rel_all 1.9220, rel_p 9.5384 (fluid 1.8532 / 9.1443)
+- 67 ep, grouped val: median rel_all 1.5328, rel_p 10.2070; aggregate rel_all 2.6938, rel_p 12.9676 (fluid 2.5988 / 12.4473)
+- 133 ep, grouped val: median rel_all 1.4003, rel_p 9.1963; aggregate rel_all 2.5570, rel_p 12.3622 (fluid 2.4937 / 12.0080)
+
+**Observations.** 133 < 67 epochs on every secondary metric, on both splits. Grouped / random ratio at 133 epochs:
+1.12 for the median rel_all, 1.31 for the mean, 1.33 for the aggregate: the cost of unseen profiles sits mostly in
+the tail of hard samples, not in the typical sample.
+
+---
+
+## 2026-10-12 — Pressure error: per-sample analysis (no new runs)
+
+**Context / why.** At 133 epochs on the random split, the two seeds differed by 1.12 points in rel_p (calibration
+entry). Question: is the rel_p level and its seed variability driven by a few samples?
+
+**Action.** `python scripts/pressure_analysis.py` (new; reads only `eval_val_samples.csv`; writes
+`docs/results/pressure_top10.csv`). Groups: calibration 133 ep (random val, seeds 0-1), night 1 133 ep (grouped,
+seeds 0-2), night 1 67 ep (grouped, seeds 0-1).
+
+**Evidence.**
+- Distribution right-skewed: grouped 133 ep, per-sample rel_p median 9.2-9.3 %, 90th pct 20.6-24.0, 99th pct
+  62-75, max 182-186 (mean 12.2-12.6). Random 133 ep: median 8.2-8.8, 99th pct 29-35, max 54-59.
+- Top 10 samples by seed-mean rel_p (2.5 % of samples) carry 8.1 % (random) / 14.8 % (grouped 133) / 14.5 %
+  (grouped 67) of the summed rel_p; without them the grouped 133 mean drops from ~12.4 to ~10.8.
+- Grouped top 10: two kinds. (i) small sum|p target| (ranks 1-26 of 402: `hh02` x3, `ht05` x2, `goe314`,
+  `sc20706`), absolute error near the median; (ii) large sum|p target| with large absolute error
+  (`pfcm_6703_-2724` rel_p 182-186 % in all 5 grouped runs, `pfcm_7006_-2167`, `rae5214_8305_-3198`; high
+  fsY / fsX, i.e. high angle of attack). `pfcm` and `rae5214` are profiles absent from training.
+- rel_p vs sum|p target|: Spearman -0.21 to -0.30; by quintile of sum|p target| the mean rel_p is U-shaped
+  (grouped 133: Q1 17.9, Q3 8.7, Q5 15.0); sum|p o-t| grows with sum|p target| (Spearman +0.75 to +0.77).
+- Seed consistency: Spearman of per-sample rel_p between seeds 0.87 (random 133), 0.91-0.92 (grouped 133), 0.94
+  (grouped 67); median per-sample |diff| 1.2-1.5 points.
+- Seed variability: the top 10 samples by |diff| carry 37-64 % of the summed squared per-sample differences
+  (48 % of the per-sample variance over 3 seeds, grouped 133). Effect on the difference of the means depends on
+  the pair: calibration s0 vs s1 +1.12 -> +0.85 without them, s0 worse on 66 % of samples, median diff +0.77
+  (a broad shift); grouped 133 s0 vs s1 +0.14 -> +0.04, 50 % of samples, median +0.006 (a few samples);
+  grouped 133 sd of the 3 run means 0.23 -> 0.19 without the top 10.
+
+**Conclusion.** The mean rel_p is inflated by a tail of hard samples (small pressure signal or high-angle,
+unseen-profile cases), which are consistently hard across seeds. Per-sample noise between seeds is concentrated
+in a few samples, but the 1.12-point calibration gap was a broad shift over most samples, not a few outliers.
+Median and aggregate rel_p (previous entry) are less sensitive to the tail and are worth reporting alongside.
+
+**Open questions.** Whether the high-angle `pfcm` / `rae5214` cases are physically unsteady (RANS targets
+less reliable). Not examined.
