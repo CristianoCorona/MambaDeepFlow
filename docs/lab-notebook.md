@@ -1102,3 +1102,51 @@ cross for MD vs SA-SDPA; SA-SDPA uses the least memory at every size (MD ~7.5-8x
 crosses MD between 256 and 1 024 tokens and runs out of memory (8 GB GPU) from 4 096 tokens. The 8x8 and 32x32
 positions used in the experiments (64 and 1 024 tokens) lie on either side of the time crossing, consistent with the
 training it/s (SA8 faster than MD8, SA32 slower than MD32). One GPU, one precision; not a general statement.
+
+---
+
+## 2026-10-13 — CBAM downgraded to an exploratory control (kept in all tables)
+
+**Context / why.** CBAM was listed among the final configurations (2026-10-11) and in the planning report. On
+reflection it is not the natural comparison for Mamba: it re-weights channels and positions but does not move
+information between positions, so it is not a global mixer. Its form is also not symmetric with SA and MD: it is
+multiplicative with no residual, so at initialisation it does not reproduce B, while SA and MD do (zero output
+projection, unit test 4). Measured here: with seed 0, at initialisation, on 50 validation samples (eval mode, CPU),
+sum|CBAM(x)| / sum|x| at the 8x8 level is 0.154 (min 0.152, max 0.155), i.e. the features start scaled by ~0.15
+(the rough "two sigmoids of ~0.5" estimate of ~1/4 is an over-estimate: the channel gate is below 0.5 on average).
+At 8x8 the 7x7 conv of the spatial branch covers almost the whole map (central positions see 7x7 of the 8x8
+cells), so the spatial gate is in practice global, but it is still only a re-weighting.
+
+**Decision.** CBAM is **downgraded, not removed**: the three night-2 runs stay in every table (they were in the
+planning report; dropping them after seeing the results would be selective reporting). No further seeds for CBAM.
+CBAM vs B is reported as exploratory only. Alternatives considered: remove CBAM (rejected, selective reporting);
+add a residual CBAM variant (rejected: new configuration after seeing results, no time).
+
+**Evidence.** Measurement script run from the scratchpad (not committed; it builds `build_from_cfg({"variant":
+"CBAM", "level": 8})` at `torch.manual_seed(0)` and hooks `layer3` and the block).
+
+---
+
+## 2026-10-13 — Note on D10 (simplified SS2D): what is shared, and the conv1d wrap-around
+
+**Context / why.** The D10 row in "Global-mixing blocks: implementation, deviations D10-D13" lists the
+simplification but not its motivation, nor one side effect of flattening.
+
+**Motivation of D10 (recorded now).** Simplicity, time (deadline 2026-10-18) and the use of a single official,
+tested module (`mamba_ssm.Mamba`, CUDA kernels checked against the reference in unit test 6) instead of a custom
+re-implementation of VMamba's SS2D.
+
+**Differences from VMamba's SS2D.** In VMamba each of the 4 directions has its own `x_proj`, `dt_proj`, `A` and
+`D`; there is a depthwise 2D 3x3 conv before the scans and an output norm. Here everything is shared by the 4
+directions (one `Mamba` module), there is no 2D conv, and Mamba's causal **conv1d (d_conv = 4) acts on the already
+flattened sequence**. So in each scan direction the first 3 tokens of every row (row scans) or column (column
+scans), except the first line, have in their conv window tokens from the far end of the previous line, i.e. from
+the opposite edge of the grid. Counted per direction (each of the 4 orders gives the same count): **21 / 64 tokens
+at 8x8 and 93 / 1024 at 32x32** (= 3 x (n - 1)), as in the request. The first line sees zero padding instead.
+
+**Effect.** Not measured. Declared as a limitation of the MD variants; the recurrence (SSM) crossing line ends is
+intended (that is the global scan), the conv wrap-around is a by-product.
+
+**Evidence.** Count script in the scratchpad (not committed): for each scan order, a token is counted if any of
+the previous 3 tokens in scan order lies on a different row (row scans) or column (column scans); output
+`8: 21 21 21 21 / 64`, `32: 93 93 93 93 / 1024`.
