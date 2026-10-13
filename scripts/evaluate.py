@@ -121,7 +121,9 @@ def main():
     else:
         # split of the run (config.json); runs from before the grouped split have no split_mode: random
         split_mode = cfg.get("split", {}).get("split_mode", "random") if cfg else "grouped"
-        ds = mdata.load_val(split_file=mdata.split_file_path(split_mode), split_mode=split_mode)
+        n_folds, fold = cfg.get("split", {}).get("n_folds"), cfg.get("split", {}).get("fold")
+        ds = mdata.load_val(split_file=mdata.split_file_path(split_mode, n_folds=n_folds, fold=fold),
+                            split_mode=split_mode, n_folds=n_folds, fold=fold)
         print(f"Validation split: {split_mode} ({len(ds)} samples)")
         expected = cfg.get("split", {}).get("val_files_sha256")
         if expected and expected != mdata.file_list_sha256(ds.files):
@@ -177,6 +179,7 @@ def main():
     summary = {
         "split": args.split,
         "split_mode": split_mode if args.split == "val" else None,
+        "fold": fold if args.split == "val" else None,
         "n_samples": len(rows),
         "checkpoint": str(ckpt),
         "model": mcfg["variant"],

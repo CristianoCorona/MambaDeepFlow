@@ -81,10 +81,55 @@ def split_files_grouped(files, split_seed=SPLIT_SEED):
 
 
 SPLIT_MODES = {"random": split_files, "grouped": split_files_grouped}
+KFOLD = "kfold"
+ALL_SPLIT_MODES = (*SPLIT_MODES, KFOLD)
 
 
-def split_file_path(split_mode, split_seed=SPLIT_SEED):
+def kfold_profile_folds(files, n_folds, split_seed=SPLIT_SEED):
+    """Profile-disjoint folds (docs/lab-notebook.md, 2026-10-13): list of n_folds sets of profiles.
+
+    The sorted unique profiles are shuffled once with split_seed; each profile, in that order, goes to the fold
+    that currently holds the fewest files (ties: lowest fold index), so folds are balanced in files. Every profile
+    is in exactly one fold. Meant for the train + validation files (data/train), never for the test set.
+    """
+    if n_folds < 2:
+        raise ValueError(f"n_folds must be >= 2, got {n_folds}")
+    files = sorted(files)
+    by_profile = {}
+    for f in files:
+        by_profile.setdefault(profile(f), []).append(f)
+    profiles = sorted(by_profile)
+    random.Random(split_seed).shuffle(profiles)
+    folds, sizes = [set() for _ in range(n_folds)], [0] * n_folds
+    for p in profiles:
+        k = min(range(n_folds), key=lambda j: (sizes[j], j))
+        folds[k].add(p)
+        sizes[k] += len(by_profile[p])
+    return folds
+
+
+def split_files_kfold(files, n_folds, fold, split_seed=SPLIT_SEED):
+    """(train, val) for one fold: val = files of the fold's profiles, train = all others; both sorted."""
+    if not 0 <= fold < n_folds:
+        raise ValueError(f"fold must be in 0..{n_folds - 1}, got {fold}")
+    val_profiles = kfold_profile_folds(files, n_folds, split_seed)[fold]
+    files = sorted(files)
+    return ([f for f in files if profile(f) not in val_profiles], [f for f in files if profile(f) in val_profiles])
+
+
+def split_files_for(split_mode, files, split_seed=SPLIT_SEED, n_folds=None, fold=None):
+    """Dispatch over all split modes (kfold needs n_folds and fold)."""
+    if split_mode == KFOLD:
+        if n_folds is None or fold is None:
+            raise ValueError("split mode kfold needs n_folds and fold")
+        return split_files_kfold(files, n_folds, fold, split_seed)
+    return SPLIT_MODES[split_mode](files, split_seed)
+
+
+def split_file_path(split_mode, split_seed=SPLIT_SEED, n_folds=None, fold=None):
     """Committed validation list for a split mode (random keeps its historical name)."""
+    if split_mode == KFOLD:
+        return SPLITS_DIR / f"kfold{n_folds}_seed{split_seed}_fold{fold}.txt"
     name = f"val_seed{split_seed}.txt" if split_mode == "random" else f"val_grouped_seed{split_seed}.txt"
     return SPLITS_DIR / name
 
@@ -182,10 +227,11 @@ class FlowDataset(Dataset):
         return self.inputs[idx], self.targets[idx]
 
 
-def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None, split_mode="random"):
+def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None, split_mode="random",
+                   n_folds=None, fold=None):
     """Return (train_ds, val_ds, split_info). If split_file is given, it must match the computed split."""
     all_files = list_files(train_dir)
-    train_files, val_files = SPLIT_MODES[split_mode](all_files, split_seed)
+    train_files, val_files = split_files_for(split_mode, all_files, split_seed, n_folds, fold)
     if split_file is not None:
         if not Path(split_file).exists():
             raise FileNotFoundError(f"Split file {split_file} not found")
@@ -204,12 +250,15 @@ def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None, 
         "n_train_profiles": len({profile(f) for f in train_files}),
         "n_val_profiles": len({profile(f) for f in val_files}),
     }
+    if split_mode == KFOLD:
+        info.update({"n_folds": n_folds, "fold": fold})
     return FlowDataset(train_dir, train_files), FlowDataset(train_dir, val_files), info
 
 
-def load_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None, split_mode="random"):
+def load_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None, split_mode="random",
+             n_folds=None, fold=None):
     """Validation set only, checked against the committed split file (if given)."""
-    _, val_files = SPLIT_MODES[split_mode](list_files(train_dir), split_seed)
+    _, val_files = split_files_for(split_mode, list_files(train_dir), split_seed, n_folds, fold)
     if split_file is not None and read_split_file(split_file) != val_files:
         raise RuntimeError(f"Computed validation split differs from {split_file}")
     return FlowDataset(train_dir, val_files)

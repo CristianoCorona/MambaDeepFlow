@@ -1298,3 +1298,47 @@ converged steady solutions is not known (open question of the pressure entry). S
 
 **Open questions.** Whether the low-angle advantage of MD8 holds with 8 seeds (night 3); whether the common
 high-angle shift is a property of B's three runs.
+
+---
+
+## 2026-10-13 — Cross-validation: prepared, decision on 2026-10-14 after the exploratory analysis
+
+**Context / why.** The exploratory analysis has 85 validation profiles and few hard cases (e.g. the top |alpha|
+quintile has 81 samples / 50 profiles, and the worst separated-flow cases are a handful). A profile-disjoint
+k-fold over the 6400 train + validation files would give predictions on unseen profiles for all 1456 profiles, i.e.
+many more hard cases, to study where MD / SA differ from B. **Only prepared today (code, tests, queue); whether to
+run it is decided on 2026-10-14.**
+
+**Implementation.**
+- `mdf/data.py`: `kfold_profile_folds(files, n_folds, split_seed)`: sorted unique profiles shuffled once with split
+  seed 0; each profile, in that order, goes to the fold with the fewest files so far (ties: lowest index), so folds
+  are balanced in files. `split_files_kfold`, `split_files_for` (dispatch over all modes), `split_file_path` for
+  kfold (`splits/kfold5_seed0_fold<k>.txt`); `load_train_val` / `load_val` take `n_folds`, `fold`; `split_info`
+  records them. Existing modes untouched (`SPLIT_MODES` unchanged; grouped val sha256 still `3b26466a...`).
+  Only `data/train` is ever listed: the test set is not part of any fold.
+- `scripts/train.py`: `--split-mode kfold --n-folds 5 --fold k` (both required with kfold and refused without it);
+  run ID contains `kfold5f<k>`. `scripts/evaluate.py --split val` reads `n_folds` / `fold` from `config.json`.
+  `scripts/make_split.py --split-mode kfold --n-folds 5 --write` writes and checks the 5 fold files.
+- Alternatives considered: round-robin assignment of profiles (fold sizes would vary with profile sizes); stratifying
+  folds by angle (rejected: more complexity, and fold-level balance in |alpha| is not needed for out-of-fold
+  predictions).
+
+**Evidence.** `make_split.py --split-mode kfold --n-folds 5 --write`: 6400 files, 1456 profiles; validation folds
+1277 / 1278 / 1276 / 1286 / 1283 files, 293 / 291 / 284 / 289 / 299 profiles; 0 shared profiles in every fold; every
+file in exactly one validation fold. `pytest tests/test_kfold.py`: **8 passed** (cover every profile exactly once,
+each file in exactly one fold, train / val disjoint and complete, balance <= 20 files, no test file (paths resolved
+under `data/train`; test names compared via directory listing only, no test file opened), determinism and committed
+files, grouped / random unchanged, bad arguments). `tests/test_blocks.py`: 43 passed, 6 skipped (unchanged).
+`load_train_val(kfold, fold 0)` on CPU (data loading only, no training): 5123 / 1277 files, 1163 / 293 profiles,
+`load_val` gives the same list and sha256. train.py without `--fold` or without `--split-mode kfold`: argparse error,
+no run directory created.
+
+**Queue** `queues/cv.txt` (not launched): for fold 0..4: B, MD8, SA8; seed 0, 133 epochs, out root `~/runs/cv`.
+Durations from the night-1 / night-2 timings rescaled to ~512 training batches (vs 599) and ~128 validation batches
+per epoch (vs 40), plus a 3.2x larger final evaluation: B 11.2, MD8 13.9, SA8 11.8 min per fold (only ~7 % shorter
+than the main runs, because the per-epoch validation is 3.2x larger); **total ~184 min** (est= with margin: 200 min).
+
+**Limits (if run).** One seed per fold; training sets differ from the main runs (5114-5124 files instead of 5998,
+and different profiles), so the results are **exploratory only** and cannot be pooled with the main validation
+numbers. Out-of-fold merging and the per-stratum analysis on CV predictions are not implemented yet
+(`scripts/analyze_val.py` handles one split per call).

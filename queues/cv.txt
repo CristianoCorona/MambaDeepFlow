@@ -1,0 +1,18 @@
+# Cross-validation (PREPARED, NOT LAUNCHED; decision on 2026-10-14 after the exploratory analysis, docs/lab-notebook.md).
+# 5 profile-disjoint folds of data/train (split seed 0, splits/kfold5_seed0_fold<k>.txt), seed 0, 133 epochs.
+# Out root ~/runs/cv. est= = estimate from nights 1-2 rescaled to ~512 train / ~128 val batches, +~7 %.
+B_f0       est=12m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 0 --variant B
+MD8_f0     est=15m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 0 --variant MD --level 8
+SA8_f0     est=13m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 0 --variant SA --level 8
+B_f1       est=12m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 1 --variant B
+MD8_f1     est=15m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 1 --variant MD --level 8
+SA8_f1     est=13m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 1 --variant SA --level 8
+B_f2       est=12m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 2 --variant B
+MD8_f2     est=15m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 2 --variant MD --level 8
+SA8_f2     est=13m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 2 --variant SA --level 8
+B_f3       est=12m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 3 --variant B
+MD8_f3     est=15m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 3 --variant MD --level 8
+SA8_f3     est=13m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 3 --variant SA --level 8
+B_f4       est=12m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 4 --variant B
+MD8_f4     est=15m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 4 --variant MD --level 8
+SA8_f4     est=13m --seed 0 --epochs 133 --split-mode kfold --n-folds 5 --fold 4 --variant SA --level 8

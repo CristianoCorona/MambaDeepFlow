@@ -24,7 +24,8 @@ host-to-device copies, forward, backward, optimiser step, loss .item(); excludes
 and data loading). it_per_s_incl_val additionally includes the validation passes in the denominator.
 
 Usage:
-    python scripts/train.py --seed 0 [--epochs 133 | --iterations 10000] [--split-mode {grouped,random}]
+    python scripts/train.py --seed 0 [--epochs 133 | --iterations 10000]
+                            [--split-mode {grouped,random,kfold} [--n-folds 5 --fold K]]
                             [--variant {B,B-large,CBAM,SA,MD}] [--level {64,32,16,8}] [--channels N]
                             [--mamba-impl {cuda,ref}] [--lr 6e-4] [--batch-size 10] [--out-dir DIR]
                             [--deterministic]
@@ -63,8 +64,11 @@ def parse_args():
     ap.add_argument("--iterations", type=int, default=10000,
                     help="requested; epochs = int(iterations / batches_per_epoch + 0.5) as in the original")
     ap.add_argument("--epochs", type=int, default=None, help="number of epochs; overrides --iterations")
-    ap.add_argument("--split-mode", default="grouped", choices=sorted(mdata.SPLIT_MODES),
-                    help="grouped: profile-disjoint validation (default); random: original-style split (D1)")
+    ap.add_argument("--split-mode", default="grouped", choices=sorted(mdata.ALL_SPLIT_MODES),
+                    help="grouped: profile-disjoint validation (default); random: original-style split (D1); "
+                         "kfold: profile-disjoint folds of data/train (needs --n-folds, --fold)")
+    ap.add_argument("--n-folds", type=int, default=None, help="kfold only: number of folds (e.g. 5)")
+    ap.add_argument("--fold", type=int, default=None, help="kfold only: validation fold, 0..n_folds-1")
     ap.add_argument("--lr", type=float, default=6e-4)
     ap.add_argument("--batch-size", type=int, default=10)
     ap.add_argument("--variant", default=None, choices=models.VARIANTS, help="model variant (default B)")
@@ -78,6 +82,8 @@ def parse_args():
     ap.add_argument("--out-dir", type=Path, default=None, help="run directory (default ~/runs/<run-id>)")
     ap.add_argument("--deterministic", action="store_true", help="cudnn.deterministic (off in the original)")
     args = ap.parse_args()
+    if (args.split_mode == mdata.KFOLD) != (args.n_folds is not None and args.fold is not None):
+        ap.error("--n-folds and --fold are required with --split-mode kfold and only allowed with it")
     if (args.model or args.expo is not None) and args.variant not in (None, "B"):
         ap.error("--model / --expo are legacy options for variant B only")
     if args.expo is not None and args.channels is not None:
@@ -100,7 +106,8 @@ def main():
 
     budget = f"ep{args.epochs}" if args.epochs is not None else f"it{args.iterations}"
     tag = mcfg["variant"] + (f"{mcfg['level']}" if mcfg["level"] else "") + f"_c{mcfg['channels']}"
-    run_id = f"{tag}_{budget}_{args.split_mode}_s{args.seed}_{time.strftime('%Y%m%d-%H%M%S')}"
+    split_tag = args.split_mode + (f"{args.n_folds}f{args.fold}" if args.split_mode == mdata.KFOLD else "")
+    run_id = f"{tag}_{budget}_{split_tag}_s{args.seed}_{time.strftime('%Y%m%d-%H%M%S')}"
     run_dir = args.out_dir or Path.home() / "runs" / run_id
     if run_dir.exists() and any(run_dir.iterdir()):
         sys.exit(f"Run directory {run_dir} exists and is not empty")
@@ -114,7 +121,8 @@ def main():
 
     with timers("data_load"):
         train_ds, val_ds, split_info = mdata.load_train_val(
-            split_file=mdata.split_file_path(args.split_mode), split_mode=args.split_mode)
+            split_file=mdata.split_file_path(args.split_mode, n_folds=args.n_folds, fold=args.fold),
+            split_mode=args.split_mode, n_folds=args.n_folds, fold=args.fold)
     print(f"Train / validation samples: {len(train_ds)} / {len(val_ds)}; "
           f"val sha256 {split_info['val_files_sha256']}")
 
