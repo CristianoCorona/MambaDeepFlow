@@ -1010,3 +1010,95 @@ before a run that would end after the cutoff and the rest resumes the next night
 
 **Not yet done (never in parallel with a training run):** cost in isolation (`scripts/cost.py`) and block
 micro-benchmark (`scripts/microbench.py`); both scripts are committed here but have not been run.
+
+---
+
+## 2026-10-13 — Night 2: results (validation only, descriptive)
+
+**Action.** Queue `queues/night2.txt` in tmux session `night2` under `systemd-inhibit`, commit `ee7ee46` (clean tree),
+2026-10-12 23:46 to 2026-10-13 04:52 local time; **all 18 runs finished and evaluated**, none interrupted, cutoff (08:30) not
+reached. All runs: 133 epochs, grouped split (402 validation samples). Test set not used. Actual training wall times:
+MD8 14.7, SA8 12.5-12.6, B-large 16.1-16.2, CBAM8 12.5-12.6, MD32 21.3-21.4, SA32 24.3 min (estimates 15.1 / 12.7 /
+16.1 / 12.7 / 21.4 / 24.6).
+
+**Evidence.** Val, %, mean (sample std, ddof=1) over seeds 0-2; B = `night1/ep133_s{0,1,2}` (commit `3e69402`; same
+model, see the unit tests); median / aggregate rel_p = mean over seeds of the secondary metrics; it/s per seed.
+
+| Config  | rel_all         | rel_p            | rel_vx          | rel_vy          | median rel_p | agg rel_p | it/s               |
+|---------|-----------------|------------------|-----------------|-----------------|--------------|-----------|--------------------|
+| B       | 2.4212 (0.0210) | 12.4210 (0.2345) | 1.5513 (0.0237) | 5.9920 (0.0890) | 9.239        | 12.308    | 115.6 / 116.2 / 116.3 |
+| MD8     | 2.4318 (0.0500) | 12.0921 (0.4137) | 1.5722 (0.0354) | 5.8059 (0.1655) | 8.814        | 12.409    | 94.4 / 94.6 / 94.6 |
+| SA8     | 2.4855 (0.0084) | 12.7703 (0.4147) | 1.5936 (0.0110) | 6.2296 (0.0696) | 9.407        | 12.544    | 110.9 / 109.9 / 110.2 |
+| B-large | 2.4786 (0.0594) | 12.5396 (0.3307) | 1.5980 (0.0347) | 6.0051 (0.1194) | 9.089        | 12.660    | 85.7 / 85.9 / 85.8 |
+| CBAM8   | 2.4963 (0.0386) | 12.5244 (0.1238) | 1.6120 (0.0300) | 6.0032 (0.2109) | 9.232        | 12.662    | 110.4 / 110.6 / 110.4 |
+| MD32    | 2.4481 (0.0244) | 12.2080 (0.2093) | 1.5850 (0.0122) | 5.8070 (0.2099) | 9.026        | 12.401    | 64.3 / 64.6 / 64.5 |
+| SA32    | 2.4850 (0.0630) | 12.4155 (0.4063) | 1.6118 (0.0560) | 5.9639 (0.1724) | 9.048        | 12.626    | 56.3 / 56.4 / 56.4 |
+
+Per run (rel_all, seeds 0 / 1 / 2): MD8 2.4849 / 2.3856 / 2.4250; SA8 2.4833 / 2.4947 / 2.4784; B-large 2.4413 / 2.4474 /
+2.5472; CBAM8 2.5363 / 2.4934 / 2.4593; MD32 2.4376 / 2.4760 / 2.4307; SA32 2.4123 / 2.5239 / 2.5187.
+
+**Observations (descriptive; not the final analysis, which is pre-registered as a draft and will be confirmed
+before the test set is opened).** On validation no variant has a lower mean rel_all than B; all means lie within
+0.08 points of B (B 2.421, range 2.432-2.496), of the order of 1-4 seed standard deviations. MD8 and MD32 have the lowest
+mean rel_p and rel_vy and the lowest median rel_p, but not the lowest aggregate rel_p. With 3 seeds these differences
+are not established.
+
+**Open questions.** Final analysis plan to be confirmed by the team; bootstrap over profiles not computed yet.
+
+---
+
+## 2026-10-13 — Cost in isolation
+
+**Action.** `python scripts/cost.py` at commit `ee7ee46` (clean tree), after the queue had ended, GPU idle (no other
+process). Output `docs/results/cost.csv`. FLOP counting and the analytic Mamba formula are documented in the script
+docstring: the counter (`torch.utils.flop_counter`) counts matmul / conv / attention at 2 FLOPs per multiply-add;
+elementwise ops are not counted for any model. For MD the block is counted analytically per sequence of length L
+(C = d_model, E = 2C, N = 16, R = ceil(C/16), K = 4):
+`2LC(2E) + 2LEK + 2LE(R+2N) + 2LRE + 2LEC + 7LEN + 3LE`, times 4 scan directions. The counter itself saw only the
+four Mamba linear layers (MD8 0.0566 GFLOPs = exactly 4 x (in_proj + x_proj + dt_proj + out_proj)), not the
+conv1d and the selective scan, which confirms the need for the analytic term.
+
+**Evidence.** Latency: eval, no_grad, median of 100 after 20 warm-up; VRAM: `max_memory_allocated`, batch 10, 3
+iterations of forward + backward + Adam step (excludes the CUDA context); it/s: control runs (17 epochs).
+
+| Config  | Params    | Added vs B | GFLOPs fwd (b=1) | Block GFLOPs | Peak train VRAM b10 (MiB) | Latency b1 / b10 (ms) | Train it/s |
+|---------|-----------|------------|------------------|--------------|---------------------------|-----------------------|------------|
+| B       | 2 332 035 | 0          | 0.7833           | -            | 145.0                     | 0.82 / 2.93           | 115.0      |
+| B-large | 2 479 755 | +147 720   | 0.8318           | -            | 152.8                     | 0.88 / 4.40           | 86.2       |
+| CBAM8   | 2 334 317 | +2 282     | 0.7833           | 0.00002      | 164.0                     | 0.91 / 2.99           | 110.0      |
+| SA8     | 2 398 339 | +66 304    | 0.7938           | 0.0105       | 165.0                     | 0.81 / 2.97           | 110.0      |
+| MD8     | 2 448 771 | +116 736   | 0.8480           | 0.0647 (an.) | 177.4                     | 1.25 / 3.36           | 92.8       |
+| SA32    | 2 348 803 | +16 768    | 1.0853           | 0.3020       | 178.2                     | 0.90 / 5.13           | 55.7       |
+| MD32    | 2 364 803 | +32 768    | 1.0910           | 0.3078 (an.) | 346.0                     | 1.10 / 4.73           | 64.7       |
+
+**Observations.** B-large has +6 % FLOPs but -25 % training it/s and +50 % latency at batch 10: consistent with the
+non-multiple-of-8 channel hypothesis (control-run entry), still not verified. SA32 and MD32 have nearly the same FLOPs
+(+39 % vs B) but SA32 trains slower; MD32 needs about twice the training memory of any other configuration.
+
+---
+
+## 2026-10-13 — Block micro-benchmark (replaces M-E, D12)
+
+**Action.** `python scripts/microbench.py` at commit `ee7ee46` (clean tree), right after `cost.py`, GPU idle. d = 64,
+batch 10, float32, square grids 8 / 16 / 32 / 64 / 128 (64 to 16 384 tokens); forward + backward time (median of 20
+after 5 warm-up, synchronised) and peak extra memory of one forward + backward. Output `docs/results/microbench.csv`,
+figure `docs/figures/microbench.png`. SDPA backend selected by PyTorch (`torch._fused_sdp_choice`) at every size:
+`EFFICIENT_ATTENTION` (flash attention needs fp16 / bf16).
+
+**Evidence.**
+
+| Tokens | MD ms / MiB    | SA-SDPA ms / MiB | SA-naive ms / MiB |
+|--------|----------------|------------------|-------------------|
+| 64     | 1.31 / 18.0    | 0.45 / 2.2       | 0.54 / 3.3        |
+| 256    | 1.97 / 68.2    | 1.10 / 9.5       | 1.02 / 43.2       |
+| 1 024  | 6.57 / 267.0   | 9.27 / 35.4      | 15.74 / 652.6     |
+| 4 096  | 52.18 / 1066.9 | 140.90 / 141.6   | OOM               |
+| 16 384 | 235.68 / 4266.3 | 2219.17 / 566.8 | OOM               |
+
+**Observations (neutral).** Time: SA (both forms) is faster than MD up to 256 tokens; the MD and SA-SDPA curves
+cross between 256 and 1 024 tokens, and above that MD is faster (2.7x at 4 096, 9.4x at 16 384). From 4 096 to
+16 384 tokens MD time grows 4.5x and SA-SDPA 15.7x (close to linear and to quadratic). Memory: the curves do not
+cross for MD vs SA-SDPA; SA-SDPA uses the least memory at every size (MD ~7.5-8x more at the larger sizes); SA-naive
+crosses MD between 256 and 1 024 tokens and runs out of memory (8 GB GPU) from 4 096 tokens. The 8x8 and 32x32
+positions used in the experiments (64 and 1 024 tokens) lie on either side of the time crossing, consistent with the
+training it/s (SA8 faster than MD8, SA32 slower than MD32). One GPU, one precision; not a general statement.
