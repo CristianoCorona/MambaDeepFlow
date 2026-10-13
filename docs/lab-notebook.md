@@ -1150,3 +1150,39 @@ intended (that is the global scan), the conv wrap-around is a by-product.
 **Evidence.** Count script in the scratchpad (not committed): for each scan order, a token is counted if any of
 the previous 3 tokens in scan order lies on a different row (row scans) or column (column scans); output
 `8: 21 21 21 21 / 64`, `32: 93 93 93 93 / 1024`.
+
+---
+
+## 2026-10-13 — Night 3: pre-registered seed extension (queue prepared, not launched)
+
+**Context / why.** With 3 seeds per configuration the validation differences between variants (night-2 entry) are
+of the order of 1-4 seed standard deviations and not established. B's three runs come from night 1 (commit
+`3e69402`), so every comparison with B also mixes two nights / commits (same model, unit test 2). **This extension
+was decided after seeing the validation results of seeds 0-2** (declared here).
+
+**Decision (fixed now, before any run).**
+- Seeds per configuration, final: **8 (seeds 0-7) for B, MD8, SA8, MD32, SA32**; **3 for CBAM8** (downgraded, see
+  "CBAM downgraded"); **B-large: 3 + those the queue completes** among seeds 3-7 (low priority, at the end).
+- **All runs will be reported, whatever their result.**
+- Purposes: more power for MD vs B and MD vs SA (at 8x8 and 32x32); remove the cross-night / cross-commit
+  confound for B (B seeds 3-7 run with the current code, in the same night as the variants).
+- B seeds 0-2 (night 1) and B seeds 3-7 (night 3) will be compared with each other as a consistency check
+  (same model and protocol; a large difference would point to a code or machine effect).
+- Training protocol unchanged: 133 epochs, `--split-mode grouped` (split seed 0), Adam lr 6e-4, batch 10, final
+  checkpoint evaluated on validation right after training.
+
+**Queue** `queues/night3.txt` (order fixed): for seed 3, 4, 5, 6, 7: B, MD8, SA8, MD32, SA32; then B-large seeds
+3-7. B runs use explicit `--variant B` and are named `B_s<k>` under `~/runs/night3`, so they cannot be confused with
+night-1 `ep133_s<k>`. Durations: longest real wall time (train + eval) per configuration in nights 1-2: B 12.06,
+MD8 14.82, SA8 12.67, MD32 21.51, SA32 24.37, B-large 16.22 min; one seed block = 85.4 min. `est=` adds ~5 %
+(13 / 16 / 14 / 23 / 26 / 17 min) and is used only for the cutoff check until a run of the same configuration
+has finished in `~/runs/night3`. Night 2 had no measurable gaps between runs (306 min of runs in 306 min).
+**Expected ends with a start at 22:30:** seed 3 block 23:55, seed 4 01:20, seed 5 02:46, seed 6 04:11, seed 7
+05:37; B-large s3-s7 05:53 / 06:09 / 06:25 / 06:42 / **06:58**. Cutoff 08:30: all 30 runs are expected to fit
+(even with every run at its `est=`: 545 min, end 07:35).
+
+**Launch.** `scripts/launch_night3.sh` (new): refuses to start on a dirty tree (`git status --porcelain`, tracked
+or untracked) or if the tmux session `night3` exists; otherwise
+`tmux new -d -s night3 "export TMPDIR=...; systemd-inhibit --what=sleep:idle:handle-lid-switch --why=night3-queue
+<mdf python> scripts/run_queue.py queues/night3.txt --out-root ~/runs/night3 --cutoff 08:30"`. Checked today: on
+the dirty tree it exits 1 with the list of changed files; `run_queue.parse_queue` reads 30 runs.

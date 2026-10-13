@@ -1,0 +1,37 @@
+# Night 3 (2026-10-13/14): seed extension, 133 epochs, grouped split (split seed 0). Pre-registered in
+# docs/lab-notebook.md ("Night 3: pre-registered seed extension"). Order fixed: by seed; per seed B, MD8, SA8, MD32,
+# SA32; B-large seeds 3-7 last, low priority (they start only if they fit before the cutoff).
+# B runs here use the current code (explicit --variant B) and are named B_s<k>, out root ~/runs/night3, so they
+# cannot be confused with night-1 B runs (~/runs/night1/ep133_s<k>, commit 3e69402).
+# est= = longest real wall time (train + eval) of nights 1-2 for the configuration, +~5 %, rounded up.
+B_s3        est=13m --seed 3 --epochs 133 --variant B
+MD8_s3      est=16m --seed 3 --epochs 133 --variant MD --level 8
+SA8_s3      est=14m --seed 3 --epochs 133 --variant SA --level 8
+MD32_s3     est=23m --seed 3 --epochs 133 --variant MD --level 32
+SA32_s3     est=26m --seed 3 --epochs 133 --variant SA --level 32
+B_s4        est=13m --seed 4 --epochs 133 --variant B
+MD8_s4      est=16m --seed 4 --epochs 133 --variant MD --level 8
+SA8_s4      est=14m --seed 4 --epochs 133 --variant SA --level 8
+MD32_s4     est=23m --seed 4 --epochs 133 --variant MD --level 32
+SA32_s4     est=26m --seed 4 --epochs 133 --variant SA --level 32
+B_s5        est=13m --seed 5 --epochs 133 --variant B
+MD8_s5      est=16m --seed 5 --epochs 133 --variant MD --level 8
+SA8_s5      est=14m --seed 5 --epochs 133 --variant SA --level 8
+MD32_s5     est=23m --seed 5 --epochs 133 --variant MD --level 32
+SA32_s5     est=26m --seed 5 --epochs 133 --variant SA --level 32
+B_s6        est=13m --seed 6 --epochs 133 --variant B
+MD8_s6      est=16m --seed 6 --epochs 133 --variant MD --level 8
+SA8_s6      est=14m --seed 6 --epochs 133 --variant SA --level 8
+MD32_s6     est=23m --seed 6 --epochs 133 --variant MD --level 32
+SA32_s6     est=26m --seed 6 --epochs 133 --variant SA --level 32
+B_s7        est=13m --seed 7 --epochs 133 --variant B
+MD8_s7      est=16m --seed 7 --epochs 133 --variant MD --level 8
+SA8_s7      est=14m --seed 7 --epochs 133 --variant SA --level 8
+MD32_s7     est=23m --seed 7 --epochs 133 --variant MD --level 32
+SA32_s7     est=26m --seed 7 --epochs 133 --variant SA --level 32
+# low priority
+B-large_s3  est=17m --seed 3 --epochs 133 --variant B-large
+B-large_s4  est=17m --seed 4 --epochs 133 --variant B-large
+B-large_s5  est=17m --seed 5 --epochs 133 --variant B-large
+B-large_s6  est=17m --seed 6 --epochs 133 --variant B-large
+B-large_s7  est=17m --seed 7 --epochs 133 --variant B-large
