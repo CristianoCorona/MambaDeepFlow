@@ -1231,3 +1231,70 @@ cuDNN TF32 convolutions (PyTorch default `cudnn.allow_tf32 = True`) depend on th
 vs batch 1 differ by <= 2e-7. Effect on the run means (`night1/ep133_s0`): <= 0.0002 points for batch 20 vs 1, <= 0.001
 points for TF32 off vs on, i.e. far below the seed spread (>= 0.02). The analysis therefore uses batch 1, as
 `evaluate.py`. Per-sample values are reproducible to ~1e-7 only at the same batch size.
+
+---
+
+## 2026-10-13 — Exploratory validation analysis (A1-A7): results (EXPLORATORY)
+
+**Action.** `python scripts/analyze_val.py --seeds 0-2` at commit `e521ed3` (clean tree); 7 configurations x 3 seeds
+(B = `night1/ep133_s*`, others `night2/*`), validation (402 samples, 85 profiles). GPU inference only (~45 s), no
+training. Outputs `docs/results/val-explore/` (`summary.md` has every table) and `docs/figures/val-explore/`.
+Test set not used. Everything below is exploratory and descriptive; with 9 comparisons x 4 metrics in A3 and 200
+stratum cells in A4, some intervals excluding 0 are expected by chance.
+
+**Consistency.** Recomputed per-sample rel_p / rel_vx / rel_vy / rel_all vs each run's `eval_val_samples.csv`: max
+|diff| 1.6e-7 over 21 runs (batch 1; see the method entry for batch 20). Identity rel_all_s = sum_c w_cs rel_cs:
+max |lhs - rhs| 1.1e-16.
+
+**A1 (channel weights).** Mean w (min-max over samples): p 0.046 (0.004-0.123), **vx 0.825 (0.632-0.989)**, vy 0.129
+(0.008-0.270). rel_all is mostly rel_vx. MD8 - B: d rel_all +0.011 points = p +0.003, vx +0.008, vy -0.000; the
+-0.33 in rel_p and -0.19 in rel_vy contribute almost nothing. MD32 - B: +0.027 = +0.003 / +0.023 / +0.000.
+
+**A2 (MAE, normalised, x1e-3, fluid cells).** B p 3.33, vx 6.80, vy 4.27; mean |target| p 27.8, vx 473.5, vy 77.6.
+vy's absolute error is of the same order as p's and below vx's; its high relative error comes from the small
+denominator, not from a "hard" channel. MD8 has slightly *higher* fluid MAE than B on all three channels (3.36 /
+6.92 / 4.28) although its mean rel_p and rel_vy are lower: the relative gain sits in samples with small targets
+(A4). Interior (target exactly 0): B 5.0 / 10.5 / 3.6, i.e. the networks predict non-zero values inside the
+airfoil, of the same order as fluid errors (MD32 vx 14.3, CBAM8 8.8); ~3 % of the whole-grid vx error.
+
+**A3 (paired, points; CI one level / two levels).**
+- MD8 - B: rel_all +0.011 [-0.063, +0.101] / [-0.085, +0.141]; rel_p -0.33 [-0.69, +0.01] / [-0.99, +0.29];
+  rel_vy -0.19 [-0.35, -0.03] / [-0.47, +0.06]; median diff of rel_all -0.040, MD8 better on 59 % of profiles.
+- SA8 - B: rel_all +0.064 [+0.001, +0.130] / [-0.023, +0.151]; rel_vy +0.24 [+0.10, +0.39] / [+0.03, +0.47].
+- MD8 - SA8: rel_p -0.68 [-1.10, -0.28] / [-1.43, +0.09]; rel_vy -0.42 [-0.60, -0.24] / **[-0.70, -0.14]**;
+  rel_all -0.054 [-0.137, +0.045]; MD8 better on 72-73 % of profiles for p and vy.
+- MD32 - B, SA32 - B, B-large - B, CBAM8 - B, MD32 - SA32, MD32 - MD8: no two-level interval excludes 0 for any metric.
+- The only two-level intervals excluding 0 in A3: SA8 - B rel_vy (worse) and MD8 - SA8 rel_vy (MD8 better).
+
+**A4 (strata).** Spearman |alpha| vs sum |p target| = 0.92 (same axis in practice); thickness and external
+difficulty almost uncorrelated with them (|rho| <= 0.20). Pattern: in the low-|alpha| / small-pressure-signal
+quintiles MD8 is lower than B (e.g. |alpha| Q1 rel_all -0.07 [-0.11, -0.03], rel_p -1.03 [-1.93, -0.27]; Q2
+rel_all -0.11) and SA8 higher (Q1 rel_all +0.06 [+0.03, +0.09]); MD8 - SA8 Q1 rel_p -1.99 [-3.07, -1.06]. In the
+highest |alpha| quintile (18-22 deg) all four variants are *above* B in point estimate (rel_all MD8 +0.26
+[-0.05, +0.64], MD32 +0.16, SA8 +0.15, SA32 +0.30 [+0.06, +0.58]), with wide intervals. Because all four share the same
+three B runs, a common shift in one stratum may come from B's runs themselves (B seeds 3-7 will show this).
+External-difficulty Q5: MD8 rel_p -0.54 [-2.03, +0.96]: no signal. Out of 200 cells, 59 exclude 0 with the one-level
+CI and 22 with the two-level CI; of the latter, none is an MD - B cell in the hardest quintile of any criterion.
+
+**A5 (regions; MAE x1e-3; mean cells per sample: interior 323, wall 544, wake 317, rest 15 200).** Errors are
+largest in the wall band (B p 11.2, vx 31.2, vy 10.9) and at the leading edge (maps). MD8 - B: wall vy -0.14
+[-0.25, -0.04] (-1.3 %), all other regions / channels CI include 0; MD32 - B: wall vy -0.38 [-0.49, -0.25] (-3.5 %).
+SA8 - B: wall p +2.4 %, vx +1.7 %, wake vx +5.7 % [+0.45, +1.38]. MD8 - SA8: wall vx -2.7 %, vy -1.9 %. CBAM8 - B:
+wall +5 % on p and vx. One-level CIs only.
+
+**A6 (train / val L1, last epoch, x1e-3, mean over seeds).** Gap val - train: B 1.87 (sd 0.10), MD8 2.16 (0.10), SA8
+2.19 (0.13), MD32 1.96, SA32 2.14, B-large 2.01, CBAM8 2.14. MD8 and SA8 reach a lower training L1 (2.71, 2.76 vs
+B 2.95) with a similar or higher val L1 (4.86, 4.95 vs 4.82): the 8x8 mixers fit the training set more without
+generalising better. Caveat: train L1 is the epoch mean in train mode (BatchNorm batch statistics, weights changing).
+
+**A7 (qualitative, seed 0).** `pfcm_6703_-2724` (-22.1 deg): the target has 1071 reverse-flow (vx < 0) fluid
+cells downstream of the trailing edge and a low-pressure vortex detached behind the airfoil; B / MD8 / SA8 predict
+205-229 such cells and a vortex attached to the suction side, rel_p 1.72-1.83 for all three. `rae5214_8305_-3198`:
+620 target cells vs 257-268 predicted. `e836_3623_-1496` (-22.45 deg): separation bubble close to the wall (440
+reverse-flow cells within 8 px), predicted well (rel_p 0.04-0.06). So the high-angle samples are separated flows;
+the worst ones look like a detached-vortex state that none of the models reproduces. Whether these RANS targets are
+converged steady solutions is not known (open question of the pressure entry). Small-pressure-signal samples
+(`ht05`, `hh02`, |alpha| < 0.5 deg): rel_p 0.44-0.83 for all three models, absolute errors close to the median.
+
+**Open questions.** Whether the low-angle advantage of MD8 holds with 8 seeds (night 3); whether the common
+high-angle shift is a property of B's three runs.
