@@ -1186,3 +1186,48 @@ or untracked) or if the tmux session `night3` exists; otherwise
 `tmux new -d -s night3 "export TMPDIR=...; systemd-inhibit --what=sleep:idle:handle-lid-switch --why=night3-queue
 <mdf python> scripts/run_queue.py queues/night3.txt --out-root ~/runs/night3 --cutoff 08:30"`. Checked today: on
 the dirty tree it exits 1 with the list of changed files; `run_queue.parse_queue` reads 30 runs.
+
+---
+
+## 2026-10-13 — Exploratory validation analysis (A1-A7): method and tooling
+
+**Context / why.** Validation has already been looked at (night-2 entry), so it can be explored freely; **all
+results of this analysis are EXPLORATORY** and do not change the pre-registered plan. The test set stays closed.
+Goal: understand where (channels, flow conditions, regions of the field) MD / SA differ from B before deciding on
+cross-validation (separate entry).
+
+**Tooling.** `mdf/explore.py` (reusable, also for the test split later) and `scripts/analyze_val.py`.
+- **Test guard.** `explore.load_split("val")` asserts that the directory is `data/train`, that no resolved file
+  path lies in `data/test`, and that the computed list equals `splits/val_grouped_seed0.txt`; the script also checks
+  the val sha256 recorded in every run. `--split test` exits unless `--allow-test` is given. Not run on test.
+- **Runs from the command line**: `--config LABEL=GLOB` (repeatable, so B from nights 1 and 3 can be merged) and
+  `--seeds 0-7`; default = the night-1 / night-2 runs. Nothing seed- or split-specific is hard-coded.
+- **Inference** of each run (GPU, batch 1, ~1-2 s per run, 45 s in total for 21 runs including data loading);
+  only aggregates are kept, cached in `~/runs/explore-cache` (keyed by the checkpoint sha256): per-sample sums
+  of |o - t| and |t| per channel (whole grid and per region), the mean |error| map per channel, and the
+  predictions of the 6 A7 samples. MD on `--device cpu` would use `mamba_impl=ref`.
+- **Regions** (disjoint; rows = streamwise x, flow towards increasing row index, verified on the data: the
+  column of the wake minimum 20 px behind the trailing edge follows the free-stream angle, correlation 0.96 over
+  101 validation samples): interior (mask); wall band = fluid cells at Euclidean distance 1-4 px from the nearest
+  airfoil cell (boundary-layer proxy); wake = other fluid cells downstream of the trailing edge (last mask row,
+  mean column) along the free-stream direction, within 5 px of that line; rest = other fluid cells.
+- **Sample properties** (model independent): |alpha| = |atan2(vy_inf, vx_inf)| from the input channels;
+  sum |p target| (normalised); relative thickness = max over rows of the airfoil cells in that row / number of
+  rows with airfoil cells (chord ~60 px, so quantised to ~1/60); external difficulty = seed-mean rel_p of
+  B-large and CBAM8 (not involved in the MD / SA vs B comparisons, to avoid regression to the mean).
+- **Bootstrap** (`explore.paired_bootstrap`, 10 000 repetitions, seed 0): per-sample seed means, per-sample
+  difference, profiles (85) resampled with replacement, the statistic being the mean over the samples of the
+  resampled profiles (sample-weighted, as the metric). Two-level version: seeds of each configuration resampled
+  with replacement at each repetition as well (coarse with 3 seeds). Also median per-sample difference and the
+  fraction of profiles (and samples) where the variant has the lower error.
+- **A7 selection** (data only): the known hard high-angle cases `pfcm_6703_-2724` and `rae5214_8305_-3198`
+  (pressure-analysis entry) are present in validation but are **not** among the 3 largest |alpha| (-22.1 and
+  -21.1 deg vs -22.45 deg max), so they are included explicitly (`--qual-files`) and the third slot is the
+  largest |alpha|; plus the 3 smallest sum |p target|.
+
+**Finding during the consistency check (evaluation detail).** With batch 20 the recomputed per-sample ratios
+differed from `eval_val_samples.csv` by up to 1.6e-3 (0.85 % relative, e.g. rel_vy of `n63210_3827_58`). Cause:
+cuDNN TF32 convolutions (PyTorch default `cudnn.allow_tf32 = True`) depend on the batch size; with TF32 off, batch 20
+vs batch 1 differ by <= 2e-7. Effect on the run means (`night1/ep133_s0`): <= 0.0002 points for batch 20 vs 1, <= 0.001
+points for TF32 off vs on, i.e. far below the seed spread (>= 0.02). The analysis therefore uses batch 1, as
+`evaluate.py`. Per-sample values are reproducible to ~1e-7 only at the same batch size.
