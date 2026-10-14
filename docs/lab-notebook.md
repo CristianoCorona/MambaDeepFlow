@@ -2128,3 +2128,43 @@ differences keep their sign at every fraction for rel_p and rel_vy (MD8 lower, S
 including 0. The excess gap of the block variants over B is present at all fractions (+0.12 to +0.30 x1e-3) and is not
 larger at reduced data (the largest diff/SE is at 100 %, where the seed spreads are smallest). With 3 seeds none of these
 changes across fractions is established. Limits as pre-registered (geometric diversity not varied, low power).
+
+---
+
+## 2026-10-15 — Multi-level models (implementation, tests); control runs for a position experiment pre-registered
+
+**Context / why.** Preparation of a possible exploratory experiment on the position of the faithful SS2D block (MDv at
+32x32, at 64x64, and at several levels at once), requested by the team after the MDv8 results. Its composition and
+pre-registration are decided later by the team; here only code, tests and 17-epoch control runs (no long runs).
+
+**Implementation.**
+- `mdf/models.py`: configuration key `levels` (>= 2 distinct `LEVELS`, stored sorted descending; `normalize_levels`,
+  `levels_tag` -> e.g. `8-16-32`). Multi-level models are a separate class `TurbNetGMultiMixer`: `weights_init` on the
+  skeleton first (so the skeleton consumes the RNG exactly as B), then one block per level in encoder order (largest
+  map first), in `mixers` (`ModuleDict` keyed by level); each block output replaces its layer's output, as for one
+  block. Every block has a zero-initialised output projection, so at initialisation the network equals B.
+  Single-level variants are untouched: same class `TurbNetGMixer`, attribute `mixer`, `normalize_cfg` output without
+  a `levels` key. `model_cfg_from_run_config` reads `levels`; `block_params` sums all blocks.
+- `scripts/train.py`: `--levels 8,16,32` (needs a block variant, excludes `--level`; error otherwise), run tag
+  `MDv8-16-32`, `config.json` key `levels` (null for single-level runs).
+- Alternative considered: generalise `TurbNetGMixer` to a list of levels; rejected, since it would rename `mixer` in
+  the state dicts of all existing checkpoints.
+
+**Tests** `tests/test_multilevel.py`: **48 passed** (full suite **126 passed, 6 skipped**):
+- shapes (2, 3, 128, 128), finite, for all 11 combinations of >= 2 levels of {8, 16, 32, 64}, MDv and MD;
+- identity at initialisation: skeleton state dict equal to B's at the same seed, output max |diff| vs B 1.49e-8 (MDv,
+  MD, SA; levels 8+16+32, 32+64, 8+16+32+64);
+- after two Adam steps every block parameter has a non-zero gradient (MDv and MD, 8+16+32);
+- parameter counts = sum of the single-level blocks: **MDv8-16-32 block 281 088 (169 216 + 55 936 + 55 936), total
+  2 613 123** (+281 088 vs B); MDv32-64 76 736; MD8-16-32 182 272. MDv64 block 20 800, MDv32 55 936;
+- existing variants unchanged: sha256 fingerprints of the initial state dicts (seed 0) of B, B-large, CBAM8, SA8, MD8,
+  MDv8, SA32, MD32, MDv32, MDv64, MD64 computed with the code before the change (git worktree of `686398f`) and
+  after: identical; hard-coded in the test;
+- configuration handling and a strict state-dict round trip.
+
+**Control runs (pre-registered now, before running them).** `queues/control-night5.txt`: MDv32 (`--level 32`), MDv64
+(`--level 64`, 4096 tokens, C = 32), MDv8-16-32 (`--levels 8,16,32`); seed 0, 17 epochs, grouped split, out root
+`~/runs/control-2026-10-15` with `B` linked to `~/runs/control-2026-10-12/B`. Criteria of 2026-10-12
+(`scripts/control_gates.py`): (a) no NaN / Inf, (b) mean train L1 of the last 3 epochs < first 3, (c) final val L1 <=
+1.15 x B's (0.006324). Purpose: faults only; the val numbers are not used for comparisons. it/s and peak VRAM measured
+(night durations; MDv64 must fit in 8 GB).

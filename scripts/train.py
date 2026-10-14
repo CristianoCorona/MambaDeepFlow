@@ -26,7 +26,7 @@ and data loading). it_per_s_incl_val additionally includes the validation passes
 Usage:
     python scripts/train.py --seed 0 [--epochs 133 | --iterations 10000]
                             [--split-mode {grouped,random,kfold} [--n-folds 5 --fold K]]
-                            [--variant {B,B-large,CBAM,SA,MD}] [--level {64,32,16,8}] [--channels N]
+                            [--variant {B,B-large,CBAM,SA,MD}] [--level {64,32,16,8} | --levels 8,16,32] [--channels N]
                             [--mamba-impl {cuda,ref}] [--lr 6e-4] [--batch-size 10] [--out-dir DIR]
                             [--deterministic]
                             [--train-fraction F --total-steps N [--lr-ref-epochs 133] [--log-every 599]]
@@ -83,6 +83,8 @@ def parse_args():
     ap.add_argument("--variant", default=None, choices=models.VARIANTS, help="model variant (default B)")
     ap.add_argument("--level", type=int, default=None, choices=models.LEVELS,
                     help="feature-map size where the block sits (default 8; ignored for B, B-large)")
+    ap.add_argument("--levels", default=None,
+                    help="several levels, comma separated (e.g. 8,16,32): one block per level (not with --level)")
     ap.add_argument("--channels", type=int, default=None, help="base channels (default 32; B-large: 33)")
     ap.add_argument("--mamba-impl", default=None, choices=["cuda", "ref"], help="MD only (default cuda)")
     ap.add_argument("--expo", type=int, default=None, help="legacy: B with 2**expo base channels")
@@ -104,6 +106,8 @@ def parse_args():
         ap.error("--n-folds and --fold are required with --split-mode kfold and only allowed with it")
     if (args.model or args.expo is not None) and args.variant not in (None, "B"):
         ap.error("--model / --expo are legacy options for variant B only")
+    if args.levels is not None and (args.level is not None or args.variant in (None, "B", "B-large")):
+        ap.error("--levels needs a block variant and excludes --level")
     if args.expo is not None and args.channels is not None:
         ap.error("give --channels or --expo, not both")
     return args
@@ -111,8 +115,8 @@ def parse_args():
 
 def model_cfg_from_args(args):
     channels = args.channels if args.expo is None else int(2 ** args.expo + 0.5)
-    return models.normalize_cfg({"variant": args.variant or "B", "level": args.level, "channels": channels,
-                                 "mamba_impl": args.mamba_impl})
+    return models.normalize_cfg({"variant": args.variant or "B", "level": args.level, "levels": args.levels,
+                                 "channels": channels, "mamba_impl": args.mamba_impl})
 
 
 def train_steps(args, net, criterion, optimizer, train_loader, val_loader, writer, csv_fh, timers):
@@ -175,6 +179,8 @@ def main():
     if args.total_steps is not None:
         budget = f"st{args.total_steps}" + (f"_f{round(100 * args.train_fraction)}" if args.train_fraction else "")
     tag = mcfg["variant"] + (f"{mcfg['level']}" if mcfg["level"] else "") + f"_c{mcfg['channels']}"
+    if mcfg.get("levels"):
+        tag = mcfg["variant"] + models.levels_tag(mcfg["levels"]) + f"_c{mcfg['channels']}"
     split_tag = args.split_mode + (f"{args.n_folds}f{args.fold}" if args.split_mode == mdata.KFOLD else "")
     run_id = f"{tag}_{budget}_{split_tag}_s{args.seed}_{time.strftime('%Y%m%d-%H%M%S')}"
     run_dir = args.out_dir or Path.home() / "runs" / run_id
@@ -231,6 +237,7 @@ def main():
         "model": mcfg["variant"],
         "variant": mcfg["variant"],
         "level": mcfg["level"],
+        "levels": list(mcfg["levels"]) if mcfg.get("levels") else None,
         "channels": mcfg["channels"],
         "mamba_impl": mcfg["mamba_impl"],
         "trainable_params": n_params,

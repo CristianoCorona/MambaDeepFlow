@@ -143,8 +143,78 @@ def make_turbnet_mixer():
     return TurbNetGMixer
 
 
+def make_turbnet_multi_mixer():
+    DfpNet, _ = original_modules()
+
+    class TurbNetGMultiMixer(DfpNet.TurbNetG):
+        """TurbNetG with one block of the same kind at each of several levels (notebook 2026-10-15).
+
+        As TurbNetGMixer: weights_init on the skeleton first, then the blocks, created in encoder order (largest
+        feature map first); each block output replaces its layer's output. Blocks are in `mixers`, keyed by level.
+        Single-level variants keep using TurbNetGMixer (attribute `mixer`), so their state dicts are unchanged."""
+
+        def __init__(self, block_kind, levels, channels=32, mamba_impl="cuda", dropout=0.0):
+            super().__init__(channelExponent=channel_exponent(channels), dropout=dropout)
+            self.apply(DfpNet.weights_init)  # skeleton only: the blocks do not exist yet
+            self.levels = tuple(sorted(levels, reverse=True))
+            self.mixers = torch.nn.ModuleDict()
+            for level in self.levels:
+                _, mult = LEVEL_LAYER[level]
+                self.mixers[str(level)] = blocks.make_block(block_kind, channels * mult, level, mamba_impl)
+            self.mix_layers = {LEVEL_LAYER[level][0]: str(level) for level in self.levels}
+
+        def _mix(self, layer, x):
+            key = self.mix_layers.get(layer)
+            return x if key is None else self.mixers[key](x)
+
+        def forward(self, x):  # copied from TurbNetG.forward; a mixer after each selected encoder layer
+            out1 = self._mix("layer1", self.layer1(x))
+            out2 = self._mix("layer2", self.layer2(out1))
+            out2b = self._mix("layer2b", self.layer2b(out2))
+            out3 = self._mix("layer3", self.layer3(out2b))
+            out4 = self.layer4(out3)
+            out5 = self.layer5(out4)
+            out6 = self.layer6(out5)
+            dout6 = self.dlayer6(out6)
+            dout6_out5 = torch.cat([dout6, out5], 1)
+            dout5 = self.dlayer5(dout6_out5)
+            dout5_out4 = torch.cat([dout5, out4], 1)
+            dout4 = self.dlayer4(dout5_out4)
+            dout4_out3 = torch.cat([dout4, out3], 1)
+            dout3 = self.dlayer3(dout4_out3)
+            dout3_out2b = torch.cat([dout3, out2b], 1)
+            dout2b = self.dlayer2b(dout3_out2b)
+            dout2b_out2 = torch.cat([dout2b, out2], 1)
+            dout2 = self.dlayer2(dout2b_out2)
+            dout2_out1 = torch.cat([dout2, out1], 1)
+            dout1 = self.dlayer1(dout2_out1)
+            return dout1
+
+    return TurbNetGMultiMixer
+
+
+def normalize_levels(levels):
+    """Several levels for one variant: a sorted (descending) tuple of >= 2 distinct LEVELS, or None."""
+    if levels is None:
+        return None
+    if isinstance(levels, str):
+        levels = [x for x in levels.split(",") if x.strip()]
+    levels = tuple(sorted({int(x) for x in levels}, reverse=True))
+    bad = [x for x in levels if x not in LEVELS]
+    if bad:
+        raise ValueError(f"levels must be in {LEVELS}, got {bad}")
+    if len(levels) < 2:
+        raise ValueError(f"levels needs at least two distinct levels (use level for one), got {levels}")
+    return levels
+
+
+def levels_tag(levels):
+    return "-".join(str(x) for x in sorted(levels))
+
+
 def normalize_cfg(cfg):
-    """Fill defaults and check a model configuration {variant, level, channels, mamba_impl}."""
+    """Fill defaults and check a model configuration {variant, level, channels, mamba_impl}; with several levels
+    {variant, level: None, levels, channels, mamba_impl} (the key `levels` exists only for multi-level models)."""
     variant = cfg.get("variant", "B")
     if variant not in VARIANTS + TEST_VARIANTS:
         raise ValueError(f"unknown variant {variant!r}; available {VARIANTS}")
@@ -155,6 +225,14 @@ def normalize_cfg(cfg):
         channels = B_LARGE_CHANNELS
     channels = 32 if channels is None else int(channels)
     has_block = variant not in ("B", "B-large")
+    levels = normalize_levels(cfg.get("levels"))
+    if levels is not None:
+        if not has_block:
+            raise ValueError(f"variant {variant} has no block, levels not allowed")
+        if cfg.get("level") is not None:
+            raise ValueError("give level or levels, not both")
+        return {"variant": variant, "level": None, "levels": levels, "channels": channels,
+                "mamba_impl": (cfg.get("mamba_impl") or "cuda") if variant in ("MD", "MDv") else None}
     level = cfg.get("level")
     level = (8 if level is None else int(level)) if has_block else None
     if has_block and level not in LEVELS:
@@ -166,6 +244,8 @@ def normalize_cfg(cfg):
 def build_from_cfg(cfg):
     """The single model factory (training, evaluation, tests). Weights already initialised."""
     cfg = normalize_cfg(cfg)
+    if cfg.get("levels"):
+        return make_turbnet_multi_mixer()(cfg["variant"], cfg["levels"], cfg["channels"], cfg["mamba_impl"] or "cuda")
     if cfg["variant"] in ("B", "B-large"):
         net = build_dfpnet(expo=channel_exponent(cfg["channels"]))
         if net.layer1.layer1_conv.out_channels != cfg["channels"]:
@@ -177,11 +257,14 @@ def build_from_cfg(cfg):
 def model_cfg_from_run_config(run_cfg):
     """Model configuration of a run from its config.json; runs from before the variants are B."""
     if run_cfg.get("variant"):
-        return normalize_cfg({k: run_cfg.get(k) for k in ("variant", "level", "channels", "mamba_impl")})
+        return normalize_cfg({k: run_cfg.get(k) for k in ("variant", "level", "levels", "channels", "mamba_impl")})
     expo = run_cfg.get("args", {}).get("expo", 5)
     return normalize_cfg({"variant": "B", "channels": int(2 ** expo + 0.5)})
 
 
 def block_params(net):
+    mixers = getattr(net, "mixers", None)
+    if mixers is not None:
+        return count_params(mixers)
     mixer = getattr(net, "mixer", None)
     return 0 if mixer is None else count_params(mixer)
