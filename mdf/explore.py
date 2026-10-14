@@ -16,6 +16,12 @@ Regions (disjoint, in this priority order; all masks are (128, 128) bool):
             s = (cell - TE) . u > 0 and |(cell - TE) x u| <= WAKE_HALF_WIDTH px, u = unit free-stream vector,
             TE = last airfoil row (most downstream in x), mean column of its airfoil cells
   rest      all other fluid cells
+
+Divergence (docs/lab-notebook.md, 2026-10-14): velocity channels brought back to v / |v_inf| by multiplying by their
+fixed maxima (vx 2.04, vy 2.37, mdata.MAX_TARGETS); central differences on the uniform grid (unit: per pixel), only
+in fluid cells whose 4 neighbours are fluid. A mapping (vx_axis, sign_x, sign_y) says along which array axis vx is
+differentiated (vy along the other one) and with which signs: div = sign_x d(vx)/d(axis) + sign_y d(vy)/d(other).
+Flipping both signs only flips the sign of div, so the 8 mappings give 4 distinct mean |div| values.
 """
 
 import hashlib
@@ -32,7 +38,10 @@ WALL_PX = 4
 WAKE_HALF_WIDTH = 5
 REGIONS = ("interior", "wall", "wake", "rest")
 CHANNEL_NAMES = ("p", "vx", "vy")
-CACHE_VERSION = 2
+CACHE_VERSION = 3
+DIV_REGIONS = ("wall", "other")  # wall band; other = wake + rest (fluid away from the wall)
+# axis mapping of the divergence, chosen from validation targets (axis_mapping_scan, notebook 2026-10-14)
+DIV_MAPPING = (0, 1, 1)  # vx along axis 0 (rows), same sign: mean |div target| 4.1e-4 vs >= 6.9e-3 otherwise
 
 
 # --- test-set guard ---
@@ -149,6 +158,52 @@ def all_region_masks(ds, props):
             for i in range(len(ds))]
 
 
+# --- divergence ---
+
+ALL_MAPPINGS = tuple((ax, sx, sy) for ax in (0, 1) for sx in (1, -1) for sy in (1, -1))
+
+
+def valid_stencil(fluid):
+    """Fluid cells (bool (..., H, W)) whose 4 neighbours are fluid; grid-edge cells are excluded."""
+    v = np.zeros_like(fluid, dtype=bool)
+    v[..., 1:-1, 1:-1] = (fluid[..., 1:-1, 1:-1] & fluid[..., :-2, 1:-1] & fluid[..., 2:, 1:-1]
+                          & fluid[..., 1:-1, :-2] & fluid[..., 1:-1, 2:])
+    return v
+
+
+def divergence(vx, vy, mapping, scale=(mdata.MAX_TARGETS[1], mdata.MAX_TARGETS[2])):
+    """Divergence (per pixel) of (vx, vy) arrays (..., H, W) in normalised units, multiplied by `scale` first.
+    Central differences; values on the outer ring are 0 and must be masked with valid_stencil."""
+    ax, sx, sy = mapping
+    vx = np.asarray(vx, dtype=np.float64) * scale[0]
+    vy = np.asarray(vy, dtype=np.float64) * scale[1]
+
+    def d(f, axis):  # central difference along array axis 0 (rows) or 1 (cols) of the last two dims
+        out = np.zeros_like(f)
+        if axis == 0:
+            out[..., 1:-1, :] = (f[..., 2:, :] - f[..., :-2, :]) / 2.0
+        else:
+            out[..., :, 1:-1] = (f[..., :, 2:] - f[..., :, :-2]) / 2.0
+        return out
+
+    return sx * d(vx, ax) + sy * d(vy, 1 - ax)
+
+
+def axis_mapping_scan(ds):
+    """Mean over samples of mean |div target| over valid cells, for all 8 mappings (model independent)."""
+    tgt = ds.targets.numpy()
+    valid = valid_stencil(ds.inputs[:, 2].numpy() < 0.5)
+    out = {}
+    for mp in ALL_MAPPINGS:
+        a = np.abs(divergence(tgt[:, 1], tgt[:, 2], mp))
+        out[mp] = float(np.mean((a * valid).sum(axis=(1, 2)) / valid.sum(axis=(1, 2))))
+    return out
+
+
+def div_regions(regions_i, valid_i):
+    return {"wall": regions_i["wall"] & valid_i, "other": (regions_i["wake"] | regions_i["rest"]) & valid_i}
+
+
 # --- inference with per-sample aggregates ---
 
 def file_sha256(path):
@@ -166,6 +221,8 @@ def run_inference(run_dir, ds, regions, keep_idx, device="cuda", batch_size=1):
     Returns a dict of numpy arrays:
       rel_<c>, abs_err_<c>, abs_tgt_<c>    whole grid, c in p, vx, vy, all (float64 sums, as evaluate.py)
       reg_err_<r>   (N, 3) sum |o - t| per channel in region r;   reg_tgt_<r> (N, 3) sum |t|;  reg_n_<r> (N,)
+      div_pred_<r>, div_tgt_<r>, div_err_<r>, div_n_<r>   (N,) mean |div pred|, mean |div target|,
+                    mean |div pred - div target| over the valid cells of r in DIV_REGIONS (DIV_MAPPING), and count
       mean_abs_err_map  (3, 128, 128) mean over samples of |o - t|
       keep_pred (K, 3, 128, 128) float32, keep_idx (K,)
     """
@@ -184,6 +241,11 @@ def run_inference(run_dir, ds, regions, keep_idx, device="cuda", batch_size=1):
         out[f"reg_err_{r}"] = np.zeros((n, 3))
         out[f"reg_tgt_{r}"] = np.zeros((n, 3))
         out[f"reg_n_{r}"] = np.zeros(n)
+    if DIV_MAPPING is None:
+        raise RuntimeError("DIV_MAPPING not set")
+    for r in DIV_REGIONS:
+        for k in ("pred", "tgt", "err", "n"):
+            out[f"div_{k}_{r}"] = np.zeros(n)
     err_map = np.zeros((3, 128, 128))
     keep_pos = {int(k): j for j, k in enumerate(keep_idx)}
     keep_pred = np.zeros((len(keep_idx), 3, 128, 128), dtype=np.float32)
@@ -207,6 +269,15 @@ def run_inference(run_dir, ds, regions, keep_idx, device="cuda", batch_size=1):
                     out[f"reg_err_{r}"][i] = ae[:, m].sum(axis=1)
                     out[f"reg_tgt_{r}"][i] = at[:, m].sum(axis=1)
                     out[f"reg_n_{r}"][i] = m.sum()
+                dp = divergence(o[1], o[2], DIV_MAPPING)
+                dt = divergence(t[1], t[2], DIV_MAPPING)
+                valid = valid_stencil(ds.inputs[i, 2].numpy() < 0.5)
+                for r, m in div_regions(regions[i], valid).items():
+                    cnt = max(int(m.sum()), 1)
+                    out[f"div_pred_{r}"][i] = np.abs(dp[m]).sum() / cnt
+                    out[f"div_tgt_{r}"][i] = np.abs(dt[m]).sum() / cnt
+                    out[f"div_err_{r}"][i] = np.abs(dp[m] - dt[m]).sum() / cnt
+                    out[f"div_n_{r}"][i] = m.sum()
                 if i in keep_pos:
                     keep_pred[keep_pos[i]] = pred[j]
     for c in (*CHANNEL_NAMES, "all"):
@@ -224,10 +295,12 @@ def cached_inference(run_dir, ds, regions, keep_idx, cache_dir, split, device="c
         "version": CACHE_VERSION, "split": split, "model_sha256": file_sha256(run_dir / "model.pt"),
         "files_sha256": mdata.file_list_sha256(ds.files), "keep_idx": [int(k) for k in keep_idx],
         "wall_px": WALL_PX, "wake_half_width": WAKE_HALF_WIDTH, "batch_size": 1,
+        "div_mapping": list(DIV_MAPPING) if DIV_MAPPING else None,
     }
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
-    path = cache_dir / f"{run_dir.parent.name}__{run_dir.name}__{split}.npz"
+    key_hash = hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()[:10]
+    path = cache_dir / f"{run_dir.parent.name}__{run_dir.name}__{split}__{key_hash}.npz"
     if path.exists():
         with np.load(path) as z:
             if json.loads(str(z["key"])) == key:

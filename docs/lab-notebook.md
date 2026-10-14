@@ -1478,3 +1478,111 @@ afterwards stable. Throughput does not affect results.
 higher error); the largest is rel_all at ~2 SE (+0.033 points), with SEs estimated from 3 and 5 runs, so rough. Not a
 sign of a code or machine effect by the pre-registered threshold; it widens B's spread. As pre-registered, all 8
 seeds of B are used.
+
+---
+
+## 2026-10-14 — Validation analysis with all seeds (EXPLORATORY)
+
+**Context / why.** Night 3 brings B, MD8, SA8, MD32, SA32 and B-large to 8 seeds (CBAM8 3). Validation has already been
+looked at, so everything here is **exploratory**; the pre-registered plan (commit `26b6e7f`) is not changed by it.
+
+**Tooling changes.**
+- `scripts/analyze_val.py`: `--external-seeds` (the external difficulty of A4 stays the seed-mean rel_p of B-large +
+  CBAM8 **seeds 0-2**, as defined yesterday, so it remains independent of the new runs); comparisons MD8 - B-large and
+  SA32 - SA8 added (MDv8 pairs skipped when absent); `--previous DIR` adds "earlier run vs this run" (A3 and A4 |alpha|
+  rows; rule: *holds* = two-level CI excludes 0 in both runs, *disappeared* / *appeared* = only in the earlier / only
+  in the current one, *none* = neither). Fixed a summary line that was not an f-string (figure path printed literally).
+- New `scripts/final_analysis.py --split {val,test}`: the pre-registered final analysis (T1 mean +- std with aggregate
+  and median rel_p and fluid MAE; T2 paired comparisons with the two-level bootstrap; T3 regions; T4 divergence; one
+  figure of per-run values). It is the script that will be run unchanged on the test set; here it runs on validation.
+- `mdf/explore.py`: cache file name now includes a hash of the cache key (the two scripts use different A7 sample
+  lists, and would otherwise overwrite each other's cache); `CACHE_VERSION` 3 (divergence aggregates, next entry).
+
+**Action.** Same configuration globs for both scripts: B = `night1/ep133_s*` + `night3/B_s*`; MD8, SA8, MD32, SA32,
+B-large = `night2/<c>_s*` + `night3/<c>_s*`; CBAM8 = `night2/CBAM8_s*`; `--seeds 0-7`. Outputs
+`docs/results/val-explore-8seed/` (+ figures) with `--external-seeds 0-2 --previous docs/results/val-explore`, and
+`docs/results/val-final/` (+ figures). GPU inference only, 51 runs, ~70 s per script. Recomputed per-sample ratios vs
+each run's `eval_val_samples.csv`: max |diff| 1.6e-7. Test set not used.
+
+**Evidence: T1** (validation, %, mean (std over seeds); MAE x1e-3):
+
+| config  | seeds | rel_all         | rel_p            | rel_vx          | rel_vy          | agg rel_p        | median rel_p   | MAE p / vx / vy |
+|---------|-------|-----------------|------------------|-----------------|-----------------|------------------|----------------|-----------------|
+| B       | 8     | 2.4416 (0.0280) | 12.5225 (0.2753) | 1.5630 (0.0185) | 6.0674 (0.2044) | 12.4487 (0.1708) | 9.1739 (0.2424) | 3.370 / 6.862 / 4.315 |
+| MD8     | 8     | 2.4363 (0.0521) | 12.3436 (0.3404) | 1.5704 (0.0433) | 5.8278 (0.1448) | 12.5088 (0.3019) | 8.9010 (0.2373) | 3.392 / 6.897 / 4.271 |
+| SA8     | 8     | 2.5041 (0.0371) | 12.7959 (0.3786) | 1.6107 (0.0290) | 6.1662 (0.1691) | 12.7046 (0.1947) | 9.2192 (0.3647) | 3.441 / 7.074 / 4.411 |
+| B-large | 8     | 2.4785 (0.0484) | 12.6021 (0.4136) | 1.5898 (0.0321) | 6.0661 (0.1178) | 12.6467 (0.3808) | 9.2033 (0.4680) | 3.416 / 6.964 / 4.372 |
+| CBAM8   | 3     | 2.4963 (0.0386) | 12.5244 (0.1238) | 1.6120 (0.0300) | 6.0032 (0.2109) | 12.6624 (0.2232) | 9.2316 (0.1270) | 3.442 / 7.099 / 4.405 |
+| MD32    | 8     | 2.4668 (0.0294) | 12.4191 (0.2442) | 1.5958 (0.0250) | 5.8480 (0.1307) | 12.6305 (0.2618) | 9.1017 (0.2974) | 3.412 / 6.970 / 4.298 |
+| SA32    | 8     | 2.4714 (0.0405) | 12.4465 (0.2691) | 1.5954 (0.0353) | 5.9544 (0.1880) | 12.6469 (0.1884) | 9.0107 (0.1668) | 3.426 / 7.012 / 4.335 |
+
+**T2, main comparisons** (points; two-level 95 % CI):
+- MD8 - B: rel_all -0.005 [-0.078, +0.083]; rel_p -0.18 [-0.63, +0.24]; rel_vx +0.007 [-0.047, +0.078]; **rel_vy -0.24
+  [-0.46, -0.04]**; fluid MAE p / vx / vy all CIs include 0 (+0.02 / +0.04 / -0.04 x1e-3).
+- MD8 - SA8: rel_all -0.068 [-0.152, +0.031]; rel_p -0.45 [-1.00, +0.04]; **rel_vy -0.34 [-0.56, -0.12]**; MAE CIs include 0.
+- MD8 - B-large: rel_all -0.042 [-0.124, +0.048]; rel_p -0.26 [-0.75, +0.20]; **rel_vy -0.24 [-0.43, -0.06]**.
+- Exploratory (MD32 - MD8, SA32 - SA8, MD32 - SA32, CBAM8 - B): no two-level CI excludes 0 for rel_* or fluid MAE.
+- rel_all is ~82 % rel_vx (A1); MD8's lower rel_vy contributes -0.010 points to rel_all.
+
+**Earlier (seeds 0-2) vs now (all seeds)** (two-level CI; all A3 / A4-|alpha| rows in `earlier_vs_now.csv`):
+- *Holds*: MD8 - SA8 rel_vy (-0.42 -> -0.34); MD8 - B rel_all in |alpha| Q1 and Q2 (-0.07 -> -0.06; -0.11 -> -0.08);
+  MD8 - SA8 rel_all Q1, Q2 and rel_p Q1.
+- *Appeared*: MD8 - B rel_vy (-0.19 [-0.47, +0.06] -> -0.24 [-0.46, -0.04]); MD32 - B rel_all Q1.
+- *Disappeared*: SA8 - B rel_vy (+0.24 -> +0.10 [-0.13, +0.32]); SA8 - B rel_all Q1; MD32 - B rel_p Q1.
+- MD8 - B rel_p: -0.33 -> -0.18, CI still includes 0 (weakened). SA8 - B rel_all: +0.064 -> +0.062; two-level CI
+  [-0.023, +0.151] yesterday, now still includes 0 (status none in both).
+- **Hardest |alpha| quintile (18-22 deg), rel_all:** MD8 - B +0.26 -> **+0.09** [-0.20, +0.45]; MD32 - B +0.16 -> +0.17;
+  SA8 - B +0.15 -> +0.21; SA32 - B +0.30 -> +0.18; none excludes 0 with the two-level CI. Yesterday's common
+  positive shift partly came from B's three runs (MD8's shrinks); for SA8, MD32, SA32 it stays at ~+0.2 in point
+  estimate.
+
+**A6 (train mode, last epoch, x1e-3, 8 seeds).** Gap val - train: B 1.91 (sd 0.14), MD8 2.17, SA8 2.22, MD32 2.07, SA32 2.16,
+B-large 2.04, CBAM8 2.14; train L1 MD8 2.69, SA8 2.78 vs B 2.96; val L1 MD8 4.87, SA8 4.99 vs B 4.87. Same pattern as
+yesterday; checked in eval mode in phase 5a.
+
+**Open questions.** Whether MD8's lower rel_vy (mostly on low-angle samples, small vy denominators, see A2 / A4)
+carries to unseen shapes (test).
+
+---
+
+## 2026-10-14 — Divergence of predicted and target velocity (implementation; tried on validation, EXPLORATORY)
+
+**Context / why.** A physical-consistency check (incompressible flow: div v = 0), descriptive, decided in the
+pre-registered plan (commit `26b6e7f`, section 2).
+
+**Implementation** (`mdf/explore.py`): `divergence(vx, vy, mapping)`: channels multiplied by their fixed maxima from
+`mdata.MAX_TARGETS` (vx 2.04, vy 2.37; verified in the code) so both are in units of v / |v_inf| (the two channels are
+normalised by different constants); central differences on the uniform grid (unit: per pixel); `valid_stencil`:
+only fluid cells whose 4 neighbours are fluid (grid edge excluded). Per sample (`run_inference`, cache version 3):
+mean |div pred|, mean |div target|, mean |div pred - div target| in the wall band (`wall` region) and in the other
+fluid cells (`wake` + `rest`). Tests `tests/test_divergence.py` (4 passed): (x, -y) has divergence 0 and (x, y) has
+divergence 2 for both axis assignments, flipping both signs flips div, scaling, the 4-neighbour mask.
+
+**Axis orientation, from the data** (`axis_mapping_scan`, validation targets only, model independent). Mapping =
+(array axis along which vx is differentiated, sign of the vx term, sign of the vy term); mean over samples of mean
+|div target| over valid cells:
+
+| vx along axis | signs (vx, vy) | equivalent pair | mean |div target| |
+|---------------|----------------|-----------------|------------------|
+| 0 (rows)      | (+, +) / (-, -) | yes, identical  | **0.000413**     |
+| 0 (rows)      | (+, -) / (-, +) | yes, identical  | 0.008175         |
+| 1 (cols)      | (+, +) / (-, -) | yes, identical  | 0.010605         |
+| 1 (cols)      | (+, -) / (-, +) | yes, identical  | 0.006936         |
+
+As expected, the 8 mappings give 4 distinct values in identical pairs (flipping both signs only flips div). The choice
+concerns the axis of vx and the relative sign: **vx along axis 0 (rows), same sign** (`DIV_MAPPING = (0, 1, 1)`),
+17x below the next one, consistent with the geometry found on 2026-10-13 (rows = streamwise x, flow towards increasing
+row index). Scale: mean |d(vx)/dx| of the target is 2.4e-2 (wall band) and 3.6e-3 (other fluid) per pixel, so the
+target's own divergence is ~0.26 (wall band) and ~0.07 (elsewhere) of a single derivative term: not zero (grid
+interpolation of the RANS solution, normalisation by |v| constant per sample), hence the comparison is with the
+target, not with 0.
+
+**Evidence** (validation, x1e-3, mean (std) over seeds; `docs/results/val-final/summary.md` T4): target 6.21 (wall band),
+0.25 (other fluid). Predictions: wall band 13.3-14.1, other fluid 0.85-0.89 for all configurations (B 13.56 / 0.89,
+MD8 13.40 / 0.86, SA8 13.50 / 0.88, MD32 13.42 / 0.87, SA32 13.41 / 0.85, B-large 13.32 / 0.88, CBAM8 14.14 / 0.88), i.e.
+~2.2x the target in the wall band and ~3.5x away from it. Differences of mean |div pred - div target| (two-level CI):
+MD8 - B other fluid -0.032 [-0.055, -0.010] (-3 %), wall band -0.23 [-0.57, +0.19]; CBAM8 - B wall band +0.61 [+0.13, +1.08];
+all other comparisons include 0.
+
+**Reading.** All networks produce fields with several times the target's divergence; the differences between
+configurations are small compared with that common excess.

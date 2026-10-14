@@ -55,7 +55,8 @@ DEFAULT_CONFIGS = [
     f"B-large={HOME_RUNS}/night2/B-large_s*", f"CBAM8={HOME_RUNS}/night2/CBAM8_s*",
 ]
 COMPARISONS = [("MD8", "B"), ("MD32", "B"), ("SA8", "B"), ("SA32", "B"), ("B-large", "B"), ("CBAM8", "B"),
-               ("MD8", "SA8"), ("MD32", "SA32"), ("MD32", "MD8")]
+               ("MD8", "SA8"), ("MD32", "SA32"), ("MD32", "MD8"), ("MD8", "B-large"), ("SA32", "SA8"),
+               ("MDv8", "MD8"), ("MDv8", "B")]  # pairs with a missing label are skipped
 STRATA_COMPARISONS = [("MD8", "B"), ("MD32", "B"), ("SA8", "B"), ("SA32", "B"), ("MD8", "SA8")]
 METRICS = ["rel_all", "rel_p", "rel_vx", "rel_vy"]
 CH = explore.CHANNEL_NAMES
@@ -88,6 +89,10 @@ def parse_args():
                     help="known hard high-angle cases shown in A7 if present in the split; filled up to 3 by |alpha|")
     ap.add_argument("--external", default="B-large,CBAM8",
                     help="labels whose seed-mean rel_p defines the external difficulty (A4 d)")
+    ap.add_argument("--external-seeds", default=None,
+                    help="seeds of the --external labels used for the external difficulty (default: all loaded)")
+    ap.add_argument("--previous", type=Path, default=None,
+                    help="out-dir of an earlier run of this script: adds an 'earlier vs now' section (A3, A4 |alpha|)")
     return ap.parse_args()
 
 
@@ -139,6 +144,42 @@ def md_table(rows, fields, fmt=None):
 
 def pct(v):
     return f"{100 * v:+.3f}" if v < 0 or v > 0 else "0"
+
+
+def _status(prev_excl, now_excl):
+    return {(True, True): "holds", (True, False): "disappeared", (False, True): "appeared",
+            (False, False): "none"}[(prev_excl, now_excl)]
+
+
+def earlier_vs_now(prev_dir, a3, a4, out_dir):
+    """Earlier run (e.g. seeds 0-2) vs this run, per comparison: estimate and two-level CI. Rule: an indication
+    'holds' if the two-level CI excludes 0 in both, 'disappeared' / 'appeared' if only in the earlier / current one."""
+    with open(prev_dir / "a3_paired.csv") as fh:
+        p3 = {(r["comparison"], r["metric"]): r for r in csv.DictReader(fh)}
+    with open(prev_dir / "a4_strata.csv") as fh:
+        p4 = {(r["comparison"], r["metric"], r["quintile"]): r for r in csv.DictReader(fh)
+              if r["criterion"] == "abs_alpha"}
+    rows = []
+
+    def add(kind, key, prev, now_d, lo, hi, seeds):
+        pl, ph = float(prev["ci2_lo"]), float(prev["ci2_hi"])
+        rows.append({"what": kind, "comparison": key[0], "metric": key[1], "seeds now": seeds,
+                     "earlier diff [CI2]": f"{100 * float(prev['mean_diff']):+.3f} [{100 * pl:+.3f}, {100 * ph:+.3f}]",
+                     "now diff [CI2]": f"{100 * now_d:+.3f} [{100 * lo:+.3f}, {100 * hi:+.3f}]",
+                     "status": _status(pl > 0 or ph < 0, lo > 0 or hi < 0)})
+    for r in a3:
+        k = (r["comparison"], r["metric"])
+        if k in p3:
+            add("A3", k, p3[k], r["mean_diff"], r["ci2_lo"], r["ci2_hi"], f"{r['seeds_var']}/{r['seeds_ref']}")
+    for r in a4:
+        k = (r["comparison"], r["metric"], str(r["quintile"]))
+        if r["criterion"] == "abs_alpha" and k in p4:
+            add(f"A4 |alpha| Q{r['quintile']}", k, p4[k], r["mean_diff"], r["ci2_lo"], r["ci2_hi"], "")
+    write_csv(out_dir / "earlier_vs_now.csv", rows)
+    return ["## Earlier run vs this run (exploratory)", "",
+            f"Earlier: `{prev_dir}`. CI2 = two-level bootstrap (seeds + profiles), percentage points. Status: holds = "
+            "CI2 excludes 0 in both; disappeared / appeared = only earlier / only now; none = neither.", "",
+            md_table(rows, list(rows[0].keys())) if rows else "(no common rows)", ""]
 
 
 def main():
@@ -288,9 +329,14 @@ def main():
     crit = {"abs_alpha": (alpha, "|alpha| (deg)"), "p_signal": (psum, "sum |p target| (normalised)"),
             "thickness": (thick, "relative thickness (mask)")}
     ext = [e for e in args.external.split(",") if e in res]
+    ext_seeds = parse_seeds(args.external_seeds)
     if ext:
-        crit["external"] = (np.mean([stack(e, "rel_p").mean(0) for e in ext], axis=0),
-                            f"external difficulty: seed-mean rel_p of {'+'.join(ext)}")
+        def ext_rel_p(e):
+            pick = [j for j, (s_, _, _) in enumerate(runs[e]) if ext_seeds is None or s_ in ext_seeds]
+            return stack(e, "rel_p")[pick].mean(0)
+        crit["external"] = (np.mean([ext_rel_p(e) for e in ext], axis=0),
+                            f"external difficulty: seed-mean rel_p of {'+'.join(ext)}"
+                            + (f" (seeds {args.external_seeds})" if ext_seeds else ""))
     names = list(crit)
     ranks = {c: np.argsort(np.argsort(crit[c][0])) for c in names}
     spear = [{"criterion": a, **{b: float(np.corrcoef(ranks[a], ranks[b])[0, 1]) for b in names}} for a in names]
@@ -330,8 +376,11 @@ def main():
     write_csv(args.out_dir / "a4_strata.csv", a4)
     md += ["## A4 Differences by quintile (percentage points, 95% CI over profiles)", "",
            "Criteria: |alpha| = |atan2(vy_inf, vx_inf)|; sum |p target|; relative thickness from the mask; external "
-           f"difficulty = seed-mean rel_p of {'+'.join(ext) or 'n/a'}. Cells: mean diff [one-level CI]; the two-level "
-           "CI (seeds + profiles) is in a4_strata.csv (ci2_lo, ci2_hi). Figures: `{args.fig_dir.relative_to(REPO) if args.fig_dir.is_relative_to(REPO) else args.fig_dir}/a4_<criterion>.png`.", ""]
+           f"difficulty = seed-mean rel_p of {'+'.join(ext) or 'n/a'}"
+           + (f" (seeds {args.external_seeds})" if ext_seeds else "") + ". Cells: mean diff [one-level CI]; the "
+           "two-level CI (seeds + profiles) is in a4_strata.csv (ci2_lo, ci2_hi). Figures: "
+           f"`{args.fig_dir.relative_to(REPO) if args.fig_dir.is_relative_to(REPO) else args.fig_dir}/a4_<criterion>.png`.",
+           ""]
     md += ["Spearman correlation between criteria:", "",
            md_table(spear, ["criterion"] + names, {b: (lambda v: f"{v:+.2f}") for b in names}), ""]
     for cname in crit:
@@ -518,6 +567,9 @@ def main():
            "`a7_flow_high_alpha.png`. vx_neg cells: fluid cells with vx < 0 downstream of the trailing edge "
            "(reverse flow), target and predictions; near_wall: within 8 px of the airfoil.", "",
            md_table(a7, list(a7[0].keys())), ""]
+
+    if args.previous is not None:
+        md += earlier_vs_now(args.previous, a3, a4, args.out_dir)
 
     (args.out_dir / "summary.md").write_text("\n".join(md) + "\n")
     print(f"Wrote {args.out_dir}/summary.md and figures in {args.fig_dir}")
