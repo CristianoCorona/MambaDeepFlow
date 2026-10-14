@@ -1759,3 +1759,11 @@ established. The common excess of divergence and the regions pattern are the sam
 
 **Open questions.** The larger seed spread of the block variants on unseen shapes (descriptive; not analysed further
 here, post-test). MDv8: second, separate test pass after night 4, as pre-registered.
+
+---
+
+## 2026-10-14 — Correction to the entry "TEST SET: pre-registered final analysis"
+
+In "Validation vs test", the phrase "SA8 ... has the lower mean rel_all on test among the 8x8 variants" is wrong: CBAM8
+(2.720, 3 seeds) is lower than SA8 (2.734). Correct statement: SA8's mean rel_all on test is below B's (2.734 vs 2.776),
+the reverse of validation, with an interval including 0 and a seed spread ~3x B's. The entry is not rewritten.
