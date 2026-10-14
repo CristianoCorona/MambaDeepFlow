@@ -75,7 +75,7 @@ def count_params(net):
 # --- Variants with a global-mixing block (docs/lab-notebook.md, 2026-10-12) ---
 
 B_PARAMS = 2332035  # TurbNetG, 32 base channels
-VARIANTS = ("B", "B-large", "CBAM", "SA", "MD")
+VARIANTS = ("B", "B-large", "CBAM", "SA", "MD", "MDv")  # MDv: faithful SS2D (notebook 2026-10-14)
 TEST_VARIANTS = ("identity",)  # unit tests only
 LEVELS = (64, 32, 16, 8)
 # level (feature-map size) -> encoder layer after which the block sits, and its channel multiplier
@@ -160,7 +160,7 @@ def normalize_cfg(cfg):
     if has_block and level not in LEVELS:
         raise ValueError(f"level must be one of {LEVELS}, got {level}")
     return {"variant": variant, "level": level, "channels": channels,
-            "mamba_impl": (cfg.get("mamba_impl") or "cuda") if variant == "MD" else None}
+            "mamba_impl": (cfg.get("mamba_impl") or "cuda") if variant in ("MD", "MDv") else None}
 
 
 def build_from_cfg(cfg):

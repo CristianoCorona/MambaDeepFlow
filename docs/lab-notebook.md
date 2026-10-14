@@ -1767,3 +1767,67 @@ here, post-test). MDv8: second, separate test pass after night 4, as pre-registe
 In "Validation vs test", the phrase "SA8 ... has the lower mean rel_all on test among the 8x8 variants" is wrong: CBAM8
 (2.720, 3 seeds) is lower than SA8 (2.734). Correct statement: SA8's mean rel_all on test is below B's (2.734 vs 2.776),
 the reverse of validation, with an interval including 0 and a seed spread ~3x B's. The entry is not rewritten.
+
+---
+
+## 2026-10-14 — MDv8 (faithful SS2D): implementation, unit tests, control run pre-registered
+
+**Context / why.** Ablation pre-registered this morning (entry "Pre-registered ablation: faithful SS2D (MDv8)", commit
+`26b6e7f`), implemented after the test pass as planned.
+
+**Official code followed.** `MzeroMiko/VMamba`, commit `9ca24aee4bbffdb34619151afe8aa7a6ca278e44` (2024-01-19, the last
+commit before 2024-01-21; the code was first released on 2024-01-18, the date of arXiv 2401.10166 v1), file
+`classification/models/vmamba/vmamba.py`, class `SS2D` (`__init__`, `dt_init`, `A_log_init`, `D_init`, `forward_core`,
+`forward`), used by `VSSM` (the paper configs `classification/configs/vmamba/vmamba_{tiny,small,base}_224.yaml` have
+`TYPE: vssm`) through `VSSBlock`: `x + drop_path(SS2D(ln_1(x)))`. At that commit the repository had three model files
+(`vmamba.py`, `vss.py`, `vssmd.py`); `vmamba.py` is the one the paper configs build. Later versions of the repository
+(v2 / v3 SS2D with other scan, init and norm options) were not used. Read with the GitHub API / raw files, nothing
+installed. The repository has no LICENSE file at that commit; it is MIT-licensed today.
+
+**Implementation.** `mdf/blocks.py` `SS2DVMamba` (variant `MDv`, `mdf/models.py`; level 8 -> `MDv8`): block
+`y = x + SS2D(LN(x))` at the same point as MD8; SS2D: `in_proj` C -> 2E (no bias) split into x and z; depthwise 3x3
+`conv2d` (bias) + SiLU on x; 4 scans (rows, columns, rows reversed, columns reversed) with separate `x_proj_weight`
+(K, R + 2N, E), `dt_projs_weight` (K, E, R), `dt_projs_bias` (K, E), `A_logs` (K E, N), `Ds` (K E); `selective_scan_fn`
+of mamba_ssm with grouped B / C (one group per direction, `(b, 4, N, L)`), delta bias and softplus; the 4 outputs mapped
+back to row-major order and summed; `out_norm` LayerNorm(E); `* SiLU(z)`; `out_proj` E -> C (no bias). E = 2C, N = 16,
+R = ceil(C / 16). Initialisation as upstream (dt "random" in [1e-3, 0.1], A = 1..N, D = 1, x_proj with `nn.Linear`'s
+default; `in_proj` trunc_normal std 0.02 as `VSSM._init_weights` does for every `nn.Linear`); `weights_init` of DfpNet
+never touches the block (same construction as MD). `mdf/mamba_ref.py`: `selective_scan_ref` extended to grouped
+B / C (`(b, g, n, l)`, as upstream's `repeat "B G N L -> B (G H) N L"`); the 3-D path is unchanged. Parameter names are
+those of upstream, so the official module loads our state dict directly.
+
+**Remaining differences from the official SS2D / VSSBlock** (complete list):
+1. `out_proj` initialised to zero (declared deviation; upstream: `nn.Linear` default, then trunc_normal 0.02).
+2. No drop path (declared; the paper uses stochastic depth 0.1-0.5 across the whole network) and no dropout (upstream
+   default 0 as well).
+3. Same distributions at initialisation but a different RNG order (upstream draws `nn.Linear` defaults first and
+   overwrites `in_proj` later), so the same seed does not give the same values as an upstream module.
+4. mamba_ssm 2.3.2 (`selective_scan_fn`) instead of the January-2024 mamba_ssm 1.x / VMamba's own kernel; same
+   operation (checked against the reference below).
+5. Context: one block inside the U-Net at 8x8 with C = 128 (as MD8), instead of VMamba's hierarchy of stages,
+   patch embedding and merging.
+6. Layout only: our block receives (B, C, H, W) and permutes to channel-last before SS2D (upstream is channel-last);
+   `reshape` instead of `view`. No numerical effect (fidelity test: bit-identical).
+The block LayerNorm is `nn.LayerNorm(C)` (eps 1e-5), as VSSM passes `nn.LayerNorm` to VSSBlock (whose own default
+would be eps 1e-6).
+
+**Unit tests** (`tests/test_mdv.py`, CUDA, **15 passed**; full suite 78 passed, 6 skipped):
+- shapes at 8x8 and 32x32 -> (2, 3, 128, 128), finite;
+- identity at initialisation (zero `out_proj`) with B's skeleton weights: max |diff| vs B 1.49e-8 (CUDA), 0 (ref, CPU);
+- CUDA vs reference scan with `out_proj` randomised: mixing term max |diff| 2.4e-7 (8x8, C = 128) and 4.8e-7 (32x32,
+  C = 64); input and parameter gradients within the mamba_ssm float32 tolerances (largest 1.5e-5 on in_proj with values
+  up to 57);
+- after two Adam steps every block parameter has a non-zero gradient (first step: only `out_proj`, as for MD);
+- `weights_init` does not touch the block (rebuilt from the same RNG state; negative control: applying it changes the
+  conv2d);
+- **parameters: MDv8 block 169 216 (total 2 501 251, +169 216 vs B; MD8 block 116 736, so +52 480 vs MD8)**, MDv32 block
+  55 936; equal to the analytic count and to the official module + the block LayerNorm, same state-dict shapes;
+- **fidelity**: transcription of the official `SS2D` (verbatim `__init__` / `forward_core` / `forward`, in the test file
+  only, with attribution) loaded with our weights: **SS2D outputs bit-identical (max |diff| 0) at 8x8 and 32x32**, input
+  gradients equal within 1e-5, full block equal to `x + SS2D_official(LN(x))`; A and D initial values identical.
+
+**Control run (pre-registered now, before running it).** `queues/control-mdv8.txt`: MDv8, seed 0, 17 epochs, grouped
+split, out root `~/runs/control-2026-10-14`, with `B` linked to `~/runs/control-2026-10-12/B` as the reference.
+Criteria of 2026-10-12 (`scripts/control_gates.py`): (a) no NaN / Inf, (b) mean train L1 of the last 3 epochs < first 3,
+(c) final val L1 <= 1.15 x B's (0.006324). Purpose: faults only; the number is not used for comparisons. it/s measured
+(estimate of the night durations). If not passed by 20:00, MDv8 is left out of tonight's queue.

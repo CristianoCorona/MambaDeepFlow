@@ -1,0 +1,4 @@
+# Control run of MDv8 (2026-10-14): 17 epochs, seed 0, grouped split. Purpose: find faults only (criteria of the
+# 2026-10-12 control runs: no NaN / Inf, train L1 decreasing, final val L1 <= 1.15 x B at 17 epochs). Reference B =
+# ~/runs/control-2026-10-12/B (linked as B in the out root). Pre-registered in docs/lab-notebook.md (2026-10-14).
+MDv8    est=6m  --seed 0 --epochs 17 --variant MDv --level 8

@@ -236,7 +236,7 @@ def run_inference(run_dir, ds, regions, keep_idx, device="cuda", batch_size=1):
     run_dir = Path(run_dir)
     cfg = json.loads((run_dir / "config.json").read_text())
     mcfg = models.model_cfg_from_run_config(cfg)
-    if mcfg["variant"] == "MD" and device == "cpu":
+    if mcfg["variant"] in ("MD", "MDv") and device == "cpu":
         mcfg["mamba_impl"] = "ref"  # CUDA kernels need the GPU; reference path, same parameters
     net = models.build_from_cfg(mcfg)
     net.load_state_dict(torch.load(run_dir / "model.pt", map_location="cpu", weights_only=True))

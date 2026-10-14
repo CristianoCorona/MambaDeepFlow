@@ -15,7 +15,8 @@ import torch.nn.functional as F
 
 
 def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta_softplus=False):
-    """u, delta, z: (b, d, l); A: (d, n); B, C: (b, n, l); D, delta_bias: (d,). Returns (b, d, l)."""
+    """u, delta, z: (b, d, l); A: (d, n); B, C: (b, n, l) or grouped (b, g, n, l), group j covering channels
+    j*d/g .. (j+1)*d/g - 1 (as upstream); D, delta_bias: (d,). Returns (b, d, l)."""
     dtype_in = u.dtype
     u, delta = u.float(), delta.float()
     if delta_bias is not None:
@@ -23,13 +24,23 @@ def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta
     if delta_softplus:
         delta = F.softplus(delta)
     B, C = B.float(), C.float()
+    if B.dim() == 4:  # grouped B / C (upstream: repeat "B G N L -> B (G H) N L")
+        B = B.repeat_interleave(u.shape[1] // B.shape[1], dim=1)
+    if C.dim() == 4:
+        C = C.repeat_interleave(u.shape[1] // C.shape[1], dim=1)
     x = A.new_zeros((u.shape[0], A.shape[0], A.shape[1]))
     deltaA = torch.exp(torch.einsum("bdl,dn->bdln", delta, A))
-    deltaB_u = torch.einsum("bdl,bnl,bdl->bdln", delta, B, u)
+    if B.dim() == 3:
+        deltaB_u = torch.einsum("bdl,bnl,bdl->bdln", delta, B, u)
+    else:
+        deltaB_u = torch.einsum("bdl,bdnl,bdl->bdln", delta, B, u)
     ys = []
     for i in range(u.shape[2]):
         x = deltaA[:, :, i] * x + deltaB_u[:, :, i]
-        ys.append(torch.einsum("bdn,bn->bd", x, C[:, :, i]))
+        if C.dim() == 3:
+            ys.append(torch.einsum("bdn,bn->bd", x, C[:, :, i]))
+        else:
+            ys.append(torch.einsum("bdn,bdn->bd", x, C[:, :, :, i]))
     y = torch.stack(ys, dim=2)
     out = y if D is None else y + u * D[:, None]
     if z is not None:
