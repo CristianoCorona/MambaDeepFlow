@@ -2198,3 +2198,37 @@ an existing session; syntax checked with `bash -n`; `run_queue.parse_queue` read
 composition is decided by the team after the MDv8 results, and the pre-registration entry (drafted, not committed)
 must be committed before the launch. With a start at 01:30 the expected ends would be: s0 03:12, s1 04:54, s2
 **06:37**; worst case at `est=`: 06:54.
+
+---
+
+## 2026-10-15 — Position experiment (night 5): pre-registration (EXPLORATORY; decided AFTER the test set was opened)
+
+**Context / why.** After the MDv8 results (validation and the second pre-registered test pass), the team decided to
+look at the position of the faithful SS2D block. **This experiment was decided after the test set was opened** (first
+test pass `ca067a4`, MDv8 second pass `98cbb84`); it is therefore exploratory, and its results can not be used as
+confirmatory evidence of any configuration.
+
+**Design (fixed now, before any run).**
+- Queue composition confirmed by the team: `queues/night5.txt` as committed in `7844663`.
+- Configurations: MDv32 (MDv block at 32x32, C = 64), MDv64 (at 64x64, C = 32, 4096 tokens), MDv8-16-32 (one MDv
+  block at each of 8x8, 16x16, 32x32; entry "Multi-level models"). Every block with a zero-initialised output
+  projection (identity with B at initialisation).
+- Protocol identical to the main runs: 133 epochs, grouped split, Adam lr 6e-4, batch 10; seeds 0-2 (queue
+  `queues/night5.txt`, in seed order); out root `~/runs/night5`, cutoff 08:30.
+- **Validation only. These runs are NEVER evaluated on the test set** (no `evaluate.py --split test`, no
+  `final_analysis.py --split test` with these labels).
+- Comparisons (seeds 0-2 of each configuration against seeds 0-2 of the reference, same seeds; also against all 8
+  seeds of the reference where available, reported separately): **MDv32 vs MD32**, **MDv32 vs B**, **MDv64 vs B**,
+  **MDv8-16-32 vs MDv8**, **MDv8-16-32 vs B**. Metrics as in the final analysis plan (rel_all primary; rel_p with
+  aggregate and median; rel_vx; rel_vy with aggregate and median; fluid MAE), two-level bootstrap (seeds + profiles,
+  10 000), plus train L1 in eval mode and the train / validation gap (as verification 5a). With 3 seeds the intervals
+  are rough; descriptive only, no correction for multiple comparisons.
+- Main number: **final checkpoint**. Validation curves only as a diagnostic.
+- **Seeds: fixed at 3 (0-2) and not increased**, whatever the results. Runs that do not start before the cutoff
+  (08:30) are completed in the following night, with the same commands and no other runs added.
+- **All runs are reported**, including failed or interrupted ones (with the reason); no run is repeated or dropped
+  because of its result.
+- The 17-epoch control runs (entry "Control runs MDv32, MDv64, MDv8-16-32: pass") serve only to find faults and to
+  measure throughput and memory; their validation numbers do not shape expectations or decisions about this experiment.
+- Limits: parameter counts differ (MDv32 +55 936, MDv64 +20 800, MDv8-16-32 +281 088 vs B); 3 seeds; validation already
+  used for many decisions in this project.
