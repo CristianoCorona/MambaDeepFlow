@@ -2079,3 +2079,52 @@ Per-run MDv8 rel_all on test: 2.43, 2.73, 3.02, 2.88, 2.79, 2.83, 2.64, 2.82 (se
 including 0; its seed spread (0.174) is ~2x B's, between B and MD8. On validation the order was the reverse (MDv8 slightly
 above MD8 and B). As for the first pass, the ranking changes between validation and test and no difference is
 established with 8 seeds and 30 test profiles. Test results final: no re-runs.
+
+---
+
+## 2026-10-15 — Data-quantity experiment: results (validation only, EXPLORATORY)
+
+**Context / why.** Analysis as pre-registered (commit `26b6e7f`, section 1; entry "Data-quantity experiment:
+implementation and queue"). Nothing in the design changed after the runs.
+
+**Action.** New `scripts/data_quantity.py` (reuses `train_fit.train_metrics` / `welch`, `explore.cached_inference`,
+`explore.paired_bootstrap`): groups 29.1 % (`night4/*_f25_s0-2`), 55.6 % (`*_f50_*`) and 100 % (the main runs with the
+same seeds: B `night1/ep133_s0-2`, MD8 / SA8 `night2/*_s0-2`), configurations B, MD8, SA8. Train L1 in eval mode on the
+training files each run actually used: list rebuilt with `subsample_per_profile` and its sha256 asserted equal to the
+run's `config.json` (27 / 27 equal). `python scripts/data_quantity.py --out-dir docs/results/data-quantity --fig-dir
+docs/figures/data-quantity` (~2 min GPU). Test set not used.
+
+**Evidence** (validation; mean (sd) over seeds 0-2; L1 x1e-3; full tables in `docs/results/data-quantity/summary.md`):
+
+| data   | config | rel_all %     | rel_p %        | rel_vy %      | val L1 final (csv) | train L1 (eval) | gap          |
+|--------|--------|---------------|----------------|---------------|--------------------|-----------------|--------------|
+| 29.1 % | B      | 2.608 (0.074) | 13.49 (0.12)   | 6.35 (0.09)   | 5.19 (0.15)        | 1.94 (0.06)     | 3.26 (0.16)  |
+| 29.1 % | MD8    | 2.567 (0.089) | 13.24 (0.45)   | 6.20 (0.25)   | 5.11 (0.18)        | 1.66 (0.05)     | 3.46 (0.16)  |
+| 29.1 % | SA8    | 2.665 (0.028) | 13.64 (0.22)   | 6.55 (0.08)   | 5.30 (0.05)        | 1.87 (0.06)     | 3.44 (0.09)  |
+| 55.6 % | B      | 2.535 (0.052) | 13.09 (0.14)   | 6.06 (0.14)   | 5.06 (0.10)        | 2.28 (0.06)     | 2.78 (0.09)  |
+| 55.6 % | MD8    | 2.483 (0.063) | 12.69 (0.31)   | 5.90 (0.06)   | 4.95 (0.14)        | 2.06 (0.05)     | 2.90 (0.09)  |
+| 55.6 % | SA8    | 2.553 (0.119) | 13.14 (0.31)   | 6.26 (0.14)   | 5.09 (0.25)        | 2.13 (0.12)     | 2.96 (0.19)  |
+| 100 %  | B      | 2.421 (0.021) | 12.42 (0.23)   | 5.99 (0.09)   | 4.82 (0.05)        | 2.71 (0.03)     | 2.12 (0.07)  |
+| 100 %  | MD8    | 2.432 (0.050) | 12.09 (0.41)   | 5.81 (0.17)   | 4.86 (0.10)        | 2.48 (0.03)     | 2.39 (0.12)  |
+| 100 %  | SA8    | 2.486 (0.008) | 12.77 (0.41)   | 6.23 (0.07)   | 4.95 (0.01)        | 2.53 (0.09)     | 2.42 (0.08)  |
+
+Differences (points, two-level 95 % CI; L1 rows: Welch diff / SE; **3 seeds: rough**):
+
+| data   | MD8 - B rel_all         | MD8 - B rel_vy        | MD8 - B gap (diff/SE) | SA8 - B rel_all         | SA8 - B rel_vy        | SA8 - B gap (diff/SE) |
+|--------|-------------------------|-----------------------|-----------------------|-------------------------|-----------------------|-----------------------|
+| 29.1 % | -0.042 [-0.191, +0.116] | -0.15 [-0.49, +0.21]  | +0.20 (+1.50)         | +0.057 [-0.079, +0.206] | +0.20 [-0.11, +0.49]  | +0.18 (+1.68)         |
+| 55.6 % | -0.053 [-0.204, +0.102] | -0.15 [-0.44, +0.13]  | +0.12 (+1.63)         | +0.018 [-0.145, +0.178] | +0.20 [-0.06, +0.46]  | +0.18 (+1.47)         |
+| 100 %  | +0.011 [-0.085, +0.142] | -0.19 [-0.47, +0.06]  | +0.27 (+3.36)         | +0.064 [-0.023, +0.151] | +0.24 [+0.03, +0.47]  | +0.30 (+4.96)         |
+
+MD8 - B rel_p: -0.25 / -0.40 / -0.33 (all two-level CIs include 0). Train L1, MD8 - B: diff/SE -6.3 / -4.9 / -9.7;
+SA8 - B: -1.3 / -1.9 / -3.3. Validation curves (diagnostic): for every group the minimum of the val-L1 curve is in the
+last third (blocks 100-132 of 133), and the curves are flat over the last ~20 blocks, at 29 % as well; no late rise
+visible (figure `docs/figures/data-quantity/val_curves.png`).
+
+**Answer to the pre-registered question (neutral).** With less data all three configurations have higher validation
+error, lower training error and a larger gap (B gap 3.26 / 2.78 / 2.12 at 29 / 56 / 100 %). The MD8 - B and SA8 - B
+differences keep their sign at every fraction for rel_p and rel_vy (MD8 lower, SA8 higher); for rel_all MD8 - B is
+-0.04 / -0.05 / +0.01, i.e. slightly negative at reduced data and ~0 at full data, with every two-level interval
+including 0. The excess gap of the block variants over B is present at all fractions (+0.12 to +0.30 x1e-3) and is not
+larger at reduced data (the largest diff/SE is at 100 %, where the seed spreads are smallest). With 3 seeds none of these
+changes across fractions is established. Limits as pre-registered (geometric diversity not varied, low power).
