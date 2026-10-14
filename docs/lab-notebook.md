@@ -1586,3 +1586,51 @@ all other comparisons include 0.
 
 **Reading.** All networks produce fields with several times the target's divergence; the differences between
 configurations are small compared with that common excess.
+
+---
+
+## 2026-10-14 — Verification 5a: training error in eval mode; 5b: the pre-registered condition is satisfied
+
+**Context / why.** A6 compared the last-epoch train L1 in train mode (BatchNorm batch statistics, weights changing
+during the epoch) with the val L1 in eval mode. Here the final model of every run is evaluated in eval mode on the
+training set itself, and the pre-registered condition (commit `26b6e7f`) is applied literally.
+
+**Action.** `mdf/explore.py`: `load_split("train")` returns the training part of the grouped split (5998 files of
+`data/train`; asserts train / validation disjoint and every path under `data/train`, none under `data/test`). New
+`scripts/train_fit.py`: final model in eval mode, batch 10 on the training set (per-sample sums in float64 on the GPU),
+batch 1 on validation (cached inference, as `evaluate.py`); L1 = per-sample mean |o - t| over the whole grid, mean
+over samples (validation: 402 samples; `metrics.csv` uses 400 because of `drop_last`). Batch 10 vs 1 only changes the
+TF32 rounding (<= 0.001 points on run means, entry of 2026-10-13), negligible against the seed spread. Estimate first:
+4.6 s (B) and 6.5 s (MD32) per run on 2 runs -> ~5 min for 51 runs, under the 10-min limit, so all seeds. Actual GPU
+time on the training set: 147 s in total. `python scripts/train_fit.py <same --config as the validation analysis>
+--seeds 0-7 --out-dir docs/results/train-fit`. Test set not used.
+
+**Evidence** (x1e-3, mean (std) over seeds; diff / SE = (mean - mean_B) / Welch SE):
+
+| config  | seeds | train L1 (eval) | val L1          | gap             | train L1 - B (diff/SE) | val L1 - B (diff/SE) |
+|---------|-------|-----------------|-----------------|-----------------|------------------------|----------------------|
+| B       | 8     | 2.7623 (0.1065) | 4.8733 (0.0611) | 2.1109 (0.1225) |                        |                      |
+| MD8     | 8     | 2.4756 (0.1746) | 4.8721 (0.1103) | 2.3965 (0.1593) | -0.2867 (-3.97)        | -0.0012 (-0.03)      |
+| SA8     | 8     | 2.5572 (0.1122) | 4.9998 (0.0733) | 2.4425 (0.1065) | -0.2051 (-3.75)        | +0.1265 (+3.75)      |
+| MD32    | 8     | 2.6746 (0.1069) | 4.9340 (0.0685) | 2.2594 (0.1401) | -0.0878 (-1.64)        | +0.0607 (+1.87)      |
+| SA32    | 8     | 2.6019 (0.1156) | 4.9447 (0.0793) | 2.3428 (0.1124) | -0.1605 (-2.89)        | +0.0714 (+2.02)      |
+| B-large | 8     | 2.7365 (0.0731) | 4.9526 (0.1024) | 2.2161 (0.1313) | -0.0259 (-0.57)        | +0.0793 (+1.88)      |
+| CBAM8   | 3     | 2.5889 (0.0760) | 4.9923 (0.0804) | 2.4034 (0.1028) | -0.1734 (-3.00)        | +0.1191 (+2.33)      |
+
+Training rel_all (eval, %): B 1.436, MD8 1.292, SA8 1.336 (validation 2.442 / 2.436 / 2.504). In eval mode B's train L1
+(2.76) is lower than the train-mode epoch mean of A6 (2.96), and so are the variants' (MD8 2.48 vs 2.69).
+
+**Does A6's reading hold?** Yes, and more clearly: in eval mode MD8 and SA8 fit the training set better than B (about
+4 Welch SEs) with a validation L1 equal to B (MD8) or higher (SA8). CBAM8 and SA32 show the same direction, weaker;
+B-large (more parameters, no block) does not fit the training set better. Exploratory.
+
+**5b, condition applied literally** (pre-registered: for MD8 or SA8, (i) train diff/SE <= -2 and (ii) val diff/SE >= -1):
+
+| variant | train diff/SE | (i) | val diff/SE | (ii) | both |
+|---------|---------------|-----|-------------|------|------|
+| MD8     | -3.97         | yes | -0.03       | yes  | yes  |
+| SA8     | -3.75         | yes | +3.75       | yes  | yes  |
+
+**Outcome: the condition is satisfied** -> the data-quantity experiment is prepared for the night 14 -> 15 (next entry),
+in the same night queue as MDv8 (launch unified in `queues/night4.txt`, out root `~/runs/night4`, instead of the
+`~/runs/data-eff` named in the session plan, so that one launcher and one cutoff serve both).

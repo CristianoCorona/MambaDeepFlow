@@ -47,11 +47,11 @@ DIV_MAPPING = (0, 1, 1)  # vx along axis 0 (rows), same sign: mean |div target| 
 # --- test-set guard ---
 
 def assert_files_allowed(directory, files, split):
-    """Explicit guard: for split 'val' every file must be read from data/train, never from data/test."""
+    """Explicit guard: for splits 'val' and 'train' every file must be read from data/train, never from data/test."""
     directory = Path(directory).resolve()
     test_dir = mdata.TEST_DIR.resolve()
     train_dir = mdata.TRAIN_DIR.resolve()
-    if split == "val":
+    if split in ("val", "train"):
         assert directory == train_dir, f"val files must come from {train_dir}, got {directory}"
         assert directory != test_dir, "refusing to read the test directory for split 'val'"
         for f in files:
@@ -63,16 +63,23 @@ def assert_files_allowed(directory, files, split):
 
 
 def load_split(split, split_mode="grouped", allow_test=False):
-    """FlowDataset for 'val' (profile-disjoint by default, checked against the committed split file) or 'test'."""
+    """FlowDataset for 'val' (profile-disjoint by default, checked against the committed split file), 'train' (the
+    training part of the same split) or 'test'."""
     if split == "test":
         if not allow_test:
             raise SystemExit("split 'test' is for final results only; pass --allow-test explicitly")
         files = mdata.list_files(mdata.TEST_DIR)
         assert_files_allowed(mdata.TEST_DIR, files, "test")
         return mdata.FlowDataset(mdata.TEST_DIR, files)
-    _, val_files = mdata.SPLIT_MODES[split_mode](mdata.list_files(mdata.TRAIN_DIR))
+    train_files, val_files = mdata.SPLIT_MODES[split_mode](mdata.list_files(mdata.TRAIN_DIR))
     if mdata.read_split_file(mdata.split_file_path(split_mode)) != val_files:
         raise RuntimeError("computed validation split differs from the committed split file")
+    if split == "train":  # training part of the split (training-error check, notebook 2026-10-14)
+        assert not set(train_files) & set(val_files), "train and validation files overlap"
+        assert_files_allowed(mdata.TRAIN_DIR, train_files, "train")
+        return mdata.FlowDataset(mdata.TRAIN_DIR, train_files)
+    if split != "val":
+        raise ValueError(f"unknown split {split!r}")
     assert_files_allowed(mdata.TRAIN_DIR, val_files, "val")
     return mdata.FlowDataset(mdata.TRAIN_DIR, val_files)
 
