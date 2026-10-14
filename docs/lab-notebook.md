@@ -1972,3 +1972,13 @@ samples**, where the per-seed error of the variants ranges ~6-31 % (B 16-23 %). 
 **Open questions.** Whether these RANS targets at the highest angles are converged steady solutions (open since the
 pressure entry). The test has 30 profiles; one profile with three near-duplicate separated-flow samples weighs ~13 % of
 the mean rel_all.
+
+---
+
+## 2026-10-14 — Correction to the entry "Exploratory post-test: night / commit effect and between-seed spread on test"
+
+The sentence "The test mean rel_all itself is shifted by ~0.36-0.43 points by these 3 samples for every configuration"
+is inaccurate. From the sensitivity table the shift (all samples minus without `mue139`) is: B 0.36, MD8 0.39, SA8 0.21,
+MD32 0.43, SA32 0.43, B-large 0.44, CBAM8 0.17 points. Also, "per-seed error of the variants ranges ~6-31 %" should read
+~5-31 % (SA8 5.5-22.3, MD8 13.3-28.1, MD32 13.4-28.9, SA32 17.6-30.9, B-large 16.2-30.8 %; B 16.3-22.9 %), i.e. B-large,
+without a block, also spreads widely on these samples. The entry is not rewritten.
