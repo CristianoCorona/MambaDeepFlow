@@ -1439,3 +1439,42 @@ direction; selective scan; sum of the 4 directions mapped back to 2D; output Lay
 - Limitation: MDv8 has more parameters than MD8; the comparison mixes faithfulness and size.
 - Implementation, tests and a 17-epoch control run follow later today (after the test pass); the official VMamba
   file and commit followed will be recorded then.
+
+---
+
+## 2026-10-14 — Night 3: run check (status and durations only)
+
+**Action.** Read `~/runs/night3/queue.log` (status lines), every run's `config.json` and `queue_timing.json`; searched
+the logs for `Traceback` / `Error:` / nan / inf and `metrics.csv` for NaN / Inf. Done after the pre-registration
+commit `26b6e7f`.
+
+**Evidence.** Queue started 2026-10-13 23:25 (not 22:30 as planned: later launch), ended 07:56:46, before the cutoff
+(08:30). **All 30 runs finished and evaluated on validation**, none interrupted, no `*.interrupted-*` directory, no
+STOP file, no error, no NaN / Inf. All at commit `7b663e2`, clean tree. **B-large: all 5 extra seeds (3-7) completed**
+(so B-large has 8 seeds). Training wall times (min; `est=` / longest of nights 1-2 in the queue entry): B 12.0-12.5
+(13 / 12.06), MD8 14.7-15.5 (16 / 14.82), SA8 12.6-13.0 (14 / 12.67), MD32 21.4-21.7 (23 / 21.51), SA32 24.4 (26 /
+24.37), B-large 16.3 (17 / 16.22). it/s: B 111.4 (s3) and 114.9-115.3, MD8 90.0 (s3) and 93.9-94.2, SA8 107.3 (s3) and
+110.1-110.5, MD32 63.5-64.4, SA32 56.0-56.1, B-large 85.1-85.2. The seed-3 runs (the first of the night) were ~3 %
+slower; at the start of SA8_s3 the machine showed 1.1 GB of swap in use and less free memory (log "machine state"),
+afterwards stable. Throughput does not affect results.
+
+---
+
+## 2026-10-14 — Consistency of B: seeds 0-2 (night 1) vs seeds 3-7 (night 3)
+
+**Action.** New `scripts/b_consistency.py` (reads `eval_val.json`; Welch SE = sqrt(s_a^2/3 + s_b^2/5), ddof = 1):
+`python scripts/b_consistency.py --a ~/runs/night1/ep133_s{0,1,2} --b ~/runs/night3/B_s{3,4,5,6,7}`.
+
+**Evidence** (validation, %):
+
+| metric  | seeds 0-2 mean (sd) | seeds 3-7 mean (sd) | diff (3-7 minus 0-2) | Welch SE | diff / SE |
+|---------|---------------------|---------------------|----------------------|----------|-----------|
+| rel_all | 2.4212 (0.0210)     | 2.4539 (0.0254)     | +0.0328              | 0.0166   | +1.97     |
+| rel_p   | 12.4210 (0.2345)    | 12.5835 (0.3045)    | +0.1625              | 0.1920   | +0.85     |
+| rel_vx  | 1.5513 (0.0237)     | 1.5700 (0.0124)     | +0.0186              | 0.0148   | +1.26     |
+| rel_vy  | 5.9920 (0.0890)     | 6.1127 (0.2496)     | +0.1207              | 0.1229   | +0.98     |
+
+**Reading (neutral).** No ratio exceeds 3 standard errors. All four differences have the same sign (seeds 3-7 slightly
+higher error); the largest is rel_all at ~2 SE (+0.033 points), with SEs estimated from 3 and 5 runs, so rough. Not a
+sign of a code or machine effect by the pre-registered threshold; it widens B's spread. As pre-registered, all 8
+seeds of B are used.
