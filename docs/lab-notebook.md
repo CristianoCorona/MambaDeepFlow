@@ -1864,3 +1864,111 @@ tree it exits 1 listing the files, no session created; `run_queue.parse_queue` r
 **After the night (planned).** MDv8: validation analysis as phase 4 (`final_analysis.py` / `analyze_val.py` with the
 label MDv8; comparisons MDv8 - MD8 and MDv8 - B are already in the scripts), then the second, separate test pass decided
 in advance. Data-quantity runs: validation only.
+
+---
+
+## 2026-10-14 — Exploratory post-test: night / commit effect and between-seed spread on test
+
+**EXPLORATORY POST-TEST** (decided after the test results; not part of the pre-registered analysis and not changing
+it). No training, no GPU: per-sample CSVs already computed by `evaluate.py`, run configs, git history; the test inputs
+are read on the CPU for sample properties and one figure (CPU inference of 4 MD8 runs on 3 samples, Mamba reference
+path). New `scripts/posttest_explore.py`, outputs `docs/results/posttest/` (`summary.md` has every table) and
+`docs/figures/posttest/md8_top3_samples.png`.
+
+### 1. Night / commit effect
+
+**Why.** On validation B seeds 3-7 were slightly worse than seeds 0-2 (~2 SE on rel_all); on test MD8 splits into two
+groups (five runs >= 3.03, three 2.54-2.74).
+
+**MD8 groups on test (rel_all): low = seeds 6, 3, 1 (2.545 / 2.724 / 2.744; nights 3, 3, 2); high = seeds 5, 4, 0, 2, 7
+(3.027-3.190; nights 3, 3, 2, 2, 3).** Both groups mix nights 2 and 3, so the split is not by night / commit.
+
+**Seeds 3-7 minus seeds 0-2** (points; diff / Welch SE):
+
+| config  | val rel_all    | val rel_p      | val rel_vy     | test rel_all   | test rel_p     | test rel_vy    |
+|---------|----------------|----------------|----------------|----------------|----------------|----------------|
+| B       | +0.033 (+1.97) | +0.163 (+0.85) | +0.121 (+0.98) | -0.111 (-2.29) | -0.926 (-3.06) | -0.275 (-2.89) |
+| MD8     | +0.007 (+0.18) | +0.402 (+1.57) | +0.035 (+0.30) | -0.071 (-0.42) | -0.354 (-0.46) | -0.165 (-0.53) |
+| SA8     | +0.030 (+1.46) | +0.041 (+0.14) | -0.101 (-1.01) | -0.232 (-1.49) | -1.689 (-1.61) | -0.780 (-2.23) |
+| MD32    | +0.030 (+1.59) | +0.338 (+2.36) | +0.066 (+0.52) | +0.055 (+0.86) | +1.920 (+3.24) | +0.473 (+2.47) |
+| SA32    | -0.022 (-0.57) | +0.050 (+0.20) | -0.015 (-0.11) | -0.200 (-1.34) | -1.109 (-1.37) | -0.461 (-1.22) |
+| B-large | -0.000 (-0.01) | +0.100 (+0.34) | +0.098 (+1.14) | +0.001 (+0.01) | +0.134 (+0.21) | +0.080 (+0.41) |
+
+Mean diff/SE over the 6 configurations (number positive): val rel_all +0.77 (4/6), rel_p +0.91 (6/6), rel_vy +0.31 (4/6);
+test rel_all -0.78 (2/6), rel_p -0.51 (2/6), rel_vy -0.67 (2/6). For B the sign flips between validation (3-7 worse) and
+test (3-7 better); MD32 goes the other way on test. Limits: the configurations share the same validation / test samples
+and the same seed indices, so the 36 ratios are not independent; with 3 vs 5 runs the SEs are rough; and night is
+confounded with the seed index (0-2 vs 3-7), so a night effect cannot be separated from which seeds were drawn.
+
+**Code and environment between the commits actually used** (night 1 `3e69402`: 3 runs; night 2 `ee7ee46`: 18; night 3
+`7b663e2`: 30; all clean trees). `git diff` of `scripts/train.py` and every module it imports directly or indirectly
+(`mdf/data.py`, `mdf/models.py`, `mdf/runinfo.py`, `mdf/blocks.py`, `mdf/mamba_ref.py`, `mdf/__init__.py`,
+`train/DfpNet.py`, `train/utils.py`):
+- 3e69402 -> ee7ee46: variant factory added; B is built by `build_from_cfg` -> `build_dfpnet(expo=log2(32) = 5.0)` instead
+  of `build_model("dfpnet", expo=5)`: same channel count (int(2**5.0 + 0.5) = 32), same initial weights and outputs at
+  the same seed (unit test 2, `torch.equal`); `models.py` imports `blocks.py`, which imports `mamba_ssm` only inside
+  `SS2DMamba.__init__` (not for B). No effect on B's training.
+- ee7ee46 -> 7b663e2: k-fold split code only (`data.py`, argument parsing); the grouped split is unchanged (same train
+  and validation sha256 in every config). No effect.
+- Searched in all three commits and in HEAD: `allow_tf32`, `cudnn.benchmark` / `deterministic`,
+  `set_float32_matmul_precision`, `use_deterministic_algorithms`, `num_workers`, `worker_init`, all seeding calls: the
+  only occurrences are `runinfo.seed_everything` (random, numpy, torch, cuda seeds; cudnn flags only with
+  `--deterministic`) and the DataLoader settings (shuffle, drop_last, num_workers 0, generator seeded with `--seed`),
+  identical in all commits. No such setting in the installed `mamba_ssm` / `causal_conv1d` packages.
+- Recorded in all 51 `config.json`: identical train / validation file lists (sha256), epochs 133, 599 batches, 79 667
+  iterations, optimiser, LR schedule, normalisation, DataLoader, batch size, loss, cudnn deterministic / benchmark both
+  false, and identical environment (Python 3.12.15, torch 2.10.0+cu128, cuDNN 91002, numpy 2.5.3, driver 615.71.09, same
+  GPU).
+- **The current code (night 4) has the same seeding, DataLoader and global settings**; its changes since `7b663e2` only add
+  the MDv variant and the step-budget branch (the epoch loop is unchanged, entry "Data-quantity experiment"). Nothing to
+  flag.
+
+**Conclusion (neutral).** No systematic night or commit effect is visible: code paths, settings and environment are the
+same; the seed-group differences change sign between validation and test and between configurations, and MD8's two test
+groups mix nights. The differences are consistent with seed-to-seed variability (non-deterministic kernels, 6b, and
+different seeds). Weight on the comparisons: B's seeds 0-2 come from night 1 and the variants' from night 2, but since
+nothing differs between the commits for these runs, this does not bias the comparisons beyond seed noise.
+
+### 2. Between-seed spread on test
+
+**Variance ratio of rel_all, variant vs B** (F = var_variant / var_B, 8 vs 8 seeds unless stated, two-sided p of the F
+distribution assuming normal per-run values; seed-bootstrap 95 % CI of the SD ratio; F CDF computed with the regularised
+incomplete beta, checked against simulation):
+
+| split | config  | SD ratio | F    | p     | SD ratio CI   |
+|-------|---------|----------|------|-------|---------------|
+| val   | MD8     | 1.86     | 3.48 | 0.12  | [1.10, 3.20]  |
+| val   | SA8     | 1.33     | 1.76 | 0.47  | [0.48, 2.43]  |
+| val   | B-large | 1.73     | 3.00 | 0.17  | [0.92, 3.05]  |
+| test  | MD8     | 2.77     | 7.70 | 0.015 | [1.30, 5.73]  |
+| test  | SA8     | 2.79     | 7.76 | 0.015 | [1.12, 5.99]  |
+| test  | SA32    | 2.31     | 5.32 | 0.042 | [1.13, 4.87]  |
+| test  | MD32    | 1.23     | 1.52 | 0.59  | [0.60, 2.63]  |
+| test  | B-large | 1.56     | 2.44 | 0.26  | [0.64, 3.30]  |
+| test  | CBAM8 (3 seeds) | 1.81 | 3.29 | 0.20 | -          |
+
+On test the larger spread of MD8, SA8 and SA32 is unlikely under equal variances taken one at a time (p 0.015-0.04;
+6 comparisons x 2 splits, no correction); B-large (no block) is not distinguishable from B.
+
+**Where it comes from** (covariance decomposition of the between-seed variance of mean test rel_all into per-sample
+shares). MD8: the top 5 samples carry 73 % of the variance, the top 3 profiles (`mue139`, `bw3`, `mh49`) 71 %; SA8: top 5
+samples 76 %, top 3 profiles (`mue139`, `mh49`, `bw3`) 92 %. The two largest shares for both are
+`mue139_9021_-3726` and `mue139_8935_-3679` (20 % and 18-20 % each): |alpha| 22.4 deg (the maximum of the test set),
+600-630 target reverse-flow cells downstream of the trailing edge (separated flow, as `pfcm_6703` and `rae5214` on
+validation), per-sample rel_all ~13-28 % against a test mean of ~2.8 %, and nearly identical flow conditions (their errors
+move together). The other large shares are also high-angle, separated or near-separated samples (`bw3_*` 20.5-21.2 deg,
+`m17` 22.3 deg, `goe147` 17.3 deg), plus the low-angle `mh49_1733_62` (2.1 deg, small pressure signal). 11 of the 90 test
+samples have > 100 reverse-flow cells. Figure: in the `mue139` samples the target has a detached low-pressure vortex
+behind the trailing edge; no seed of MD8, good or bad, reproduces it (all predict a low-pressure region attached to the
+suction side); good and bad seeds differ in how far they are from it.
+
+**Sensitivity (post hoc): test rel_all without the profile `mue139` (3 of 90 samples)**, mean (sd over seeds), %:
+B 2.414 (0.119), MD8 2.555 (0.164), SA8 2.527 (0.188), MD32 2.306 (0.108), SA32 2.383 (0.165), B-large 2.453 (0.101),
+CBAM8 2.546 (0.121); with all samples B 2.776 (0.085), MD8 2.940 (0.234). Without `mue139`, SD ratios vs B are 0.85-1.58
+(p >= 0.25): **the larger test spread of the block variants is mostly produced by the two near-duplicate `mue139`
+samples**, where the per-seed error of the variants ranges ~6-31 % (B 16-23 %). The test mean rel_all itself is shifted by
+~0.36-0.43 points by these 3 samples for every configuration.
+
+**Open questions.** Whether these RANS targets at the highest angles are converged steady solutions (open since the
+pressure entry). The test has 30 profiles; one profile with three near-duplicate separated-flow samples weighs ~13 % of
+the mean rel_all.
