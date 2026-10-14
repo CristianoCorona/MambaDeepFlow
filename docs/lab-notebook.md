@@ -1702,3 +1702,60 @@ All tests: 63 passed, 6 skipped.
 -0.190 [-0.396, +0.034] / -0.152 [-0.466, +0.091]; MD8 - B-large: -0.150 [-0.355, +0.058] / -0.156 [-0.380, +0.148].
 So on validation MD8's rel_vy advantage over B is mostly in the mean of ratios (-0.24 [-0.46, -0.04]); in the aggregate
 it is small and its interval includes 0.
+
+---
+
+## 2026-10-14 — TEST SET: pre-registered final analysis (single pass)
+
+**Action.** After the team's go-ahead ("VIA AL TEST"). Checks: working tree clean, HEAD `ee9b8c5` descends from the
+pre-registration commit `26b6e7f` and contains the addendum (`65aa729`). **One pass**, 13:2x local time: `scripts/evaluate.py
+--run-dir <run> --split test` (batch 1) on all 51 final runs (B night1 s0-2 + night3 s3-7; MD8, SA8, MD32, SA32, B-large
+night2 s0-2 + night3 s3-7; CBAM8 night2 s0-2; no data-quantity run exists yet, none included), 51 / 51 evaluated, 90
+samples each, no failure; then `scripts/final_analysis.py <same --config as on validation> --seeds 0-7 --split test
+--allow-test --out-dir docs/results/test --fig-dir docs/figures/test`, unchanged from the version tried on validation.
+Results committed right after the computation without re-runs (`ca067a4`). Consistency vs `eval_test_samples.csv`: max
+|diff| 3.0e-7. 90 samples, 30 profiles (none seen in training).
+
+**Evidence: T1** (test, %, mean (std) over seeds; MAE x1e-3):
+
+| config  | seeds | rel_all        | rel_p          | rel_vx         | rel_vy        | agg rel_p | median rel_p | agg rel_vy | median rel_vy | MAE p / vx / vy |
+|---------|-------|----------------|----------------|----------------|---------------|-----------|--------------|------------|---------------|-----------------|
+| B       | 8     | 2.776 (0.085)  | 14.91 (0.64)   | 1.797 (0.068)  | 6.64 (0.20)   | 13.74     | 8.53         | 6.24       | 4.13          | 3.78 / 7.90 / 5.03 |
+| MD8     | 8     | 2.940 (0.235)  | 15.20 (1.20)   | 1.937 (0.168)  | 6.61 (0.47)   | 14.67     | 8.10         | 6.51       | 3.95          | 4.05 / 8.51 / 5.25 |
+| SA8     | 8     | 2.734 (0.235)  | 14.70 (1.70)   | 1.763 (0.171)  | 6.51 (0.62)   | 13.44     | 8.70         | 6.10       | 4.30          | 3.69 / 7.78 / 4.91 |
+| B-large | 8     | 2.896 (0.132)  | 14.98 (0.72)   | 1.883 (0.115)  | 6.70 (0.20)   | 14.43     | 8.40         | 6.55       | 4.09          | 3.96 / 8.24 / 5.26 |
+| CBAM8   | 3     | 2.720 (0.153)  | 14.42 (0.78)   | 1.768 (0.113)  | 6.40 (0.16)   | 13.21     | 8.16         | 6.08       | 4.15          | 3.65 / 7.82 / 4.90 |
+| MD32    | 8     | 2.736 (0.104)  | 13.40 (1.39)   | 1.794 (0.072)  | 5.97 (0.39)   | 13.68     | 8.32         | 6.16       | 3.83          | 3.76 / 7.81 / 4.95 |
+| SA32    | 8     | 2.813 (0.195)  | 14.28 (1.20)   | 1.829 (0.158)  | 6.38 (0.52)   | 14.10     | 8.19         | 6.35       | 4.02          | 3.88 / 8.03 / 5.12 |
+
+Per-run rel_all (descriptive, figure `docs/figures/test/per_seed.png`): B 2.63-2.89; MD8 2.55-3.19 (five runs >= 3.03,
+three 2.54-2.74); SA8 2.31-3.10; MD32 2.56-2.87; SA32 2.61-3.17; B-large 2.79-3.09; CBAM8 2.57-2.88.
+
+**Main comparisons** (points; two-level 95 % CI; T2 / T2b):
+- MD8 - B: rel_all +0.164 [-0.102, +0.527]; rel_p +0.28 [-1.22, +1.76]; rel_vx +0.140 [-0.062, +0.445]; rel_vy -0.04
+  [-0.59, +0.49]; agg rel_p +0.93 [-0.47, +2.70]; median rel_p -0.40 [-1.37, +0.57]; agg rel_vy +0.27 [-0.30, +0.94];
+  median rel_vy -0.26 [-0.78, +0.42]; fluid MAE p / vx / vy +0.27 / +0.61 / +0.23 x1e-3, all CIs include 0.
+- MD8 - SA8: rel_all +0.21 [-0.14, +0.74]; rel_p +0.50 [-1.37, +2.92]; rel_vy +0.10 [-0.55, +0.99]; median rel_vy -0.56
+  [-1.10, +0.15] (one-level CI [-0.93, -0.01]).
+- MD8 - B-large: rel_all +0.04 [-0.27, +0.38]; rel_p +0.22 [-1.22, +1.85]; rel_vy -0.09 [-0.60, +0.51].
+- **No two-level interval of the main comparisons excludes 0, for any metric.**
+- Exploratory (MD32 - MD8, SA32 - SA8, MD32 - SA32, CBAM8 - B): no two-level interval excludes 0 for rel_*, MAE,
+  aggregate or median. Largest point estimate: MD32 - MD8 rel_p -1.80 [-6.12, +0.31].
+
+**Regions** (T3, descriptive): wall-band MAE as on validation is the largest (B p 12.3, vx 31.5, vy 11.9 x1e-3). Two-level
+CIs excluding 0: only MD32 - SA32 wall vy -0.43 [-0.82, -0.09] (-3.7 %).
+
+**Divergence** (T4, descriptive): target 6.48 (wall band) / 0.27 (other fluid) x1e-3; predictions 14.2-15.3 / 0.99-1.03,
+i.e. ~2.2x and ~3.7x the target for every configuration, as on validation. Differences of mean |div pred - div target|
+with the two-level CI excluding 0: SA32 - SA8 (wall -0.44, other -0.037) and CBAM8 - B (wall +0.69, as on validation);
+MD8 - B other -0.028 [-0.057, +0.006] (on validation -0.032, CI excluding 0).
+
+**Validation vs test (qualitative).** Errors are higher on test (B rel_all 2.78 vs 2.44; profiles never seen). The
+validation signal of MD8 on rel_vy (-0.24 vs B, interval excluding 0) **is not reproduced** on test (-0.04, interval
+including 0); MD8's seed spread is ~3x larger on test than B's (0.235 vs 0.085), while on validation it was ~2x. SA8,
+worst on validation, has the lower mean rel_all on test among the 8x8 variants, with an equally large spread. The ranking
+of configurations changes between validation and test; with 8 seeds and 30 test profiles none of the differences is
+established. The common excess of divergence and the regions pattern are the same on both splits.
+
+**Open questions.** The larger seed spread of the block variants on unseen shapes (descriptive; not analysed further
+here, post-test). MDv8: second, separate test pass after night 4, as pre-registered.
