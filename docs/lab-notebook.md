@@ -1831,3 +1831,36 @@ split, out root `~/runs/control-2026-10-14`, with `B` linked to `~/runs/control-
 Criteria of 2026-10-12 (`scripts/control_gates.py`): (a) no NaN / Inf, (b) mean train L1 of the last 3 epochs < first 3,
 (c) final val L1 <= 1.15 x B's (0.006324). Purpose: faults only; the number is not used for comparisons. it/s measured
 (estimate of the night durations). If not passed by 20:00, MDv8 is left out of tonight's queue.
+
+---
+
+## 2026-10-14 — MDv8 control run: pass; Night 4: queue (pre-registered, not launched)
+
+**Control run.** `scripts/run_queue.py queues/control-mdv8.txt --out-root ~/runs/control-2026-10-14 --cutoff 20:00` at
+commit `82ed832` (clean tree), 13:34-13:36 local time; `python scripts/control_gates.py --root ~/runs/control-2026-10-14
+--csv docs/results/control-mdv8.csv` (B = link to the 2026-10-12 control B):
+
+| Run  | Params    | it/s  | Train L1 first 3 / last 3 | Val L1 final | / B   | a | b | c | Result |
+|------|-----------|-------|---------------------------|--------------|-------|---|---|---|--------|
+| B    | 2 332 035 | 115.0 | 0.023897 / 0.006655       | 0.006324     | 1.000 | Y | Y | Y | pass   |
+| MDv8 | 2 501 251 | 92.1  | 0.023220 / 0.006537       | 0.006338     | 1.002 | Y | Y | Y | pass   |
+
+Peak VRAM allocated 182 MiB (MD8 179). As pre-registered, the val number is not used for comparisons. Estimated
+133-epoch wall time (training loop + validation x 133/17 + fixed overhead + evaluation): 15.1 min, the same as MD8's
+estimate from its control run (15.1; MD8's real night-3 times were 14.7-15.5).
+
+**Night 4 queue** `queues/night4.txt` (26 runs, order fixed): MDv8 seeds 0-7 (133 epochs, grouped split, in seed order,
+`est=16m`), then the 18 data-quantity runs, lines identical to `queues/data-eff.txt` (per seed 0, 1, 2: B, MD8, SA8 at
+0.25, then at 0.5). Out root `~/runs/night4` (the data-quantity runs go here, not to `~/runs/data-eff`, so one launcher
+and one cutoff serve both). `est=` total 386 min; with real durations (MDv8 15.1, B 12.1, MD8 14.8, SA8 12.6 min; the
+step-budget runs have the same number of steps and validation passes as the full runs) ~358 min. **Expected ends with a
+start at 22:30:** MDv8 s0-s7 00:31; data-quantity seed 0 01:50, seed 1 03:09, seed 2 **04:28**; worst case with every run
+at its `est=`: 04:56. Cutoff 08:30: all 26 runs are expected to fit.
+
+**Launch.** `scripts/launch_night4.sh` (copy of `launch_night3.sh`, defaults `queues/night4.txt`, `~/runs/night4`, cutoff
+08:30, tmux session `night4`): refuses to start on a dirty tree or if the session exists. Checked today: on the dirty
+tree it exits 1 listing the files, no session created; `run_queue.parse_queue` reads 26 runs.
+
+**After the night (planned).** MDv8: validation analysis as phase 4 (`final_analysis.py` / `analyze_val.py` with the
+label MDv8; comparisons MDv8 - MD8 and MDv8 - B are already in the scripts), then the second, separate test pass decided
+in advance. Data-quantity runs: validation only.
