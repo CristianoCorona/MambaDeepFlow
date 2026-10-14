@@ -2039,3 +2039,43 @@ validation gap. The faithful SS2D therefore does not change the picture of the s
 (declared): MDv8 has 52 480 more parameters than MD8.
 
 **Open questions.** Test set: second pre-registered pass, next entry.
+
+---
+
+## 2026-10-15 — TEST SET: MDv8, second pre-registered pass
+
+**Context / why.** Second, separate test pass decided in advance (entry "Pre-registered ablation: faithful SS2D (MDv8)",
+commit `26b6e7f`): MDv8 is evaluated on the test set whatever its validation result, with the plan of section 2
+(comparisons MDv8 vs MD8 and MDv8 vs B, same metrics, two-level bootstrap). Done after the validation analysis
+(previous entry), which does not change the plan.
+
+**Action.** Checks: tree clean, HEAD `ed7637e` descends from `26b6e7f`. **One pass**: `scripts/evaluate.py --run-dir
+~/runs/night4/MDv8_s<k> --split test` (batch 1) for k = 0..7, one run at a time, 8 / 8 evaluated, 90 samples each; only
+the MDv8 runs are new on test (B and MD8 test values recomputed from the cached inference, identical to the first
+pass). Then `scripts/final_analysis.py <same --config as the previous entry> --seeds 0-7 --split test --allow-test
+--out-dir docs/results/test-mdv8 --fig-dir docs/figures/test-mdv8` (script unchanged since the first pass).
+Consistency vs `eval_test_samples.csv`: max |diff| 2.6e-7. Committed right after the computation, no re-runs.
+
+**Evidence: T1** (test, %, mean (std) over 8 seeds; MAE x1e-3):
+
+| config | rel_all       | rel_p         | rel_vx        | rel_vy        | agg rel_p | median rel_p | agg rel_vy | median rel_vy | MAE p / vx / vy    |
+|--------|---------------|---------------|---------------|---------------|-----------|--------------|------------|---------------|--------------------|
+| B      | 2.776 (0.085) | 14.91 (0.64)  | 1.797 (0.068) | 6.64 (0.20)   | 13.74     | 8.53         | 6.24       | 4.13          | 3.78 / 7.90 / 5.03 |
+| MD8    | 2.940 (0.235) | 15.20 (1.20)  | 1.937 (0.168) | 6.61 (0.47)   | 14.67     | 8.10         | 6.51       | 3.95          | 4.05 / 8.51 / 5.25 |
+| MDv8   | 2.767 (0.174) | 14.88 (0.99)  | 1.772 (0.149) | 6.65 (0.32)   | 13.59     | 8.15         | 6.24       | 4.17          | 3.74 / 7.83 / 5.03 |
+
+Per-run MDv8 rel_all on test: 2.43, 2.73, 3.02, 2.88, 2.79, 2.83, 2.64, 2.82 (seeds 0-7).
+
+**Comparisons** (points; two-level 95 % CI):
+- MDv8 - MD8: rel_all -0.17 [-0.64, +0.14]; rel_p -0.31 [-2.06, +1.41]; rel_vx -0.17 [-0.53, +0.07]; rel_vy +0.04
+  [-0.58, +0.68]; agg rel_p -1.08 [-3.50, +0.62]; median rel_p -0.05 [-0.72, +1.32]; agg rel_vy -0.27 [-1.21, +0.44];
+  median rel_vy +0.36 [-0.37, +0.91]; fluid MAE p / vx / vy -0.30 / -0.68 / -0.22 x1e-3, all CIs include 0.
+- MDv8 - B: rel_all -0.009 [-0.34, +0.26]; rel_p -0.03 [-1.49, +1.43]; rel_vx -0.03 [-0.28, +0.17]; rel_vy +0.004
+  [-0.52, +0.50]; agg / median and MAE all include 0.
+- **No two-level interval excludes 0, for any metric, in either comparison.** Regions: none excludes 0. Divergence:
+  MDv8 - B other fluid -0.034 [-0.063, -0.005] (as on validation); the rest include 0.
+
+**Reading (neutral).** On test MDv8's mean equals B's (2.767 vs 2.776) and is below MD8's (2.940), with intervals
+including 0; its seed spread (0.174) is ~2x B's, between B and MD8. On validation the order was the reverse (MDv8 slightly
+above MD8 and B). As for the first pass, the ranking changes between validation and test and no difference is
+established with 8 seeds and 30 test profiles. Test results final: no re-runs.
