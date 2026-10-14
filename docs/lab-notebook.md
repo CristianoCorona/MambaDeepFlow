@@ -1634,3 +1634,44 @@ B-large (more parameters, no block) does not fit the training set better. Explor
 **Outcome: the condition is satisfied** -> the data-quantity experiment is prepared for the night 14 -> 15 (next entry),
 in the same night queue as MDv8 (launch unified in `queues/night4.txt`, out root `~/runs/night4`, instead of the
 `~/runs/data-eff` named in the session plan, so that one launcher and one cutoff serve both).
+
+---
+
+## 2026-10-14 — Data-quantity experiment: implementation and queue (pre-registered, EXPLORATORY; not launched)
+
+**Context / why.** The condition of verification 5a is satisfied (previous entry), so the experiment fixed in the
+pre-registration (commit `26b6e7f`, section 1) is prepared for the night 14 -> 15. Nothing in its design is changed
+after seeing 5a.
+
+**Implementation.**
+- `mdf/data.py`: `subsample_per_profile(files, fraction, seed)` (k = max(1, floor(f n + 0.5)) per profile, first k of a
+  `random.Random(f"{seed}:{profile}")` permutation of the sorted files); `load_train_val(..., train_fraction,
+  subset_seed)` (default None: unchanged), `split_info` records fraction, subset seed, full count and rule.
+- `mdf/models.py`: `step_lr(step, total_steps, ref_epochs, lr)` = original schedule at virtual epoch
+  floor(step * ref_epochs / total_steps), applied only below the base LR (as the epoch loop).
+- `scripts/train.py`: `--train-fraction F` (needs `--total-steps`; subset drawn with `--seed`), `--total-steps N`,
+  `--lr-ref-epochs` (133), `--log-every` (599): a separate step-budget loop (loader restarted with a new shuffle when
+  exhausted; one `metrics.csv` row and one validation every 599 steps, `epoch` = block index; `config.json`
+  `epochs: null`, `step_budget`). The epoch loop is not changed; run ID `..._st79667_f25_...`.
+- Alternative considered: keep the epoch loop with more epochs (e.g. 458 at 25 %): the LR would then follow the same
+  curve in progress but on a different epoch grid, and the validation count would change; rejected.
+
+**Evidence.**
+- `tests/test_train_fraction.py`: **6 passed** (every training profile kept, exact k per profile; 25 % subset strictly
+  inside the 50 % subset for seeds 0-2, different seeds give different subsets; no validation file, no test name
+  (directory listing only); `step_lr` equals the epoch-loop LR at every one of the 79 667 steps; without the option the
+  training list has the sha256 recorded in `night1/ep133_s0`). Full suite: see the commit (all pass).
+- **Actual sample counts** (equal for seeds 0, 1, 2, since k depends only on n; the files differ): **f = 0.25: 1743 of
+  5998 (29.1 %)**, 174 batches per data epoch, ~458 data epochs; **f = 0.5: 3335 (55.6 %)**, 333 batches, ~239 data
+  epochs. The realised fractions exceed the nominal ones because of the minimum of 1 per profile and the half-up
+  rounding (many profiles have 1-4 samples); declared, not changed.
+- Functional smoke test (only training of the day, seconds; scratch directory, deleted): `--variant MD --train-fraction
+  0.25 --total-steps 20 --log-every 7 --lr-ref-epochs 4`: 3 rows (7 / 7 / 6 steps), LR 6e-4, 6e-4, 1.275e-4, 1743 files,
+  1371 profiles, status finished. Normal-run check: `--seed 0 --epochs 1 --deterministic --variant B` before and after
+  the change: `config.json` identical apart from the new arguments (at their defaults) and the output directory
+  (split, model, LR, iterations); metrics not bit-identical (train L1 0.03370 vs 0.03441), as expected from 6b
+  (non-deterministic CUDA backward; the same happens between two runs of the same code: MD 0.03399 vs 0.03395).
+- **Queue** `queues/data-eff.txt`: per seed 0, 1, 2: B, MD8, SA8 at 0.25, then B, MD8, SA8 at 0.5 (18 runs). `est=` 13 /
+  16 / 14 min (longest real wall time of the 133-epoch runs + ~5 %: same steps and validation passes); total 258 min
+  (real expected ~237). Not launched separately: its lines go into `queues/night4.txt` after the MDv8 runs, out root
+  `~/runs/night4` (launch command and expected end in the MDv8 entry later today).

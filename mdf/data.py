@@ -9,6 +9,7 @@ Deviations from the original are declared in docs/lab-notebook.md (D1, D2, D8).
 """
 
 import hashlib
+import math
 import random
 from pathlib import Path
 
@@ -78,6 +79,25 @@ def split_files_grouped(files, split_seed=SPLIT_SEED):
     val = [f for f in files if profile(f) in val_profiles]
     train = [f for f in files if profile(f) not in val_profiles]
     return train, val
+
+
+def subsample_per_profile(files, fraction, seed):
+    """Per-profile subset of training files (data-quantity experiment, docs/lab-notebook.md 2026-10-14).
+
+    For a profile with n files, k = max(1, floor(fraction * n + 0.5)) files are kept (round half up): the first k of
+    a permutation of its sorted files drawn with random.Random(f"{seed}:{profile}"). Every profile keeps >= 1 file;
+    for the same seed a smaller fraction gives a subset of a larger one. Returns a sorted list."""
+    if not 0.0 < fraction <= 1.0:
+        raise ValueError(f"fraction must be in (0, 1], got {fraction}")
+    by_profile = {}
+    for f in sorted(files):
+        by_profile.setdefault(profile(f), []).append(f)
+    keep = []
+    for p, fs in sorted(by_profile.items()):
+        perm = list(fs)
+        random.Random(f"{seed}:{p}").shuffle(perm)
+        keep += perm[:max(1, math.floor(fraction * len(fs) + 0.5))]
+    return sorted(keep)
 
 
 SPLIT_MODES = {"random": split_files, "grouped": split_files_grouped}
@@ -228,10 +248,16 @@ class FlowDataset(Dataset):
 
 
 def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None, split_mode="random",
-                   n_folds=None, fold=None):
-    """Return (train_ds, val_ds, split_info). If split_file is given, it must match the computed split."""
+                   n_folds=None, fold=None, train_fraction=None, subset_seed=None):
+    """Return (train_ds, val_ds, split_info). If split_file is given, it must match the computed split.
+    train_fraction (with subset_seed): keep a per-profile subset of the training files (subsample_per_profile)."""
     all_files = list_files(train_dir)
     train_files, val_files = split_files_for(split_mode, all_files, split_seed, n_folds, fold)
+    n_train_full = len(train_files)
+    if train_fraction is not None:
+        if subset_seed is None:
+            raise ValueError("train_fraction needs subset_seed")
+        train_files = subsample_per_profile(train_files, train_fraction, subset_seed)
     if split_file is not None:
         if not Path(split_file).exists():
             raise FileNotFoundError(f"Split file {split_file} not found")
@@ -252,6 +278,10 @@ def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None, 
     }
     if split_mode == KFOLD:
         info.update({"n_folds": n_folds, "fold": fold})
+    if train_fraction is not None:
+        info.update({"train_fraction": train_fraction, "subset_seed": subset_seed, "n_train_full": n_train_full,
+                     "subset_rule": "per profile k = max(1, floor(f*n + 0.5)), first k of random.Random("
+                                    "f'{seed}:{profile}') permutation of the sorted files"})
     return FlowDataset(train_dir, train_files), FlowDataset(train_dir, val_files), info
 
 

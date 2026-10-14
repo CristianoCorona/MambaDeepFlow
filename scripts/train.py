@@ -29,6 +29,7 @@ Usage:
                             [--variant {B,B-large,CBAM,SA,MD}] [--level {64,32,16,8}] [--channels N]
                             [--mamba-impl {cuda,ref}] [--lr 6e-4] [--batch-size 10] [--out-dir DIR]
                             [--deterministic]
+                            [--train-fraction F --total-steps N [--lr-ref-epochs 133] [--log-every 599]]
 
 The model is built by mdf.models.build_from_cfg (the single factory, also used by evaluate.py).
 --model dfpnet / --expo E are kept only to reproduce earlier commands; they mean variant B with 2**E channels.
@@ -36,6 +37,14 @@ The evaluated checkpoint is always the final-epoch model (no selection on valida
 
 The protocol is defined in epochs (docs/lab-notebook.md, 2026-10-11): --epochs takes precedence over
 --iterations, which is kept to reproduce earlier runs. Default split: profile-disjoint ("grouped").
+
+Data-quantity experiment (docs/lab-notebook.md, 2026-10-14): --train-fraction F keeps a per-profile subset of the
+training files (mdf.data.subsample_per_profile, drawn with --seed) and needs --total-steps N: training then runs for
+exactly N optimiser steps (the shuffled loader restarts as often as needed) with the LR of step s equal to the original
+schedule at virtual epoch floor(s * lr_ref_epochs / N) (models.step_lr); one metrics.csv row (and one validation pass)
+every --log-every steps, "epoch" being the block index. With N = 133 x 599 = 79667, --lr-ref-epochs 133 and
+--log-every 599 the LR and the logging match the full 133-epoch runs step by step. Without these options the
+epoch loop below is unchanged.
 """
 
 import argparse
@@ -81,7 +90,16 @@ def parse_args():
     ap.add_argument("--no-lr-decay", action="store_true", help="disable the original LR decay (default: on)")
     ap.add_argument("--out-dir", type=Path, default=None, help="run directory (default ~/runs/<run-id>)")
     ap.add_argument("--deterministic", action="store_true", help="cudnn.deterministic (off in the original)")
+    ap.add_argument("--train-fraction", type=float, default=None,
+                    help="per-profile fraction of the training files (needs --total-steps)")
+    ap.add_argument("--total-steps", type=int, default=None, help="step budget instead of epochs")
+    ap.add_argument("--lr-ref-epochs", type=int, default=133, help="step budget: epochs of the reference LR schedule")
+    ap.add_argument("--log-every", type=int, default=599, help="step budget: steps per metrics row / validation")
     args = ap.parse_args()
+    if args.train_fraction is not None and args.total_steps is None:
+        ap.error("--train-fraction needs --total-steps")
+    if args.total_steps is not None and args.epochs is not None:
+        ap.error("give --epochs or --total-steps, not both")
     if (args.split_mode == mdata.KFOLD) != (args.n_folds is not None and args.fold is not None):
         ap.error("--n-folds and --fold are required with --split-mode kfold and only allowed with it")
     if (args.model or args.expo is not None) and args.variant not in (None, "B"):
@@ -97,6 +115,55 @@ def model_cfg_from_args(args):
                                  "mamba_impl": args.mamba_impl})
 
 
+def train_steps(args, net, criterion, optimizer, train_loader, val_loader, writer, csv_fh, timers):
+    """Step-budget training (see the module docstring). Returns (last block train L1, last val L1, steps)."""
+    def batches():
+        while True:  # each pass re-shuffles with the loader's generator, as a new epoch
+            yield from train_loader
+
+    stream = batches()
+    step, block, curr_lr = 0, 0, None
+    while step < args.total_steps:
+        n_block = min(args.log_every, args.total_steps - step)
+        t0 = time.perf_counter()
+        with timers("train_loop"):
+            net.train()
+            l1_accum = 0.0
+            for _ in range(n_block):
+                lr_s = args.lr if args.no_lr_decay else models.step_lr(step, args.total_steps, args.lr_ref_epochs,
+                                                                        args.lr)
+                if lr_s != curr_lr:
+                    curr_lr = lr_s
+                    for g in optimizer.param_groups:
+                        g["lr"] = lr_s
+                inputs, targets = next(stream)
+                inputs, targets = inputs.cuda(), targets.cuda()
+                net.zero_grad()
+                loss = criterion(net(inputs), targets)
+                loss.backward()
+                optimizer.step()
+                l1_accum += loss.item()
+                step += 1
+        t_train = time.perf_counter() - t0
+        t0 = time.perf_counter()
+        with timers("validation"):
+            net.eval()
+            l1val_accum = 0.0
+            with torch.no_grad():
+                for inputs, targets in val_loader:
+                    inputs, targets = inputs.cuda(), targets.cuda()
+                    l1val_accum += criterion(net(inputs), targets).item()
+        t_val = time.perf_counter() - t0
+        train_l1, val_l1 = l1_accum / n_block, l1val_accum / len(val_loader)
+        writer.writerow([block, step, f"{curr_lr:.10g}", f"{train_l1:.10g}", f"{val_l1:.10g}",
+                         n_block, len(val_loader), f"{t_train:.3f}", f"{t_val:.3f}"])
+        csv_fh.flush()
+        print(f"Block {block + 1}  it {step}/{args.total_steps}  lr {curr_lr:.3g}  train L1 {train_l1:.6f}  "
+              f"val L1 {val_l1:.6f}  ({t_train:.1f}s + {t_val:.1f}s)", flush=True)
+        block += 1
+    return train_l1, val_l1, step
+
+
 def main():
     args = parse_args()
     mcfg = model_cfg_from_args(args)
@@ -105,6 +172,8 @@ def main():
     started = runinfo.utc_now()
 
     budget = f"ep{args.epochs}" if args.epochs is not None else f"it{args.iterations}"
+    if args.total_steps is not None:
+        budget = f"st{args.total_steps}" + (f"_f{round(100 * args.train_fraction)}" if args.train_fraction else "")
     tag = mcfg["variant"] + (f"{mcfg['level']}" if mcfg["level"] else "") + f"_c{mcfg['channels']}"
     split_tag = args.split_mode + (f"{args.n_folds}f{args.fold}" if args.split_mode == mdata.KFOLD else "")
     run_id = f"{tag}_{budget}_{split_tag}_s{args.seed}_{time.strftime('%Y%m%d-%H%M%S')}"
@@ -122,20 +191,26 @@ def main():
     with timers("data_load"):
         train_ds, val_ds, split_info = mdata.load_train_val(
             split_file=mdata.split_file_path(args.split_mode, n_folds=args.n_folds, fold=args.fold),
-            split_mode=args.split_mode, n_folds=args.n_folds, fold=args.fold)
+            split_mode=args.split_mode, n_folds=args.n_folds, fold=args.fold,
+            train_fraction=args.train_fraction, subset_seed=args.seed if args.train_fraction is not None else None)
     print(f"Train / validation samples: {len(train_ds)} / {len(val_ds)}; "
           f"val sha256 {split_info['val_files_sha256']}")
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, drop_last=True,
                               generator=loader_gen)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, drop_last=True)
-    if args.epochs is not None:
+    if args.total_steps is not None:
+        epochs = None  # step budget: rows of metrics.csv are blocks of --log-every steps
+    elif args.epochs is not None:
         epochs = args.epochs
     else:
         epochs = int(args.iterations / len(train_loader) + 0.5)
-    effective_iterations = epochs * len(train_loader)
+    effective_iterations = args.total_steps if args.total_steps is not None else epochs * len(train_loader)
     print(f"Batches train / val: {len(train_loader)} / {len(val_loader)}; "
           f"epochs {epochs}, effective iterations {effective_iterations}")
+    if args.train_fraction is not None:
+        print(f"Train fraction {args.train_fraction}: {len(train_ds)} of {split_info['n_train_full']} files, "
+              f"{split_info['n_train_profiles']} profiles")
 
     with timers("setup"):
         net = models.build_from_cfg(mcfg)
@@ -164,7 +239,12 @@ def main():
         "params_added_vs_B": n_params - models.B_PARAMS,
         "evaluated_checkpoint": "final epoch (model.pt); validation is for monitoring only",
         "optimizer": {"name": "Adam", "lr": args.lr, "betas": [0.5, 0.999], "weight_decay": 0.0},
-        "lr_decay": None if args.no_lr_decay else "train/utils.py computeLR(epoch, epochs, 0.1*lr, lr)",
+        "lr_decay": None if args.no_lr_decay else (
+            "train/utils.py computeLR(epoch, epochs, 0.1*lr, lr)" if args.total_steps is None else
+            "models.step_lr: computeLR(floor(step*lr_ref_epochs/total_steps), lr_ref_epochs, 0.1*lr, lr)"),
+        "step_budget": None if args.total_steps is None else {
+            "total_steps": args.total_steps, "lr_ref_epochs": args.lr_ref_epochs, "log_every": args.log_every,
+            "data_epochs": args.total_steps / len(train_loader)},
         "loss": "nn.L1Loss (mean)",
         "batch_size": args.batch_size,
         "requested_iterations": None if args.epochs is not None else args.iterations,
@@ -194,7 +274,10 @@ def main():
     writer.writerow(CSV_COLUMNS)
 
     iteration = 0
-    for epoch in range(epochs):
+    if args.total_steps is not None:
+        train_l1, val_l1, iteration = train_steps(args, net, criterion, optimizer, train_loader, val_loader,
+                                                  writer, csv_fh, timers)
+    for epoch in range(epochs or 0):
         # LR decay as in the original: computed per epoch, applied only below the base LR
         curr_lr = args.lr
         if not args.no_lr_decay:

@@ -41,6 +41,14 @@ def compute_lr(epoch, epochs, min_lr, max_lr):
     return utils.computeLR(epoch, epochs, min_lr, max_lr)
 
 
+def step_lr(step, total_steps, ref_epochs, lr):
+    """LR at optimiser step `step` (0-based) of a step-budget run: the original schedule evaluated at the virtual
+    epoch floor(step * ref_epochs / total_steps), applied only below the base LR (as scripts/train.py). With
+    total_steps = ref_epochs * batches_per_epoch this equals, step by step, the LR of an epoch-defined run."""
+    lr_e = compute_lr(step * ref_epochs // total_steps, ref_epochs, lr * 0.1, lr)
+    return lr_e if lr_e < lr else lr
+
+
 def build_dfpnet(expo=5, dropout=0.0):
     DfpNet, _ = original_modules()
     net = DfpNet.TurbNetG(channelExponent=expo, dropout=dropout)

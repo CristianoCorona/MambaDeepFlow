@@ -1,0 +1,26 @@
+# Data-quantity experiment (EXPLORATORY), pre-registered in docs/lab-notebook.md (2026-10-14, "Decisions taken on
+# 2026-10-13 evening ..." section 1, and "Data-quantity experiment: implementation and queue"). Condition of
+# verification 5a satisfied. B, MD8, SA8; seeds 0-2; per-profile fractions 0.25 and 0.5 of the grouped training split;
+# 79 667 optimiser steps (= 133 x 599, as the full runs), LR per step as the full runs, one validation every 599 steps.
+# Order: by seed; per seed B, MD8, SA8 at 0.25, then B, MD8, SA8 at 0.5. Validation only, never the test set.
+# This file is not launched on its own: its lines are part of queues/night4.txt (out root ~/runs/night4).
+# est= = longest real wall time (train + eval) of the 133-epoch runs of the same configuration in nights 1-3, +~5 %
+# (same number of steps and of validation passes; smaller data loading).
+B_f25_s0     est=13m --seed 0 --variant B --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f25_s0   est=16m --seed 0 --variant MD --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f25_s0   est=14m --seed 0 --variant SA --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+B_f50_s0     est=13m --seed 0 --variant B --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f50_s0   est=16m --seed 0 --variant MD --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f50_s0   est=14m --seed 0 --variant SA --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+B_f25_s1     est=13m --seed 1 --variant B --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f25_s1   est=16m --seed 1 --variant MD --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f25_s1   est=14m --seed 1 --variant SA --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+B_f50_s1     est=13m --seed 1 --variant B --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f50_s1   est=16m --seed 1 --variant MD --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f50_s1   est=14m --seed 1 --variant SA --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+B_f25_s2     est=13m --seed 2 --variant B --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f25_s2   est=16m --seed 2 --variant MD --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f25_s2   est=14m --seed 2 --variant SA --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+B_f50_s2     est=13m --seed 2 --variant B --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f50_s2   est=16m --seed 2 --variant MD --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f50_s2   est=14m --seed 2 --variant SA --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
