@@ -374,3 +374,53 @@ def paired_bootstrap(m_var, m_ref, profiles, n_boot=10000, seed=0, two_level=Tru
         boot2 = np.take_along_axis(prof_r, idx, axis=1).sum(axis=1) / denom
         res["ci2_lo"], res["ci2_hi"] = _ci(boot2)
     return res
+
+
+def _weighted_median(values, weights):
+    """Median of `values` repeated `weights` times (integer weights), as np.median of the repeated array."""
+    return float(np.median(np.repeat(values, weights.astype(np.int64))))
+
+
+def paired_bootstrap_agg_median(err_var, err_ref, tgt, rel_var, rel_ref, profiles, n_boot=10000, seed=0):
+    """Paired differences var - ref of the aggregate ratio and of the median per-sample ratio of one channel.
+
+    err_*: (seeds, N) per-sample sum|o - t|; tgt: (N,) per-sample sum|t| (same for every run); rel_*: (seeds, N)
+    per-sample ratios. Point estimates on seed means: aggregate = sum_s err / sum_s tgt; median = median over samples of
+    the seed-mean per-sample ratio. Intervals: one level (profiles resampled with replacement; a sample counts as many
+    times as its profile is drawn) and two levels (also the seeds of each configuration resampled), as
+    paired_bootstrap."""
+    err_var, err_ref = np.atleast_2d(err_var), np.atleast_2d(err_ref)
+    rel_var, rel_ref = np.atleast_2d(rel_var), np.atleast_2d(rel_ref)
+    g, _ = profile_onehot(profiles)
+    n_prof = g.shape[1]
+    sample_prof = g.argmax(axis=1)
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, n_prof, size=(n_boot, n_prof))
+    prof_counts = np.zeros((n_boot, n_prof))
+    np.add.at(prof_counts, (np.arange(n_boot)[:, None], idx), 1.0)
+    w = prof_counts[:, sample_prof]  # (n_boot, N) multiplicity of each sample
+
+    def seed_weights(k):  # the same resampled seeds are used for err and rel of one configuration
+        pick = rng.integers(0, k, size=(n_boot, k))
+        sw = np.zeros((n_boot, k))
+        np.add.at(sw, (np.arange(n_boot)[:, None], pick), 1.0)
+        return sw / k
+
+    def stats(ev, er, rv, rr, weights):
+        agg = (weights * ev).sum(-1) / (weights * tgt).sum(-1) - (weights * er).sum(-1) / (weights * tgt).sum(-1)
+        if rv.ndim == 1:
+            med = np.array([_weighted_median(rv, wi) - _weighted_median(rr, wi) for wi in weights])
+        else:
+            med = np.array([_weighted_median(a, wi) - _weighted_median(b, wi) for a, b, wi in zip(rv, rr, weights)])
+        return agg, med
+
+    ev, er, rv, rr = err_var.mean(0), err_ref.mean(0), rel_var.mean(0), rel_ref.mean(0)
+    res = {"agg_diff": float(ev.sum() / tgt.sum() - er.sum() / tgt.sum()),
+           "median_diff": float(np.median(rv) - np.median(rr)),
+           "seeds_var": int(err_var.shape[0]), "seeds_ref": int(err_ref.shape[0])}
+    a1, m1 = stats(ev, er, rv, rr, w)
+    sv, sr = seed_weights(err_var.shape[0]), seed_weights(err_ref.shape[0])
+    a2, m2 = stats(sv @ err_var, sr @ err_ref, sv @ rel_var, sr @ rel_ref, w)
+    for name, arr in (("agg_ci1", a1), ("median_ci1", m1), ("agg_ci2", a2), ("median_ci2", m2)):
+        res[name + "_lo"], res[name + "_hi"] = _ci(arr)
+    return res

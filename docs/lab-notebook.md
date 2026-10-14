@@ -1675,3 +1675,30 @@ after seeing 5a.
   16 / 14 min (longest real wall time of the 133-epoch runs + ~5 %: same steps and validation passes); total 258 min
   (real expected ~237). Not launched separately: its lines go into `queues/night4.txt` after the MDv8 runs, out root
   `~/runs/night4` (launch command and expected end in the MDv8 entry later today).
+
+---
+
+## 2026-10-14 — Addendum to the final analysis plan: aggregate and median rel_vy (decided after the 8-seed validation analysis, before opening the test set)
+
+**Context / why.** Decided by the team on 2026-10-14 **after seeing the 8-seed validation analysis and before the test
+set was opened** (declared as such). The only robust validation signal is on rel_vy (MD8 lower than B, SA8, B-large),
+and rel_vy is a mean of per-sample ratios, sensitive to samples with small vy denominators (A2, A4). So the test
+analysis also reports, for rel_vy as already planned for rel_p: the **aggregate ratio** (sum|e| / sum|t| over all
+samples) and the **median**, for all configurations (T1) and in the paired comparisons.
+
+**Implementation.** `mdf/explore.py`: `paired_bootstrap_agg_median` (paired difference of the aggregate ratio, from
+seed-mean per-sample sums, and of the median over samples of the seed-mean per-sample ratio; one-level and two-level
+bootstrap as `paired_bootstrap`; a sample counts as many times as its profile is drawn; the same resampled seeds for
+errors and ratios of one configuration). `scripts/final_analysis.py`: T1 gains `agg_rel_vy`, `median_rel_vy`; new T2b
+with aggregate and median differences for p and vy (for p this makes explicit in the comparisons what the
+pre-registration states for rel_p: "always reported with the aggregate and the median"). Note: in T1 the median is
+the per-run median averaged over seeds; in T2b it is the median of the seed-mean per-sample ratios. Tests
+`tests/test_bootstrap.py` (2: identical configurations give 0; point estimates as computed directly, CI contains them).
+All tests: 63 passed, 6 skipped.
+
+**Tried on validation** (`docs/results/val-final/`, regenerated; exploratory). T1 agg / median rel_vy (%): B 5.660 /
+4.279, MD8 5.598 / 4.067, SA8 5.788 / 4.256, B-large 5.748 / 4.202, CBAM8 5.771 / 4.108, MD32 5.647 / 4.061, SA32 5.688 /
+4.162. T2b, MD8 - B: agg rel_vy -0.062 [-0.252, +0.146], median rel_vy -0.264 [-0.497, +0.044] (two-level); MD8 - SA8:
+-0.190 [-0.396, +0.034] / -0.152 [-0.466, +0.091]; MD8 - B-large: -0.150 [-0.355, +0.058] / -0.156 [-0.380, +0.148].
+So on validation MD8's rel_vy advantage over B is mostly in the mean of ratios (-0.24 [-0.46, -0.04]); in the aggregate
+it is small and its interval includes 0.

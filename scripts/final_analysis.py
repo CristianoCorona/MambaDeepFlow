@@ -45,6 +45,9 @@ SECOND_PASS = [("MDv8", "MD8"), ("MDv8", "B")]
 ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8"]
 CH = explore.CHANNEL_NAMES
 FLUID = ("wall", "wake", "rest")
+# aggregate and median ratios: p (pre-registered, commit 26b6e7f) and vy (addendum of 2026-10-14, decided after the
+# 8-seed validation analysis and before the test set was opened)
+AGG_MEDIAN_CHANNELS = ("p", "vy")
 
 
 def parse_args():
@@ -133,16 +136,17 @@ def main():
         row = {"config": label, "seeds": len(res[label])}
         for m in av.METRICS:
             row[m] = fmt_msd(stack(label, m).mean(axis=1))
-        row["agg_rel_p"] = fmt_msd(stack(label, "abs_err_p").sum(1) / stack(label, "abs_tgt_p").sum(1))
-        row["median_rel_p"] = fmt_msd(np.median(stack(label, "rel_p"), axis=1))
+        for c in AGG_MEDIAN_CHANNELS:
+            row[f"agg_rel_{c}"] = fmt_msd(stack(label, f"abs_err_{c}").sum(1) / stack(label, f"abs_tgt_{c}").sum(1))
+            row[f"median_rel_{c}"] = fmt_msd(np.median(stack(label, f"rel_{c}"), axis=1))
         mae = np.stack([per_sample_fluid_mae(r).mean(0) for r in res[label]])  # (S, 3)
         for i, c in enumerate(CH):
             row[f"mae_fluid_{c} x1e-3"] = fmt_msd(mae[:, i], scale=1e3)
         t1.append(row)
     av.write_csv(args.out_dir / "t1_summary.csv", t1)
     md += ["## T1 Mean (std over seeds) per configuration", "",
-           "rel_* = mean over samples of the per-sample ratio, then mean (std, ddof=1) over seeds; agg_rel_p = "
-           "sum|e_p| / sum|t_p| over all samples; median_rel_p = median over samples; MAE in the fluid (normalised "
+           "rel_* = mean over samples of the per-sample ratio, then mean (std, ddof=1) over seeds; agg_rel_c = "
+           "sum|e_c| / sum|t_c| over all samples; median_rel_c = median over samples (c = p, vy); MAE in the fluid (normalised "
            "fields, x1e-3) = per-sample mean |o - t| over fluid cells, mean over samples.", "",
            av.md_table(t1, list(t1[0].keys())), ""]
 
@@ -160,6 +164,27 @@ def main():
                 bs = explore.paired_bootstrap(a, b, profiles, args.n_boot, args.boot_seed)
                 t2.append({"group": group, "comparison": f"{v} - {ref}", "metric": name, "scale": sc, **bs})
     av.write_csv(args.out_dir / "t2_paired.csv", t2)
+    t2b = []
+    for group, pairs in (("main", MAIN), ("exploratory", EXPLORATORY), ("second pass", SECOND_PASS)):
+        for v, ref in pairs:
+            if v not in res or ref not in res:
+                continue
+            for c in AGG_MEDIAN_CHANNELS:
+                tgt = res[ref][0][f"abs_tgt_{c}"]
+                assert np.allclose(tgt, res[v][0][f"abs_tgt_{c}"])
+                bs = explore.paired_bootstrap_agg_median(stack(v, f"abs_err_{c}"), stack(ref, f"abs_err_{c}"), tgt,
+                                                         stack(v, f"rel_{c}"), stack(ref, f"rel_{c}"), profiles,
+                                                         args.n_boot, args.boot_seed)
+                t2b.append({"group": group, "comparison": f"{v} - {ref}", "channel": c, **bs})
+    av.write_csv(args.out_dir / "t2_agg_median.csv", t2b)
+    rows_b = []
+    for r in t2b:
+        for k in ("agg", "median"):
+            rows_b.append({"group": r["group"], "comparison": r["comparison"], "metric": f"{k}_rel_{r['channel']}",
+                           "seeds": f"{r['seeds_var']}/{r['seeds_ref']}",
+                           "diff": f"{100 * r[k + '_diff']:+.4f}",
+                           "95% CI seeds+profiles": f"[{100 * r[k + '_ci2_lo']:+.4f}, {100 * r[k + '_ci2_hi']:+.4f}]",
+                           "95% CI profiles": f"[{100 * r[k + '_ci1_lo']:+.4f}, {100 * r[k + '_ci1_hi']:+.4f}]"})
     rows_md = [{"group": r["group"], "comparison": r["comparison"], "metric": r["metric"],
                 "seeds": f"{r['seeds_var']}/{r['seeds_ref']}",
                 "mean diff": f"{r['scale'] * r['mean_diff']:+.4f}",
@@ -170,7 +195,12 @@ def main():
     md += ["## T2 Paired comparisons (negative = variant has lower error)", "",
            "Per-sample seed means, difference per sample; main interval: two-level bootstrap (seeds of each "
            "configuration + profiles). rel_* in percentage points, MAE x1e-3. No correction for multiple "
-           "comparisons; descriptive.", "", av.md_table(rows_md, list(rows_md[0].keys())) if rows_md else "", ""]
+           "comparisons; descriptive.", "", av.md_table(rows_md, list(rows_md[0].keys())) if rows_md else "", "",
+           "### T2b Aggregate and median ratios (p pre-registered; vy added by the 2026-10-14 addendum)", "",
+           "agg diff = difference of sum|e| / sum|t| over all samples (seed-mean errors); median diff = difference of "
+           "the medians over samples of the seed-mean per-sample ratio; percentage points; bootstrap as T2 (a sample "
+           "counts as many times as its profile is drawn).", "",
+           av.md_table(rows_b, list(rows_b[0].keys())) if rows_b else "", ""]
 
     # --- T3 regions ---
     t3, t3d = [], []
