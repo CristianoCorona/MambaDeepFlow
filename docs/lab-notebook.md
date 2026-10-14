@@ -1982,3 +1982,60 @@ is inaccurate. From the sensitivity table the shift (all samples minus without `
 MD32 0.43, SA32 0.43, B-large 0.44, CBAM8 0.17 points. Also, "per-seed error of the variants ranges ~6-31 %" should read
 ~5-31 % (SA8 5.5-22.3, MD8 13.3-28.1, MD32 13.4-28.9, SA32 17.6-30.9, B-large 16.2-30.8 %; B 16.3-22.9 %), i.e. B-large,
 without a block, also spreads widely on these samples. The entry is not rewritten.
+
+---
+
+## 2026-10-15 — Night 4: run check (status and durations only)
+
+**Action.** Read `~/runs/night4/queue.log`, every run's `config.json` and `queue_timing.json`; searched the logs for
+`Traceback` / `Error:` / nan / inf and `metrics.csv` for NaN / Inf.
+
+**Evidence.** Queue started **2026-10-14 18:07:22** (not 22:30 as planned in the entry "MDv8 control run: pass; Night 4":
+earlier launch), ended **2026-10-15 00:03:21**, before the cutoff (08:30). **26 / 26 runs finished and evaluated on
+validation** (MDv8 s0-7, 18 data-quantity runs), none interrupted, no `*.interrupted-*` directory, no STOP file, no
+error, no NaN / Inf. All at commit `f3bfc17`, clean tree. Training wall times, min (`est=` in the queue): MDv8 14.6-14.7
+(16; control-run estimate 15.1), B 12.0 (13), MD8 14.7-14.8 (16), SA8 12.6-12.7 (14); the step-budget runs took the same
+time as the full runs of the same configuration, as expected (same steps and validation passes). Evaluation 3-7 s.
+
+---
+
+## 2026-10-15 — MDv8 on validation (EXPLORATORY, as pre-registered)
+
+**Action.** `python scripts/final_analysis.py --config B=~/runs/night1/ep133_s* --config B=~/runs/night3/B_s* --config
+MD8=~/runs/night2/MD8_s* --config MD8=~/runs/night3/MD8_s* --config MDv8=~/runs/night4/MDv8_s* --seeds 0-7 --split val
+--out-dir docs/results/val-mdv8 --fig-dir docs/figures/val-mdv8`, and `scripts/train_fit.py` with the same configs
+(`docs/results/train-fit-mdv8/`; its "pre-registered condition" section is the 5a condition on MD8, repeated, not new).
+Consistency vs `eval_val_samples.csv`: max |diff| 1.5e-7. Test set not used.
+
+**Evidence: T1** (validation, %, mean (std) over 8 seeds):
+
+| config | rel_all         | rel_p            | rel_vx          | rel_vy          | agg rel_vy | median rel_vy |
+|--------|-----------------|------------------|-----------------|-----------------|------------|---------------|
+| B      | 2.4416 (0.0280) | 12.5225 (0.2753) | 1.5630 (0.0185) | 6.0674 (0.2044) | 5.660      | 4.279         |
+| MD8    | 2.4363 (0.0521) | 12.3436 (0.3404) | 1.5704 (0.0433) | 5.8278 (0.1448) | 5.598      | 4.067         |
+| MDv8   | 2.4945 (0.0321) | 12.4265 (0.2460) | 1.6089 (0.0254) | 5.9792 (0.2235) | 5.759      | 4.101         |
+
+**T2** (points, two-level 95 % CI):
+- MDv8 - MD8: rel_all +0.058 [-0.028, +0.143]; rel_p +0.08 [-0.33, +0.49]; rel_vx +0.038 [-0.028, +0.101]; rel_vy
+  +0.15 [-0.06, +0.38]; fluid MAE p / vx / vy +0.06 / +0.17 / +0.12 x1e-3, all CIs include 0. (One-level CIs, profiles
+  only, exclude 0 for rel_all, rel_vy, MAE vy.)
+- MDv8 - B: rel_all +0.053 [-0.039, +0.154]; rel_p -0.10 [-0.59, +0.38]; rel_vx +0.046 [-0.021, +0.121]; rel_vy -0.09
+  [-0.35, +0.16]; MAE all CIs include 0.
+- T2b: no two-level interval excludes 0 (MDv8 - MD8 agg rel_vy +0.16 [-0.05, +0.37]). Regions: none excludes 0.
+  Divergence: MDv8 - B other fluid -0.025 [-0.045, -0.004] (as MD8 - B), wall band includes 0.
+
+**Training error in eval mode** (x1e-3, mean (std); diff / Welch SE vs B):
+
+| config | train L1        | val L1          | gap             | train - B       | val - B         |
+|--------|-----------------|-----------------|-----------------|-----------------|-----------------|
+| B      | 2.7623 (0.1065) | 4.8733 (0.0611) | 2.1109 (0.1225) |                 |                 |
+| MD8    | 2.4756 (0.1746) | 4.8721 (0.1103) | 2.3965 (0.1593) | -0.287 (-3.97)  | -0.001 (-0.03)  |
+| MDv8   | 2.3162 (0.0588) | 4.9900 (0.0635) | 2.6738 (0.0836) | -0.446 (-10.37) | +0.117 (+3.75)  |
+
+**Reading (neutral).** On validation MDv8 is not distinguishable from MD8 or from B on any pre-registered metric with
+the two-level interval; its point estimates are slightly worse than MD8 on every metric. It fits the training set
+better than both (lowest train L1 of all configurations so far, smallest seed spread) and has the largest train /
+validation gap. The faithful SS2D therefore does not change the picture of the simplified block on validation. Limit
+(declared): MDv8 has 52 480 more parameters than MD8.
+
+**Open questions.** Test set: second pre-registered pass, next entry.
