@@ -1342,3 +1342,100 @@ than the main runs, because the per-epoch validation is 3.2x larger); **total ~1
 and different profiles), so the results are **exploratory only** and cannot be pooled with the main validation
 numbers. Out-of-fold merging and the per-stratum analysis on CV predictions are not implemented yet
 (`scripts/analyze_val.py` handles one split per call).
+
+---
+
+## 2026-10-14 — Decisions taken on 2026-10-13 evening and confirmed on 2026-10-14 morning, before looking at any metric of seeds 3-7
+
+**Context / why.** Night 3 (seeds 3-7 of B, MD8, SA8, MD32, SA32; B-large seeds 3-7) has run. Before reading any of
+its metrics (no CSV, no evaluation JSON, no evaluation line of `queue.log` has been read; only the run directory
+names have been listed), the decisions below are fixed and committed. This commit is the **pre-registration commit**
+for the final test analysis. The test set has never been opened.
+
+### 1. Cross-validation abandoned; exploratory data-quantity experiment instead (conditional)
+
+**Decision.** The profile-disjoint 5-fold cross-validation (entry "Cross-validation: prepared ...") is **not run**:
+cost in human time (merging, analysis), one seed per fold, and results that cannot be pooled with the main runs
+(different training sets). The code stays in the repository, unused. Alternatives considered: run it as prepared
+(rejected for the reasons above); run it with fewer folds (same problems).
+
+In its place, an **EXPLORATORY experiment on the quantity of training data**, run only if the condition below holds.
+- Configurations B, MD8, SA8; seeds 0-2; fractions ~25 % and ~50 % of the training part of the grouped split
+  (5998 files, 1371 profiles).
+- **Reduction per profile.** All 1371 training profiles are kept; for a profile with n training samples,
+  k = max(1, floor(f * n + 0.5)) samples are kept (round half up, declared explicitly because Python's `round` rounds
+  half to even). This varies the density of flow conditions per profile, which is the direction in which the full
+  dataset grows (~36 samples per profile in the full set vs ~4.4 here); geometric diversity is not varied.
+- **Selection.** For each profile, its training files (sorted by name) are permuted with an RNG derived from the run
+  seed and the profile name; the subset is the first k files of that permutation. Hence for the same seed B, MD8 and
+  SA8 see the same samples, and the 25 % subset is contained in the 50 % subset (k is non-decreasing in f).
+- **Same number of optimisation steps as the full runs**: 133 x 599 = 79 667 steps (epochs over the smaller set
+  adapt). Learning rate at step s = `computeLR(floor(s / 599), 133, 0.1 lr, lr)`, i.e. identical step by step to the
+  full runs (the original schedule halves the LR from mid-training on). Validation and one row of `metrics.csv`
+  every 599 steps (133 rows, curves comparable with the full runs).
+- **Main number: final checkpoint**, as always. Descriptive diagnostics: val_L1 curves and position of their
+  minimum, to see late overfitting. The minimum is NOT used as a result (it would select the checkpoint on the same
+  validation).
+- Evaluated on validation only, never on the test set.
+- Question: do the differences MD8 - B and SA8 - B (in either direction) and the train / validation gap change with
+  the quantity of data?
+- Limits: geometric diversity not varied; extrapolation to the full dataset remains a hypothesis; with 3 seeds the
+  power is low.
+- **Condition (operational, fixed now).** The experiment runs in the night 14 -> 15 only if verification 5a
+  (training error in eval mode, all seeds available) gives, **for MD8 or for SA8, both**:
+  (i) training L1 in eval mode lower than B with (mean_variant - mean_B) / SE_Welch <= -2;
+  (ii) validation L1 NOT lower than B beyond noise: (mean_variant - mean_B) / SE_Welch >= -1;
+  SE_Welch = sqrt(s_var^2 / n_var + s_B^2 / n_B), s = sample std over seeds (ddof = 1). Training L1 = mean over the
+  5998 training samples of the per-sample L1 (final model, eval mode, batch 10); validation L1 = the same on the 402
+  validation samples (from the same kind of inference, batch 1). The rule is applied literally and the four ratios
+  (MD8 / SA8, train / val) are reported.
+
+### 2. Final analysis plan for the test set (confirms the draft of "Night 2: pre-registered queue")
+
+Additions decided AFTER the exploratory look at validation are marked (added).
+- Primary metric `rel_all`; key secondary `rel_p`; also `rel_vx`, `rel_vy`.
+- `rel_p` always reported with the aggregate `rel_p` (sum|e| / sum|t| over all samples) and the median, and (added)
+  the absolute MAE in the fluid per channel.
+- Mean +- std (ddof = 1) over seeds: 8 for B, MD8, SA8, MD32, SA32; B-large the completed ones; 3 for CBAM8.
+  Main interval: (added) **two-level bootstrap (seeds + profiles), 10 000 repetitions** (`explore.paired_bootstrap`).
+- Main comparisons: MD8 vs B, MD8 vs SA8, MD8 vs B-large. Exploratory: MD32 vs MD8, SA32 vs SA8, MD32 vs SA32,
+  CBAM8 vs B. No formal correction for multiple comparisons; results are descriptive.
+- (added) No strata on the test set (90 samples, 30 profiles: too few per quintile); strata only on validation,
+  exploratory.
+- (added) Regions (wall band, wake) and divergence: descriptive; divergence as defined in phase 6 of 2026-10-14
+  (implemented and tried on validation before the test is opened).
+- The test set is evaluated **once**, all configurations together, with `scripts/evaluate.py` (batch 1), after this
+  commit and after the team's explicit go-ahead; results are reported whatever they are. If a technical bug emerges
+  after opening, it is fixed only if the fix does not depend on the results; the notebook records what changed and
+  both versions are reported. The runs of the data-quantity experiment do not go on the test set.
+
+### 3. Correction note (dated 2026-10-14) to the entry "Note on D10 (simplified SS2D) ..." (2026-10-13)
+
+The phrase "as in the request" after the token counts (21 / 64 and 93 / 1024) refers to the user's request that
+asked to verify those counts, not to a published source. The counts themselves were verified by the script described
+in that entry. The entry is not rewritten.
+
+---
+
+## 2026-10-14 — Pre-registered ablation: faithful SS2D (MDv8)
+
+**Context / why.** Decided on 2026-10-14 morning, before looking at any metric of seeds 3-7 and before opening the
+test set. Purpose: check that the simplification D10 (one shared `Mamba` module for the 4 directions, no 2D conv, no
+output norm) is not what penalises Mamba.
+
+**Variant MDv8.** Block at 8x8, at the same point and in the same residual form as MD8 (`x + SS2D(LN(x))`), with
+SS2D faithful to the version of the VMamba paper (Liu et al. 2024, arXiv 2401.10166): `in_proj` to x and z;
+depthwise 2D 3x3 conv + SiLU on the x branch; 4 directions with separate `x_proj`, `dt_proj`, `A_log` and `D` per
+direction; selective scan; sum of the 4 directions mapped back to 2D; output LayerNorm; gating with SiLU(z);
+`out_proj`. d_state 16, expand 2, dt_rank as Mamba (ceil(C / 16)).
+- Declared deviations: `out_proj` initialised to zero (consistent with MD8 and SA8); no drop path.
+- Protocol identical to the other runs (133 epochs, grouped split, Adam lr 6e-4, batch 10, final checkpoint); seeds
+  0-7.
+- Question (validation, exploratory): does MDv8 differ from MD8 and from B? Same analyses as phase 4 (rel_all, rel_p
+  with aggregate and median, MAE, two-level bootstrap).
+- Test: MDv8 will be evaluated on the test set **whatever its validation result**, in a separate pass after the
+  first one, with the same plan as section 2 of the previous entry (comparisons MDv8 vs MD8 and MDv8 vs B), declared
+  in the report as a second pass decided in advance.
+- Limitation: MDv8 has more parameters than MD8; the comparison mixes faithfulness and size.
+- Implementation, tests and a 17-epoch control run follow later today (after the test pass); the official VMamba
+  file and commit followed will be recorded then.
