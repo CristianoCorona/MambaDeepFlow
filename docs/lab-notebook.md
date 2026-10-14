@@ -2168,3 +2168,33 @@ pre-registration are decided later by the team; here only code, tests and 17-epo
 (`scripts/control_gates.py`): (a) no NaN / Inf, (b) mean train L1 of the last 3 epochs < first 3, (c) final val L1 <=
 1.15 x B's (0.006324). Purpose: faults only; the val numbers are not used for comparisons. it/s and peak VRAM measured
 (night durations; MDv64 must fit in 8 GB).
+
+---
+
+## 2026-10-15 — Control runs MDv32, MDv64, MDv8-16-32: pass; Night 5 queue prepared (NOT launched, not pre-registered)
+
+**Control runs.** `scripts/run_queue.py queues/control-night5.txt --out-root ~/runs/control-2026-10-15 --cutoff 08:30`
+at commit `82b3c43` (clean tree), 01:11-01:25 local time; `python scripts/control_gates.py --root
+~/runs/control-2026-10-15 --csv docs/results/control-night5.csv` (B = link to the 2026-10-12 control B):
+
+| Run        | Params    | it/s  | Train L1 first 3 / last 3 | Val L1 final | / B   | a | b | c | Result | Peak VRAM alloc / reserved (MiB) |
+|------------|-----------|-------|---------------------------|--------------|-------|---|---|---|--------|----------------------------------|
+| B          | 2 332 035 | 115.0 | 0.023897 / 0.006655       | 0.006324     | 1.000 | Y | Y | Y | pass   |                                  |
+| MDv32      | 2 387 971 | 53.9  | 0.023733 / 0.006639       | 0.006444     | 1.019 | Y | Y | Y | pass   | 282 / 316                        |
+| MDv64      | 2 352 835 | 29.8  | 0.022099 / 0.006002       | 0.005951     | 0.941 | Y | Y | Y | pass   | 434 / 558                        |
+| MDv8-16-32 | 2 613 123 | 44.3  | 0.023373 / 0.006374       | 0.006114     | 0.967 | Y | Y | Y | pass   | 332 / 386                        |
+
+As pre-registered, the val numbers are not used for comparisons (17 epochs, one seed). MDv64 (4096 tokens) fits easily
+(434 MiB allocated of 8 GB). For reference: MDv8 92.1 it/s / 182 MiB, MD32 64.7 it/s / 349 MiB.
+
+**133-epoch estimates** (same formula as for MDv8: (training loop + validation) x 133 / 17 + data loading + setup +
+process overhead + evaluation; it gave MDv8 15.1 min vs 14.6-14.7 real, MD32 21.4 vs 21.4-21.7 real): **MDv32 25.5 min,
+MDv64 45.7 min, MDv8-16-32 31.0 min**; 102.2 min per seed.
+
+**Queue** `queues/night5.txt` (9 runs: MDv32, MDv64, MDv8-16-32; seeds 0-2 in seed order, s0 of all three first;
+`est=` 27 / 48 / 33 min = estimate + ~5 %; total `est=` 324 min, expected ~307 min). Out root `~/runs/night5`, cutoff
+08:30. Launcher `scripts/launch_night5.sh` (copy of `launch_night4.sh`: session `night5`, refuses on a dirty tree or
+an existing session; syntax checked with `bash -n`; `run_queue.parse_queue` reads 9 runs). **Not launched**: the
+composition is decided by the team after the MDv8 results, and the pre-registration entry (drafted, not committed)
+must be committed before the launch. With a start at 01:30 the expected ends would be: s0 03:12, s1 04:54, s2
+**06:37**; worst case at `est=`: 06:54.
