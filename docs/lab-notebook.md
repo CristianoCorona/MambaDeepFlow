@@ -2333,3 +2333,103 @@ opened, so nothing here is confirmatory.
 
 **Open questions.** Whether the rel_vy signal of MDv64 is more than seed noise would need more seeds or new data; the
 pre-registration fixes the seeds at 3 and excludes the test set, so no follow-up is planned here.
+
+---
+
+## 2026-10-15 — Tag of the main-results code: `main-results-2026-10-15`
+
+**Context / why.** Before the night-6 work (a confirmatory test of MDv64 and a seen-shape vs unseen-shape validation
+experiment, next entries) the code that produced the main results is marked, so that later additive changes cannot be
+confused with it. No separate branch (team decision of 2026-10-15 morning): the work continues on `train-infrastruct`.
+
+**Action.** Annotated tag `main-results-2026-10-15` on `ab76e4a` (position experiment results; contains the first test
+pass `ca067a4` and the MDv8 second pass `98cbb84`), pushed to `origin`. Check: `git show main-results-2026-10-15`.
+
+---
+
+## 2026-10-15 — PRE-REGISTRATION: confirmatory test of MDv64 on rel_vy (deviation from the night-5 pre-registration)
+
+**Context / why. Deviation, declared.** The night-5 position experiment was pre-registered (commit `72e5b1b`) as
+"validation only, never evaluated on the test set, seeds fixed at 3 and not increased". This confirmatory test was
+decided by the team on **2026-10-15 at 10:25, AFTER seeing the night-5 validation results** (MDv64 - B rel_vy
+-0.66 [-0.96, -0.41] 3 vs 3, entry "Position experiment (night 5): results"). The hypothesis is therefore **generated
+by the validation set**; the test set is used once to check it. This will be stated in the report. The test set has
+already been opened for other configurations (`ca067a4`, `98cbb84`), but no MDv64 run has ever been evaluated on it.
+
+**Single hypothesis.** On the test set, **rel_vy of MDv64 is lower than rel_vy of B**. rel_vy = original definition:
+per-sample ratio sum|o_vy - t_vy| / sum|t_vy| over the whole grid, mean over samples (as in the plan of `26b6e7f`,
+`evaluate.py`).
+
+**Data.** MDv64 seeds 0-7: seeds 0-2 from night 5 (`~/runs/night5/MDv64_s0-2`, commit `72e5b1b`), seeds 3-7 from
+night 6 (`~/runs/night6/MDv64_s3-7`), same configuration (`--epochs 133 --variant MDv --level 64`, grouped split, Adam
+lr 6e-4, batch 10) and same model code (the multi-level change of `82b3c43` does not touch single-level models; the
+night-6 code changes are additive and covered by the tests). Against **B seeds 0-7** (`night1/ep133_s0-2`,
+`night3/B_s3-7`), already evaluated on test in the first pass.
+
+**Statistic.** Difference of the means MDv64 - B of rel_vy on the 90 test samples (mean over samples of the
+difference of the seed-mean per-sample values, `explore.paired_bootstrap`); 95 % percentile interval from the
+**two-level bootstrap** (seeds of each configuration + the 30 test profiles), **10 000 repetitions**, bootstrap seed 0.
+
+**Decision rule.** **"CONFIRMED" only if the upper bound of the 95 % interval is < 0**; otherwise **"NOT CONFIRMED"**,
+reported with the estimate and the interval. No other metric decides.
+
+**Descriptive only (no decision):** median and aggregate rel_vy, rel_all, rel_p (with aggregate and median), fluid
+MAE per channel, vy MAE in the wall band, divergence error (wall band / other fluid); all MDv64 - B with the two-level
+interval, as in `scripts/final_analysis.py`.
+
+**Procedure.**
+- **One pass** on the test set, in a single session on **2026-10-16**; results reported whatever they are; no re-runs.
+- The validation results of seeds 3-7 are reported but **do not change this plan**.
+- If some night-6 seed does not finish before the cutoff, the available seeds are used, **without further runs**.
+- Expected power is low (30 test profiles; a validation rel_vy signal of MD8 did not reproduce on test): a "NOT
+  CONFIRMED" outcome is likely and is an informative result.
+- Implementation: comparison group `confirm-mdv64` in `scripts/final_analysis.py` (added before the test session,
+  tried on validation with seeds 0-2 only to check that it runs).
+
+---
+
+## 2026-10-15 — PRE-REGISTRATION: seen-shape vs unseen-shape validation (EXPLORATORY) and validation calibration on the test set
+
+**Context / why.** Other groups report validation improvements for "half / full Mamba" U-Nets. The original pipeline
+validates on a random split, where the validation shapes are also in training (here 390 of the 400 files of the random
+validation have their profile in training, entry of 2026-10-11). Verification 5a showed that the block variants fit the
+training set better than B with the same validation error on unseen profiles. Question: **does a seen-shape
+validation make the Mamba variants look better than B, while on unseen shapes they equal B?** This links the shape
+leakage to verification 5a. Exploratory.
+
+**Split "grouped-holdout"** (split seed 0; `data/train` only, the test set is not involved):
+- **unseen-shape validation** = the current grouped validation, seed 0 (`splits/val_grouped_seed0.txt`, 402 files,
+  85 profiles), unchanged;
+- **seen-shape validation** = 400 files drawn from the training part of the grouped split: eligible profiles = those
+  with **at least 2 files** there (1287 of 1371); their sorted list is shuffled with `random.Random(0)`, the first 400
+  are taken and from each **one file** is drawn with the same generator (`rng.choice` over its sorted files), so every
+  seen shape stays in training with its other flow conditions;
+- **training** = the remaining **5598** files (all 1371 training profiles keep >= 1 file).
+
+**Runs.** B, MD8, MDv8-16-32; seeds 0-2; 133 epochs; protocol unchanged (Adam lr 6e-4, batch 10, final checkpoint);
+`--split-mode grouped-holdout`; each run evaluated after training on both validations (`eval_val.json` = unseen,
+`eval_val_seen.json` = seen). Queue: night 6, interleaved with the MDv64 seeds (entry above). 3 seeds fixed, all runs
+reported (failed / interrupted ones with the reason), no run repeated or dropped because of its result.
+
+**Hypothesis (exploratory).** For MD8 and for MDv8-16-32, the difference to B in rel_all is **more negative on seen
+shapes than on unseen shapes**. Statistic: difference of differences DoD = (V - B)_seen - (V - B)_unseen (rel_all,
+mean over samples of seed-mean per-sample values); 95 % percentile interval from a bootstrap with 10 000 repetitions
+(seed 0) that resamples **the seeds of each configuration once per repetition, jointly for both validation sets**
+(the same models are evaluated on both), and **the profiles separately in each set**. Reading: an upper bound < 0
+supports the hypothesis; exploratory, no correction for two comparisons.
+
+**Descriptive.** The same DoD for rel_vy and rel_p; per configuration and set the means (sd) over seeds; for B the
+ratio of the error on unseen shapes to the error on seen shapes (to compare with the x1.31 grouped / random ratio of
+2026-10-11, which mixed profile novelty with different samples).
+
+**Validation calibration on the test set (descriptive, decided now, before any number exists).** The same 9 models
+are evaluated **once** on the test set, in the single test session of 2026-10-16. For each configuration, rel_all
+(and rel_vy) on seen shapes, unseen shapes and test:
+- (a) which validation has an error level closer to the test (|mean_val - mean_test|, means over seeds);
+- (b) which validation orders the three configurations as the test does (order of the means; also Kendall tau).
+**No conclusion on the architectures** is drawn from this pass (those remain with the pre-registered test of
+2026-10-14). Limit: these models are trained on 400 fewer files than the main runs.
+
+**Limits (declared).** This checks the validation mechanism, not the "half / full Mamba" architectures of other
+groups, which are not tested here. 3 seeds: rough. The seen-shape set has one file per profile, the unseen set ~4.7;
+the profile-level resampling handles that, but the two sets differ in their samples as well as in shape novelty.
