@@ -1,0 +1,10 @@
+# Night 7 (Friday 2026-10-16): MDv64 confirmatory seeds 3-7 (pre-registration d46b279; postponed by the amendment in
+# docs/preregistration-night6b.md, commit a986ca1). Same configuration as night 5 (~/runs/night5/MDv64_s0-2/config.json:
+# --seed k --epochs 133 --variant MDv --level 64, grouped split), lines as in queues/night6.txt. est= as night 6
+# (real 44.5-44.6 min + ~8 %). A failed run is repeated identically once (re-run this queue), else declared missing.
+# Out root ~/runs/night7, cutoff 08:30. Test pass: scripts/test_session_night7.sh --go (Saturday 2026-10-17 morning).
+MDv64_s3          est=48m --seed 3 --epochs 133 --variant MDv --level 64
+MDv64_s4          est=48m --seed 4 --epochs 133 --variant MDv --level 64
+MDv64_s5          est=48m --seed 5 --epochs 133 --variant MDv --level 64
+MDv64_s6          est=48m --seed 6 --epochs 133 --variant MDv --level 64
+MDv64_s7          est=48m --seed 7 --epochs 133 --variant MDv --level 64

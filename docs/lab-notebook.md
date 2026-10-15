@@ -2694,3 +2694,51 @@ parameter match with B).
 `scripts/run_queue.py --out-root ~/runs/control-2026-10-15b` (evaluated on val and val_seen). Criteria as pre-registered
 (`a986ca1`): no NaN / Inf, train L1 last 3 < first 3; the val L1 ratio to the B control of 2026-10-12 (linked as `B`
 in the out root for `scripts/control_gates.py`) is reported only (different split). Results in the next entry.
+
+---
+
+## 2026-10-15 — Night 6b: control runs (pass), queue, launchers, test-session scripts
+
+**Control runs** (`queues/control-night6b.txt`, commit `f7d6152`, clean tree; `~/runs/control-2026-10-15b`; 17 epochs,
+seed 0, grouped-holdout; `scripts/control_gates.py --root ~/runs/control-2026-10-15b`, B = link to the 2026-10-12
+control, grouped split):
+
+| run | params | it/s (train) | peak VRAM alloc / reserved MiB | train L1 first 3 | last 3 | val L1 final | / B (different split, not a criterion) |
+|---|---|---|---|---|---|---|---|
+| DRv11 | 2 354 691 | 38.6 | 329 / 394 | 0.024818 | 0.006253 | 0.006293 | 0.995 |
+| TR | 493 315 | 147.7 | 124 / 146 | 0.025816 | 0.008328 | 0.008262 | 1.307 |
+
+Pre-registered criteria (`a986ca1`): no NaN / Inf — **yes for both**; train L1 last 3 < first 3 — **yes for both**.
+**Both pass.** (`control_gates.py` prints FAIL for TR only through its column c, the 1.15 x B rule of the 2026-10-12
+control runs, which is not a criterion here; reported as such.) 17-epoch val rel_all: DRv11 3.19 % (val_seen 3.18),
+TR 4.19 % (val_seen 4.31) — fault check only, not an outcome. Train wall 267 s (DRv11) / 80 s (TR), evaluations
+(val + val_seen) 17 s / 6 s.
+- Functional check of the night-6b analyses on these two runs (validation only, scratch outputs not kept, the test set
+  not read): `final_analysis.py --confirm-dr --split val` with B-GH = the TR control run as a stand-in (banner "NOT THE
+  TEST SET: functional check only"), and `seen_unseen.py` with B = TR, DRv11, TR: both run end to end; T1 has the vx
+  aggregate / median columns.
+
+**Estimate.** 133 epochs = 17-epoch train wall x 133/17 + evaluation: DRv11 **35.1 min**, TR **10.5 min**; B-GH /
+MD8-GH / MDv8-16-32-GH 11.4 / 14.0 / 28.2 min (night-6 estimates). Expected total **412 min (6 h 52)**; `est=` (38 /
+12 / 13 / 16 / 30 min) total **453 min (7 h 33)** < 9.5 h: **no cut**. Start ~18:30 -> expected end ~01:20 (at `est=`
+~02:05); cutoff 08:30.
+
+**Files (new; night-6 files unchanged).**
+- `queues/night6b.txt` (21 runs): DRv11_s0, GH_B_s0, TR_s0, ... s4, then GH_MD8_s0, GH_MDv8-16-32_s0, ..., s2; GH_B /
+  GH_MD8 / GH_MDv8-16-32 s0-2 lines identical to `queues/night6.txt`. All lines parsed by `run_queue.parse_queue` and
+  `train.parse_args`.
+- `scripts/launch_night6b.sh` (copy of `launch_night6.sh`: session `night6b`, out root `~/runs/night6b`, cutoff 08:30;
+  dirty-tree refusal, STOP file, val + val_seen evaluation via `run_queue.py`).
+- `queues/night7.txt` + `scripts/launch_night7.sh`: MDv64 s3-7, grouped split, lines identical to `queues/night6.txt`,
+  out root `~/runs/night7` — **not launched** (Friday 2026-10-16, amendment in the pre-registration).
+- `scripts/test_session_night6b.sh --go` (Friday): test evaluation of the night-6b runs only (refused without `--go`,
+  on a dirty tree or if any has `eval_test.json`), then `final_analysis.py --config B-GH=... --config DRv11=...
+  --config TR=... --seeds 0-4 --split test --allow-test --confirm-dr` -> `docs/results/test-confirm-dr`, and
+  `seen_unseen.py` (B, MD8, MDv8-16-32, DRv11, TR) `--split test --allow-test` -> `docs/results/seen-unseen-test`.
+  Before it, on validation (Friday morning): run check, `final_analysis.py` with the same three labels `--split val`
+  (TR control on validation, descriptive) and `seen_unseen.py` without `--split test` (part 1, exploratory).
+- `scripts/test_session_night7.sh --go` (Saturday): test evaluation of MDv64 night5 s0-2 + night7 s3-7, then
+  `--confirm-mdv64` as in `test_session_night6.sh` (B night1 / night3 s0-7).
+All scripts pass `bash -n`; `test_session_night6b.sh` without `--go` refuses (exit 1).
+
+**Open questions.** None before the launch.

@@ -1,0 +1,29 @@
+# Night 6b (docs/preregistration-night6b.md, commit a986ca1): replaces night 6 of 2026-10-15 (queues/night6.txt unchanged).
+# Core, interleaved by seed: DRv11 (deep path replaced by 11 MDv blocks at 8x8), B-GH, TR (truncated control), seeds 0-4;
+# then the grouped-holdout runs moved from night 6 (seen- vs unseen-shape experiment, d46b279): MD8, MDv8-16-32 seeds 0-2.
+# All: 133 epochs, --split-mode grouped-holdout; each run evaluated on val and val_seen by run_queue.py.
+# est= : DRv11 / TR from the 17-epoch control runs (~/runs/control-2026-10-15b: train wall 267 s / 80 s x 133/17, + eval;
+# expected 35.1 / 10.5 min, est 38 / 12), B-GH / MD8 / MDv8-16-32 as night 6 (expected 11.4 / 14.0 / 28.2 min, est
+# 13 / 16 / 30). Expected total ~412 min (6 h 52), est total 453 min (7 h 33) < 9.5 h: no cut. Out root ~/runs/night6b,
+# cutoff 08:30.
+DRv11_s0          est=38m --seed 0 --epochs 133 --variant DRv11 --split-mode grouped-holdout
+GH_B_s0           est=13m --seed 0 --epochs 133 --variant B --split-mode grouped-holdout
+TR_s0             est=12m --seed 0 --epochs 133 --variant TR --split-mode grouped-holdout
+DRv11_s1          est=38m --seed 1 --epochs 133 --variant DRv11 --split-mode grouped-holdout
+GH_B_s1           est=13m --seed 1 --epochs 133 --variant B --split-mode grouped-holdout
+TR_s1             est=12m --seed 1 --epochs 133 --variant TR --split-mode grouped-holdout
+DRv11_s2          est=38m --seed 2 --epochs 133 --variant DRv11 --split-mode grouped-holdout
+GH_B_s2           est=13m --seed 2 --epochs 133 --variant B --split-mode grouped-holdout
+TR_s2             est=12m --seed 2 --epochs 133 --variant TR --split-mode grouped-holdout
+DRv11_s3          est=38m --seed 3 --epochs 133 --variant DRv11 --split-mode grouped-holdout
+GH_B_s3           est=13m --seed 3 --epochs 133 --variant B --split-mode grouped-holdout
+TR_s3             est=12m --seed 3 --epochs 133 --variant TR --split-mode grouped-holdout
+DRv11_s4          est=38m --seed 4 --epochs 133 --variant DRv11 --split-mode grouped-holdout
+GH_B_s4           est=13m --seed 4 --epochs 133 --variant B --split-mode grouped-holdout
+TR_s4             est=12m --seed 4 --epochs 133 --variant TR --split-mode grouped-holdout
+GH_MD8_s0         est=16m --seed 0 --epochs 133 --variant MD --level 8 --split-mode grouped-holdout
+GH_MDv8-16-32_s0  est=30m --seed 0 --epochs 133 --variant MDv --levels 8,16,32 --split-mode grouped-holdout
+GH_MD8_s1         est=16m --seed 1 --epochs 133 --variant MD --level 8 --split-mode grouped-holdout
+GH_MDv8-16-32_s1  est=30m --seed 1 --epochs 133 --variant MDv --levels 8,16,32 --split-mode grouped-holdout
+GH_MD8_s2         est=16m --seed 2 --epochs 133 --variant MD --level 8 --split-mode grouped-holdout
+GH_MDv8-16-32_s2  est=30m --seed 2 --epochs 133 --variant MDv --levels 8,16,32 --split-mode grouped-holdout
