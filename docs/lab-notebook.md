@@ -2577,3 +2577,11 @@ and at or above B on unseen shapes (-1.7 to +3.8); B-large shows the smallest sh
 behaved like the training set, it would favour the block variants, MDv8 and MDv8-16-32 most. On rel_vy the shift is
 smaller and for MD32, MDv32 and MDv64 absent (similar diff/SE on both sets). Limits: training samples were fitted, so
 this mixes shape familiarity with memorisation; diff/SE depends on the seed counts (3 vs 8); exploratory.
+
+---
+
+## 2026-10-15 — Correction to the entry "Approximate seen- vs unseen-shape table from existing results"
+
+In "Reading", "at or above B on unseen shapes (-1.7 to +3.8)" is inaccurate: MD8 (-0.25), MDv32 (-0.29), MDv8-16-32
+(-0.63) and MDv64 (-1.71) are slightly below B on validation. Correct statement: on unseen shapes every block variant
+is within -1.7 and +3.8 SE of B (none below -2), while on the training set all are below B. The entry is not rewritten.
