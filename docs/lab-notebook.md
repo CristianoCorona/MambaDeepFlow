@@ -2538,3 +2538,42 @@ pre-registered), then runs `final_analysis.py ... --seeds 0-7 --split test --all
 `docs/results/seen-unseen-test`); log in `~/runs/test-session-night6/`. Before it, on validation only (morning of
 2026-10-16): run check, `final_analysis.py ... --confirm-mdv64 --split val` with seeds 0-7 (reported, does not change
 the plan) and `seen_unseen.py` without `--split test` (part 1 of the experiment).
+
+---
+
+## 2026-10-15 — Approximate seen- vs unseen-shape table from existing results (EXPLORATORY, no runs)
+
+**Context / why.** While the night-6 experiment is pending, the existing `train_fit.py` results give a rough version
+of the same question: does a set of seen shapes make the variants look better than B? Here "seen" is the training set
+itself (seen shapes **and** seen samples), so this is not a random validation; the night-6 grouped-holdout runs are the
+clean version.
+
+**Action.** New `scripts/seen_proxy.py` (CPU, reads only CSVs): `--runs-csv docs/results/train-fit/train_fit_runs.csv
+--runs-csv docs/results/train-fit-positions-all/train_fit_runs.csv --out-dir docs/results/seen-proxy --fig-dir
+docs/figures/seen-proxy`. Runs present in both files (B, MD8, MD32) agree within 1e-5 (asserted). Per configuration,
+rel_all and rel_vy in eval mode on the training part of the grouped split (5998) and on the grouped validation (402),
+difference to B (all 8 B seeds) in Welch SE. Figure `docs/figures/seen-proxy/seen_proxy.pdf` (IEEE single column;
+orange dot = train, blue hollow diamond = validation, grey band |diff/SE| < 2; palette of the positions figure).
+
+**Evidence** (diff/SE vs B; train = seen shapes + seen samples, val = unseen shapes):
+
+| config         | rel_all train | rel_all val | rel_vy train | rel_vy val |
+|----------------|---------------|-------------|--------------|------------|
+| MD8            | -4.00         | -0.25       | -4.87        | -2.71      |
+| SA8            | -3.70         | +3.80       | -2.47        | +1.05      |
+| CBAM8 (3)      | -2.86         | +2.24       | -1.55        | -0.45      |
+| B-large        | -0.55         | +1.86       | -0.36        | -0.02      |
+| MD32           | -1.61         | +1.76       | -2.38        | -2.56      |
+| SA32           | -2.86         | +1.71       | -2.24        | -1.15      |
+| MDv8           | -10.49        | +3.51       | -4.83        | -0.82      |
+| MDv32 (3)      | -3.72         | -0.29       | -2.74        | -2.87      |
+| MDv64 (3)      | -4.89         | -1.71       | -10.86       | -9.69      |
+| MDv8-16-32 (3) | -14.56        | -0.63       | -7.53        | -2.95      |
+
+B: rel_all 1.436 % (train) vs 2.442 % (val); rel_vy 4.235 vs 6.067 %.
+
+**Reading (neutral, rough).** On rel_all every block variant is below B on the training set (diff/SE -1.6 to -14.6)
+and at or above B on unseen shapes (-1.7 to +3.8); B-large shows the smallest shift. So, if a seen-shape validation
+behaved like the training set, it would favour the block variants, MDv8 and MDv8-16-32 most. On rel_vy the shift is
+smaller and for MD32, MDv32 and MDv64 absent (similar diff/SE on both sets). Limits: training samples were fitted, so
+this mixes shape familiarity with memorisation; diff/SE depends on the seed counts (3 vs 8); exploratory.
