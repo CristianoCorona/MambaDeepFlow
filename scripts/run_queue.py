@@ -7,6 +7,8 @@ e.g.  ep133_s0  est=13m  --seed 0 --epochs 133
 Each run goes to <out-root>/<name>/ (train.py stdout in <name>.log), is evaluated on validation right
 after training (scripts/evaluate.py --split val, stdout in <name>.eval_val.log), and its wall times are
 written to <name>/queue_timing.json. One run at a time; no resuming in the middle of a run.
+Runs trained with split mode grouped-holdout are also evaluated on the seen-shape validation (--split val_seen,
+stdout in <name>.eval_val_seen.log); they count as evaluated only when eval_val_seen.json exists too.
 
 State of <out-root>/<name>/ when its line is reached:
   config.json status finished + eval_val.json   -> skipped
@@ -198,19 +200,28 @@ def on_signal(signum, _frame):
         _child.terminate()
 
 
+def eval_splits(run_dir):
+    """Validation splits a finished run is evaluated on: val, plus val_seen for grouped-holdout runs."""
+    cfg = read_json(run_dir / "config.json") or {}
+    return ["val", "val_seen"] if cfg.get("split", {}).get("split_mode") == "grouped-holdout" else ["val"]
+
+
 def evaluate(name, run_dir, out_root, log):
-    log(f"{name}: evaluation on validation started")
-    rc, sec = run_child([PY, "scripts/evaluate.py", "--run-dir", str(run_dir), "--split", "val"],
-                        out_root / f"{name}.eval_val.log")
-    if rc != 0:
-        log(f"{name}: evaluation FAILED (exit {rc}, {sec:.0f} s), see {name}.eval_val.log")
-        return None
-    res = read_json(run_dir / "eval_val.json")
-    m = res["means"]
-    log(f"{name}: evaluation finished in {sec:.0f} s; val rel_all {100 * m['rel_all']:.4f} % "
-        f"rel_p {100 * m['rel_p']:.4f} rel_vx {100 * m['rel_vx']:.4f} rel_vy {100 * m['rel_vy']:.4f} "
-        f"({res['n_samples']} samples, split {res.get('split_mode')})")
-    return sec
+    total = 0.0
+    for split in eval_splits(run_dir):
+        log(f"{name}: evaluation on {split} started")
+        rc, sec = run_child([PY, "scripts/evaluate.py", "--run-dir", str(run_dir), "--split", split],
+                            out_root / f"{name}.eval_{split}.log")
+        if rc != 0:
+            log(f"{name}: evaluation FAILED (exit {rc}, {sec:.0f} s), see {name}.eval_{split}.log")
+            return None
+        res = read_json(run_dir / f"eval_{split}.json")
+        m = res["means"]
+        log(f"{name}: evaluation finished in {sec:.0f} s; {split} rel_all {100 * m['rel_all']:.4f} % "
+            f"rel_p {100 * m['rel_p']:.4f} rel_vx {100 * m['rel_vx']:.4f} rel_vy {100 * m['rel_vy']:.4f} "
+            f"({res['n_samples']} samples, split {res.get('split_mode')})")
+        total += sec
+    return total
 
 
 def main():
@@ -252,7 +263,7 @@ def main():
         if run_dir.exists():
             cfg = read_json(run_dir / "config.json")
             status = cfg.get("status") if cfg else None
-            if status == "finished" and (run_dir / "eval_val.json").exists():
+            if status == "finished" and all((run_dir / f"eval_{s}.json").exists() for s in eval_splits(run_dir)):
                 log(f"{name}: already finished and evaluated - skipped")
                 continue
             if status == "finished":
@@ -262,7 +273,7 @@ def main():
                 tag = utc_tag()
                 aside = out_root / f"{name}.interrupted-{tag}"
                 run_dir.rename(aside)
-                for suffix in (".log", ".eval_val.log"):
+                for suffix in (".log", ".eval_val.log", ".eval_val_seen.log"):
                     old = out_root / f"{name}{suffix}"
                     if old.exists():
                         old.rename(out_root / f"{name}.interrupted-{tag}{suffix}")

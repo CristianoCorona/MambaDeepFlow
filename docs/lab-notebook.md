@@ -2433,3 +2433,44 @@ are evaluated **once** on the test set, in the single test session of 2026-10-16
 **Limits (declared).** This checks the validation mechanism, not the "half / full Mamba" architectures of other
 groups, which are not tested here. 3 seeds: rough. The seen-shape set has one file per profile, the unseen set ~4.7;
 the profile-level resampling handles that, but the two sets differ in their samples as well as in shape novelty.
+
+---
+
+## 2026-10-15 — Split "grouped-holdout": implementation, tests, 1-epoch functional check
+
+**Context / why.** Implements the split of the pre-registration "seen-shape vs unseen-shape validation" (commit
+`d46b279`) exactly as written there. Additive only: existing split modes, variants and analyses unchanged.
+
+**Implementation.**
+- `mdf/data.py`: `HOLDOUT = "grouped-holdout"`, `N_SEEN = 400`; `split_files_grouped_holdout_parts` -> (train,
+  val_unseen, val_seen) with the pre-registered rule; `split_files_grouped_holdout` -> (train, val_unseen) registered
+  in `SPLIT_MODES`, so `train.py --split-mode grouped-holdout` needs no change (its per-epoch validation is the unseen
+  set, i.e. the grouped validation, checked against `splits/val_grouped_seed0.txt`); `seen_split_file_path`,
+  `load_val_seen`; `load_train_val` records `n_val_seen`, `val_seen_files_sha256`, `val_seen_split_file` for this mode
+  and checks the committed seen list.
+- `splits/val_seen_holdout_seed0.txt` (new, 400 files, 400 profiles), written by `scripts/make_split.py --split-mode
+  grouped-holdout --write` (new branch with the checks below).
+- `scripts/evaluate.py`: `--split val_seen` (only for runs whose `config.json` has split mode grouped-holdout,
+  otherwise exit 1; sha of the list checked against `config.json`) -> `eval_val_seen.json` /
+  `eval_val_seen_samples.csv`. For these runs `--split val` is the unseen-shape validation.
+- `scripts/run_queue.py`: after training, grouped-holdout runs are evaluated on `val` and `val_seen`; such a run counts
+  as evaluated only when both JSON files exist; `eval_wall_s` is the sum. Other runs: unchanged behaviour.
+- `mdf/explore.py`: `load_split("val_seen", "grouped-holdout")` (guard: files from `data/train` only, disjoint from
+  train and unseen validation; refused for other split modes).
+
+**Evidence.**
+- `make_split.py --split-mode grouped-holdout`: train **5598** files / 1371 profiles (every training profile keeps >= 1
+  file), unseen 402 / 85, seen 400 / 400; sha256 train `35a65222...`, unseen `3b26466a...` (= grouped validation),
+  seen `b43a0fdb...`; all checks true (parts pairwise disjoint, union = all 6400 files of `data/train`, unseen =
+  grouped validation and its committed file, train = grouped train minus seen, one file per seen profile, every seen
+  profile in training, no unseen profile in training, no test file name in any part).
+- `tests/test_holdout.py`: **8 passed** (the checks above; committed seen list; `split_files_for("grouped-holdout")`;
+  the (train, val) sha256 of random, grouped and the 5 k-folds hard-coded from the code before the change (HEAD
+  `d46b279`) and unchanged; grouped split = the one recorded in `night1/ep133_s0`; seen loaders). **Full suite: 134
+  passed, 6 skipped** (126 + 8; the variant fingerprints of `tests/test_multilevel.py` included).
+- **Functional check (the only training of the day, declared)**: `train.py --seed 0 --epochs 1 --variant B
+  --split-mode grouped-holdout --out-dir <scratch>/GH_B_s0` (10:45, 21 s, 559 batches = 5598 // 10), then
+  `run_queue.evaluate()` on it: `eval_val.json` (402 samples, split mode grouped-holdout) and `eval_val_seen.json`
+  (400 samples) both written (3 s each). `evaluate.py --split val_seen` on `night1/ep133_s0` (grouped) refuses with
+  exit 1. The scratch run is kept until the analysis script of the experiment has been tried on it (same day), then
+  deleted; its numbers (1 epoch) mean nothing and are not reported.

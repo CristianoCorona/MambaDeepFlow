@@ -100,7 +100,41 @@ def subsample_per_profile(files, fraction, seed):
     return sorted(keep)
 
 
-SPLIT_MODES = {"random": split_files, "grouped": split_files_grouped}
+HOLDOUT = "grouped-holdout"
+# seen-shape validation size of the grouped-holdout split (docs/lab-notebook.md, 2026-10-15 pre-registration)
+N_SEEN = 400
+
+
+def split_files_grouped_holdout_parts(files, split_seed=SPLIT_SEED):
+    """Three-part split (docs/lab-notebook.md, 2026-10-15, "seen-shape vs unseen-shape validation"):
+    (train, val_unseen, val_seen), all sorted.
+
+    val_unseen = the grouped validation (split_files_grouped, unchanged). val_seen = N_SEEN files of the grouped
+    training part: the sorted profiles with >= 2 files there are shuffled with random.Random(split_seed), the first
+    N_SEEN are taken and from each one file is drawn with the same generator (rng.choice over its sorted files), so
+    every seen profile keeps >= 1 file in training. train = grouped training part minus val_seen.
+    """
+    grouped_train, val_unseen = split_files_grouped(files, split_seed)
+    by_profile = {}
+    for f in grouped_train:  # sorted, so each profile's list is sorted
+        by_profile.setdefault(profile(f), []).append(f)
+    eligible = sorted(p for p, fs in by_profile.items() if len(fs) >= 2)
+    if len(eligible) < N_SEEN:
+        raise ValueError(f"only {len(eligible)} training profiles with >= 2 files, need {N_SEEN}")
+    rng = random.Random(split_seed)
+    rng.shuffle(eligible)
+    val_seen = sorted(rng.choice(by_profile[p]) for p in eligible[:N_SEEN])
+    seen = set(val_seen)
+    return [f for f in grouped_train if f not in seen], val_unseen, val_seen
+
+
+def split_files_grouped_holdout(files, split_seed=SPLIT_SEED):
+    """(train, val_unseen) of the grouped-holdout split; val_unseen is the grouped validation."""
+    train, val_unseen, _ = split_files_grouped_holdout_parts(files, split_seed)
+    return train, val_unseen
+
+
+SPLIT_MODES = {"random": split_files, "grouped": split_files_grouped, HOLDOUT: split_files_grouped_holdout}
 KFOLD = "kfold"
 ALL_SPLIT_MODES = (*SPLIT_MODES, KFOLD)
 
@@ -150,8 +184,14 @@ def split_file_path(split_mode, split_seed=SPLIT_SEED, n_folds=None, fold=None):
     """Committed validation list for a split mode (random keeps its historical name)."""
     if split_mode == KFOLD:
         return SPLITS_DIR / f"kfold{n_folds}_seed{split_seed}_fold{fold}.txt"
+    # grouped-holdout: its unseen-shape validation is the grouped one, checked against the same file
     name = f"val_seed{split_seed}.txt" if split_mode == "random" else f"val_grouped_seed{split_seed}.txt"
     return SPLITS_DIR / name
+
+
+def seen_split_file_path(split_seed=SPLIT_SEED):
+    """Committed seen-shape validation list of the grouped-holdout split."""
+    return SPLITS_DIR / f"val_seen_holdout_seed{split_seed}.txt"
 
 
 def file_list_sha256(files):
@@ -278,6 +318,18 @@ def load_train_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None, 
     }
     if split_mode == KFOLD:
         info.update({"n_folds": n_folds, "fold": fold})
+    if split_mode == HOLDOUT:
+        _, _, val_seen = split_files_grouped_holdout_parts(all_files, split_seed)
+        if set(val_seen) & set(train_files) or set(val_seen) & set(val_files):
+            raise RuntimeError("seen-shape validation overlaps train or unseen validation")
+        seen_file = seen_split_file_path(split_seed)
+        if split_file is not None and read_split_file(seen_file) != val_seen:
+            raise RuntimeError(f"Computed seen-shape validation differs from {seen_file}")
+        info.update({"n_val_seen": len(val_seen), "val_seen_files_sha256": file_list_sha256(val_seen),
+                     "val_seen_split_file": str(seen_file.relative_to(REPO_ROOT)),
+                     "n_val_seen_profiles": len({profile(f) for f in val_seen}),
+                     "val_seen_rule": "one file from each of N_SEEN grouped-training profiles with >= 2 files, "
+                                      "random.Random(split_seed) shuffle of the sorted profiles, then rng.choice"})
     if train_fraction is not None:
         info.update({"train_fraction": train_fraction, "subset_seed": subset_seed, "n_train_full": n_train_full,
                      "subset_rule": "per profile k = max(1, floor(f*n + 0.5)), first k of random.Random("
@@ -292,6 +344,14 @@ def load_val(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None, split_
     if split_file is not None and read_split_file(split_file) != val_files:
         raise RuntimeError(f"Computed validation split differs from {split_file}")
     return FlowDataset(train_dir, val_files)
+
+
+def load_val_seen(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None):
+    """Seen-shape validation of the grouped-holdout split, checked against the committed list (if given)."""
+    _, _, val_seen = split_files_grouped_holdout_parts(list_files(train_dir), split_seed)
+    if split_file is not None and read_split_file(split_file) != val_seen:
+        raise RuntimeError(f"Computed seen-shape validation differs from {split_file}")
+    return FlowDataset(train_dir, val_seen)
 
 
 def load_test(test_dir=TEST_DIR):

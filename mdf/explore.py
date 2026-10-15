@@ -51,7 +51,7 @@ def assert_files_allowed(directory, files, split):
     directory = Path(directory).resolve()
     test_dir = mdata.TEST_DIR.resolve()
     train_dir = mdata.TRAIN_DIR.resolve()
-    if split in ("val", "train"):
+    if split in ("val", "train", "val_seen"):
         assert directory == train_dir, f"val files must come from {train_dir}, got {directory}"
         assert directory != test_dir, "refusing to read the test directory for split 'val'"
         for f in files:
@@ -64,13 +64,23 @@ def assert_files_allowed(directory, files, split):
 
 def load_split(split, split_mode="grouped", allow_test=False):
     """FlowDataset for 'val' (profile-disjoint by default, checked against the committed split file), 'train' (the
-    training part of the same split) or 'test'."""
+    training part of the same split), 'val_seen' (seen-shape validation, split mode grouped-holdout only) or
+    'test'."""
     if split == "test":
         if not allow_test:
             raise SystemExit("split 'test' is for final results only; pass --allow-test explicitly")
         files = mdata.list_files(mdata.TEST_DIR)
         assert_files_allowed(mdata.TEST_DIR, files, "test")
         return mdata.FlowDataset(mdata.TEST_DIR, files)
+    if split == "val_seen":  # notebook 2026-10-15, seen-shape vs unseen-shape validation
+        if split_mode != mdata.HOLDOUT:
+            raise ValueError(f"split 'val_seen' exists only for split mode {mdata.HOLDOUT}")
+        train_files, val_files, seen = mdata.split_files_grouped_holdout_parts(mdata.list_files(mdata.TRAIN_DIR))
+        if mdata.read_split_file(mdata.seen_split_file_path()) != seen:
+            raise RuntimeError("computed seen-shape validation differs from the committed split file")
+        assert not set(seen) & (set(train_files) | set(val_files)), "seen-shape validation overlaps"
+        assert_files_allowed(mdata.TRAIN_DIR, seen, "val_seen")
+        return mdata.FlowDataset(mdata.TRAIN_DIR, seen)
     train_files, val_files = mdata.SPLIT_MODES[split_mode](mdata.list_files(mdata.TRAIN_DIR))
     if mdata.read_split_file(mdata.split_file_path(split_mode)) != val_files:
         raise RuntimeError("computed validation split differs from the committed split file")

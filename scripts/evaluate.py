@@ -23,8 +23,12 @@ to select protocols, hyper-parameters or designs (docs/lab-notebook.md).
 Outputs (in the run directory, or --out-dir): eval_<split>_samples.csv (one row per sample, all
 metrics) and eval_<split>.json (means over samples, metadata).
 
+Split val_seen (docs/lab-notebook.md, 2026-10-15): seen-shape validation of a run trained with split mode
+grouped-holdout (splits/val_seen_holdout_seed0.txt); outputs eval_val_seen.json / eval_val_seen_samples.csv. For such a
+run, --split val is its unseen-shape validation (the grouped one).
+
 Usage:
-    python scripts/evaluate.py --run-dir DIR --split {val,test}
+    python scripts/evaluate.py --run-dir DIR --split {val,val_seen,test}
     python scripts/evaluate.py --checkpoint FILE --out-dir DIR --split {val,test} [--model dfpnet --expo 5]
 
 The model is rebuilt with mdf.models.build_from_cfg from the run's config.json (variant, level, channels,
@@ -85,7 +89,7 @@ def rel_error(out, tgt, chans, mask=None):
 
 def parse_args():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--split", choices=["val", "test"], required=True)
+    ap.add_argument("--split", choices=["val", "val_seen", "test"], required=True)
     ap.add_argument("--run-dir", type=Path, help="run directory with model.pt (+ config.json)")
     ap.add_argument("--checkpoint", type=Path, help="state_dict file (alternative to --run-dir)")
     ap.add_argument("--out-dir", type=Path, help="output directory (default: the run directory)")
@@ -118,6 +122,14 @@ def main():
     if args.split == "test":
         print("NOTE: test set - for the equivalence check and final results only, never for selection.")
         ds = mdata.load_test()
+    elif args.split == "val_seen":
+        split_mode, fold = cfg.get("split", {}).get("split_mode"), None
+        if split_mode != mdata.HOLDOUT:
+            sys.exit(f"--split val_seen needs a run trained with split mode {mdata.HOLDOUT} (got {split_mode})")
+        ds = mdata.load_val_seen(split_file=mdata.seen_split_file_path())
+        print(f"Seen-shape validation of split {split_mode} ({len(ds)} samples)")
+        if cfg["split"].get("val_seen_files_sha256") != mdata.file_list_sha256(ds.files):
+            sys.exit("Seen-shape validation differs from the one recorded in config.json")
     else:
         # split of the run (config.json); runs from before the grouped split have no split_mode: random
         split_mode = cfg.get("split", {}).get("split_mode", "random") if cfg else "grouped"
@@ -178,8 +190,8 @@ def main():
                                              / sum(r[f"{pre}abs_tgt_{k}"] for r in rows))
     summary = {
         "split": args.split,
-        "split_mode": split_mode if args.split == "val" else None,
-        "fold": fold if args.split == "val" else None,
+        "split_mode": split_mode if args.split in ("val", "val_seen") else None,
+        "fold": fold if args.split in ("val", "val_seen") else None,
         "n_samples": len(rows),
         "checkpoint": str(ckpt),
         "model": mcfg["variant"],

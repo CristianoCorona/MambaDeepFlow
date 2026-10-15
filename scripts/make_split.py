@@ -7,9 +7,14 @@ The random split (splits/val_seed0.txt) is only recomputed and checked, never re
 K-fold (docs/lab-notebook.md, 2026-10-13): profile-disjoint folds of all files in data/train (train + val of
 the other modes, never the test set), split seed 0; --write writes splits/kfold<N>_seed0_fold<k>.txt for every k.
 
+Grouped-holdout (docs/lab-notebook.md, 2026-10-15): unseen-shape validation = the grouped one (checked against
+splits/val_grouped_seed0.txt), seen-shape validation = 400 files of the grouped training part, one per profile with
+>= 2 files; --write writes splits/val_seen_holdout_seed0.txt only.
+
 Usage:
     python scripts/make_split.py [--split-mode grouped] [--write]
     python scripts/make_split.py --split-mode kfold --n-folds 5 [--write]
+    python scripts/make_split.py --split-mode grouped-holdout [--write]
 """
 
 import argparse
@@ -29,6 +34,8 @@ def main():
     args = ap.parse_args()
     if args.split_mode == mdata.KFOLD:
         return kfold(args)
+    if args.split_mode == mdata.HOLDOUT:
+        return holdout(args)
 
     files = mdata.list_files(mdata.TRAIN_DIR)
     train, val = mdata.SPLIT_MODES[args.split_mode](files, mdata.SPLIT_SEED)
@@ -85,6 +92,41 @@ def kfold(args):
           f"{sum(len(f) for f in folds) == len(all_profiles) == len(set().union(*folds))}")
     if not (ok and cover):
         sys.exit("k-fold check failed")
+
+
+def holdout(args):
+    files = mdata.list_files(mdata.TRAIN_DIR)
+    train, unseen, seen = mdata.split_files_grouped_holdout_parts(files, mdata.SPLIT_SEED)
+    g_train, g_val = mdata.split_files_grouped(files, mdata.SPLIT_SEED)
+    p_train = {mdata.profile(f) for f in train}
+    p_unseen = {mdata.profile(f) for f in unseen}
+    p_seen = [mdata.profile(f) for f in seen]
+    test_names = set(mdata.list_files(mdata.TEST_DIR))  # names only, nothing is read
+    checks = {
+        "parts pairwise disjoint": not (set(train) & set(unseen) or set(train) & set(seen) or set(unseen) & set(seen)),
+        "train + unseen + seen = all files": sorted(train + unseen + seen) == files,
+        "unseen = grouped validation": unseen == g_val,
+        "unseen matches splits/val_grouped_seed0.txt": mdata.read_split_file(mdata.split_file_path("grouped")) == unseen,
+        "train = grouped train minus seen": train == [f for f in g_train if f not in set(seen)],
+        "seen: one file per profile": len(set(p_seen)) == len(seen) == mdata.N_SEEN,
+        "every seen profile has >= 1 training file": set(p_seen) <= p_train,
+        "no unseen profile in train": not p_unseen & p_train,
+        "no test file name in any part": not test_names & set(files),
+    }
+    print(f"grouped-holdout, split seed {mdata.SPLIT_SEED}: train {len(train)} files / {len(p_train)} profiles; "
+          f"unseen {len(unseen)} / {len(p_unseen)}; seen {len(seen)} / {len(set(p_seen))}")
+    print(f"sha256 train {mdata.file_list_sha256(train)}; unseen {mdata.file_list_sha256(unseen)}; "
+          f"seen {mdata.file_list_sha256(seen)}")
+    for k, v in checks.items():
+        print(f"  {k}: {v}")
+    path = mdata.seen_split_file_path()
+    if args.write:
+        path.write_text("".join(f + "\n" for f in seen))
+        print(f"wrote {path.relative_to(mdata.REPO_ROOT)}")
+    if path.exists():
+        print(f"{path.relative_to(mdata.REPO_ROOT)} matches the computed split: {mdata.read_split_file(path) == seen}")
+    if not all(checks.values()):
+        sys.exit("grouped-holdout check failed")
 
 
 if __name__ == "__main__":
