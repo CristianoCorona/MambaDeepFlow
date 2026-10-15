@@ -2474,3 +2474,27 @@ the profile-level resampling handles that, but the two sets differ in their samp
   (400 samples) both written (3 s each). `evaluate.py --split val_seen` on `night1/ep133_s0` (grouped) refuses with
   exit 1. The scratch run is kept until the analysis script of the experiment has been tried on it (same day), then
   deleted; its numbers (1 epoch) mean nothing and are not reported.
+
+---
+
+## 2026-10-15 — Night 6: queue and launcher (NOT launched)
+
+**Context / why.** Runs of the two pre-registered experiments (commit `d46b279`): MDv64 seeds 3-7 for the confirmatory
+test, and B / MD8 / MDv8-16-32 seeds 0-2 on the grouped-holdout split (`d84da2c`). Interleaved so that both advance if
+the night is cut short.
+
+**Queue** `queues/night6.txt` (14 runs): GH_{B, MD8, MDv8-16-32}_s0, MDv64_s3, MDv64_s4, GH_*_s1, MDv64_s5, MDv64_s6,
+GH_*_s2, MDv64_s7. MDv64 arguments as in `~/runs/night5/MDv64_s0-2/config.json` (`--seed k --epochs 133 --variant MDv
+--level 64`, grouped split by default); GH runs: the arguments of the main runs (`--variant B`; `--variant MD --level 8`
+as `night3/MD8_s*`; `--variant MDv --levels 8,16,32` as `night5`) plus `--split-mode grouped-holdout`. Checked with
+`run_queue.parse_queue` and `train.parse_args` on every distinct line. Out root `~/runs/night6`, cutoff 08:30.
+
+**Estimates (from real durations).** Train wall time of nights 3 / 5 (train + eval in `queue_timing.json`): B
+12.0-12.5 min, MD8 14.7-15.5, MDv8-16-32 29.9, MDv64 44.5-44.6. Grouped-holdout runs: training loop x 559 / 599 batches
+per epoch, same validation passes (40 batches), plus two evaluations: **B ~11.4, MD8 ~14.0, MDv8-16-32 ~28.2 min**;
+MDv64 **~44.7**. Expected total **~384 min (6 h 24)**; `est=` (13 / 16 / 30 / 48 min) total 417 min (6 h 57).
+Expected end with a start at **20:00: ~02:25** (worst case at `est=` 02:57); at **22:30: ~04:55** (05:27). Latest
+start that fits the cutoff at `est=`: ~01:30.
+
+**Launcher** `scripts/launch_night6.sh` (copy of `launch_night5.sh`; session `night6`; refuses on a dirty tree or an
+existing session; `bash -n` ok). **Not launched** (daytime session). Command: `scripts/launch_night6.sh`.
