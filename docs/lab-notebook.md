@@ -2250,3 +2250,86 @@ estimate in the entry "Control runs MDv32, MDv64, MDv8-16-32: pass"): MDv32 24.7
 labels are loaded (as `second pass`); the three labels appended to `ORDER`. The main / exploratory / second-pass groups
 are unchanged, so earlier outputs are reproducible. `scripts/train_fit.py` unchanged. Test set not used (the runs are
 never given `--split test` / `--allow-test`). Results: next entry.
+
+---
+
+## 2026-10-15 — Position experiment (night 5): results (validation only, EXPLORATORY)
+
+**Context / why.** Analysis exactly as pre-registered (entry "Position experiment (night 5): pre-registration", commit
+`72e5b1b`); nothing in the design changed after the runs. **Exploratory**: decided after the test set was opened; these
+runs are never evaluated on test. All 9 runs are reported (none failed; previous entry). Main number: final checkpoint.
+
+**Action** (commit `9b5ac01`, clean tree; configs: B = `night1/ep133_s*` + `night3/B_s*`, MD8 / MD32 = `night2` +
+`night3`, MDv8 = `night4/MDv8_s*`, MDv32 / MDv64 / MDv8-16-32 = `night5`):
+- `scripts/final_analysis.py <configs> --seeds 0-2 --split val` -> `docs/results/val-positions-s0-2/` (pre-registered
+  main reading: 3 vs 3, same seeds) and without `--seeds` -> `docs/results/val-positions-all/` (reference with all 8
+  seeds, reported separately). Consistency vs `eval_val_samples.csv`: max |diff| 1.5e-7. Bootstrap 10 000, seed 0.
+- `scripts/train_fit.py <configs> [--seeds 0-2]` -> `docs/results/train-fit-positions-{s0-2,all}/` (GPU 128 s on the
+  training set for 41 runs); its "pre-registered condition" section only repeats the 5a condition on MD8 (not new).
+- New `scripts/positions_figure.py` (CPU): gap vs B in Welch SE (`docs/results/positions/gap_vs_B.md`) and the figure
+  `docs/figures/positions/positions_summary.pdf` (IEEE single column, 3.5 in; (a) validation rel_all per seed and mean,
+  (b) train L1 in eval mode vs validation L1; hollow markers = 3 seeds; grey B, vermillion MD, blue MDv, marker =
+  position; palette checked with a CVD validator: MD / MDv pair passes, B is deliberately achromatic).
+- Test set not read by any command.
+
+**Evidence: T1** (validation, %, mean (std) over seeds; MDv32 / MDv64 / MDv8-16-32 have 3 seeds, the others 8):
+
+| config     | seeds | rel_all         | rel_p            | rel_vx          | rel_vy          | agg rel_vy | median rel_vy |
+|------------|-------|-----------------|------------------|-----------------|-----------------|------------|---------------|
+| B          | 8     | 2.4416 (0.0280) | 12.5225 (0.2753) | 1.5630 (0.0185) | 6.0674 (0.2044) | 5.660      | 4.279         |
+| MD8        | 8     | 2.4363 (0.0521) | 12.3436 (0.3404) | 1.5704 (0.0433) | 5.8278 (0.1448) | 5.598      | 4.067         |
+| MDv8       | 8     | 2.4945 (0.0321) | 12.4265 (0.2460) | 1.6089 (0.0254) | 5.9792 (0.2235) | 5.759      | 4.101         |
+| MD32       | 8     | 2.4668 (0.0294) | 12.4191 (0.2442) | 1.5958 (0.0250) | 5.8480 (0.1307) | 5.647      | 4.061         |
+| MDv32      | 3     | 2.4366 (0.0249) | 12.0676 (0.1676) | 1.5779 (0.0251) | 5.7306 (0.1603) | 5.575      | 4.064         |
+| MDv64      | 3     | 2.4144 (0.0215) | 12.1993 (0.5373) | 1.5755 (0.0164) | 5.3330 (0.0394) | 5.415      | 3.697         |
+| MDv8-16-32 | 3     | 2.4102 (0.0849) | 11.8431 (0.4006) | 1.5554 (0.0619) | 5.6562 (0.2064) | 5.549      | 4.008         |
+
+Full T1 (agg / median rel_p, fluid MAE) in the summaries. Per-run rel_all: MDv32 2.433 / 2.414 / 2.463,
+MDv64 2.396 / 2.409 / 2.438, MDv8-16-32 2.505 / 2.383 / 2.342 (seeds 0-2).
+
+**Pre-registered comparisons** (points; two-level 95 % CI; **3 seeds: rough; 3 vs 8 is rougher still** and mixes
+seed sets):
+
+| comparison        | rel_all, 3 vs 3          | rel_all, vs 8 seeds      | rel_p, 3 vs 3          | rel_vy, 3 vs 3           | rel_vy, vs 8 seeds       |
+|-------------------|--------------------------|--------------------------|------------------------|--------------------------|--------------------------|
+| MDv32 - MD32      | -0.011 [-0.094, +0.068]  | -0.030 [-0.114, +0.045]  | -0.14 [-0.67, +0.28]   | -0.08 [-0.39, +0.22]     | -0.12 [-0.36, +0.12]     |
+| MDv32 - B         | +0.016 [-0.065, +0.100]  | -0.005 [-0.082, +0.070]  | -0.35 [-1.13, +0.27]   | -0.26 [-0.64, +0.05]     | **-0.34 [-0.70, -0.01]** |
+| MDv64 - B         | -0.007 [-0.097, +0.115]  | -0.027 [-0.112, +0.083]  | -0.22 [-0.98, +0.46]   | **-0.66 [-0.96, -0.41]** | **-0.73 [-1.03, -0.47]** |
+| MDv8-16-32 - MDv8 | -0.066 [-0.216, +0.104]  | -0.084 [-0.215, +0.080]  | -0.33 [-1.13, +0.41]   | -0.12 [-0.52, +0.20]     | -0.32 [-0.72, +0.02]     |
+| MDv8-16-32 - B    | -0.011 [-0.157, +0.186]  | -0.031 [-0.177, +0.154]  | -0.58 [-1.54, +0.19]   | -0.34 [-0.79, +0.02]     | **-0.41 [-0.85, -0.06]** |
+
+- rel_all, rel_p, rel_vx, fluid MAE: no two-level interval excludes 0 in either reading.
+- T2b: only MDv64 - B median rel_vy excludes 0 (3 vs 3: -0.58 [-0.92, -0.28]; vs 8: -0.68 [-0.98, -0.34]); all
+  aggregate rel_vy / rel_p intervals include 0 (MDv64 - B agg rel_vy -0.18 [-0.42, +0.12] 3 vs 3).
+- Regions (descriptive): wall-band velocity MAE lower than the reference with intervals excluding 0 for MDv64 - B (vx
+  -5.0 %, vy -8.5 %), MDv8-16-32 - MDv8 (vx -6.4 %, vy -5.7 %), MDv8-16-32 - B (vy -6.6 %), MDv32 - B (vy -3.2 %)
+  (3 vs 3). Divergence error (3 vs 3) lower than B for all three new configurations in both regions with intervals
+  excluding 0 (largest MDv64 - B wall -1.26 x1e-3; vs 8 seeds the same except MDv32 - B wall, which includes 0);
+  MDv32 - MD32 is higher in the wall band (+0.24) and lower elsewhere (-0.03) 3 vs 3, both include 0 vs 8 seeds.
+
+**Verification 5a** (train L1 in eval mode, x1e-3, mean (std); diff / Welch SE vs B, seeds 0-2 of both):
+
+| config     | train L1        | val L1          | gap             | train - B       | val - B        | gap - B        |
+|------------|-----------------|-----------------|-----------------|-----------------|----------------|----------------|
+| B          | 2.7117 (0.0296) | 4.8275 (0.0443) | 2.1159 (0.0684) |                 |                |                |
+| MD32       | 2.7240 (0.0580) | 4.8885 (0.0546) | 2.1644 (0.0325) | +0.012 (+0.33)  | +0.061 (+1.50) | +0.049 (+1.11) |
+| MDv32      | 2.5708 (0.0572) | 4.8698 (0.0600) | 2.2990 (0.1081) | -0.141 (-3.79)  | +0.042 (+0.98) | +0.183 (+2.48) |
+| MDv64      | 2.4682 (0.0829) | 4.8443 (0.0548) | 2.3761 (0.1244) | -0.243 (-4.79)  | +0.017 (+0.41) | +0.260 (+3.18) |
+| MDv8       | 2.3026 (0.0593) | 4.9576 (0.0740) | 2.6549 (0.0965) | -0.409 (-10.69) | +0.130 (+2.61) | +0.539 (+7.90) |
+| MDv8-16-32 | 2.1678 (0.0282) | 4.8303 (0.1832) | 2.6625 (0.1858) | -0.544 (-23.05) | +0.003 (+0.03) | +0.547 (+4.78) |
+
+With all 8 B seeds the reading is the same (`docs/results/positions/gap_vs_B.md`): every MDv configuration fits the
+training set better than B (train diff/SE -3.8 to -14.5) with validation L1 within 1 SE of B (MDv8 excepted, +3.75).
+
+**Reading (neutral).** On the primary metric (rel_all) no position or number of MDv blocks is distinguishable from B or
+from its reference, in either reading; the point estimates are within 0.09 points. The one consistent signal is on the
+vertical velocity: MDv64 - B rel_vy (mean and median) excludes 0 in both readings, with a smaller wall-band velocity
+error and divergence error; MDv32 and MDv8-16-32 have negative rel_vy differences whose intervals touch 0 depending on
+the reading. Every MDv configuration fits the training data better than B, more so with the block at 8x8 or with three
+blocks, and the train / validation gap grows accordingly, without a matching change in validation error. Cautions: 3
+seeds; a validation rel_vy advantage of MD8 over B (-0.24, interval excluding 0) did not reproduce on test; parameter
+counts differ; the validation set has been used for many decisions; the experiment was decided after the test set was
+opened, so nothing here is confirmatory.
+
+**Open questions.** Whether the rel_vy signal of MDv64 is more than seed noise would need more seeds or new data; the
+pre-registration fixes the seeds at 3 and excludes the test set, so no follow-up is planned here.
