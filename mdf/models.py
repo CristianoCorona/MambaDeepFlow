@@ -76,6 +76,8 @@ def count_params(net):
 
 B_PARAMS = 2332035  # TurbNetG, 32 base channels
 VARIANTS = ("B", "B-large", "CBAM", "SA", "MD", "MDv")  # MDv: faithful SS2D (notebook 2026-10-14)
+DEEP_REPLACE_VARIANTS = ("TR", "DRv11")  # deep path removed / replaced by MDv blocks (mdf/deep_replace.py)
+VARIANTS = VARIANTS + DEEP_REPLACE_VARIANTS
 TEST_VARIANTS = ("identity",)  # unit tests only
 LEVELS = (64, 32, 16, 8)
 # level (feature-map size) -> encoder layer after which the block sits, and its channel multiplier
@@ -218,6 +220,13 @@ def normalize_cfg(cfg):
     variant = cfg.get("variant", "B")
     if variant not in VARIANTS + TEST_VARIANTS:
         raise ValueError(f"unknown variant {variant!r}; available {VARIANTS}")
+    if variant in DEEP_REPLACE_VARIANTS:  # notebook 2026-10-15 (night 6b): no level / levels, 32 base channels
+        if cfg.get("level") is not None or cfg.get("levels"):
+            raise ValueError(f"variant {variant} has no level / levels")
+        if cfg.get("channels") not in (None, 32):
+            raise ValueError(f"variant {variant} is defined with 32 base channels, got {cfg.get('channels')}")
+        return {"variant": variant, "level": None, "channels": 32,
+                "mamba_impl": (cfg.get("mamba_impl") or "cuda") if variant == "DRv11" else None}
     channels = cfg.get("channels")
     if variant == "B-large":
         if channels not in (None, B_LARGE_CHANNELS):
@@ -244,6 +253,9 @@ def normalize_cfg(cfg):
 def build_from_cfg(cfg):
     """The single model factory (training, evaluation, tests). Weights already initialised."""
     cfg = normalize_cfg(cfg)
+    if cfg["variant"] in DEEP_REPLACE_VARIANTS:
+        from mdf import deep_replace
+        return deep_replace.build(cfg["variant"], cfg["channels"], cfg["mamba_impl"])
     if cfg.get("levels"):
         return make_turbnet_multi_mixer()(cfg["variant"], cfg["levels"], cfg["channels"], cfg["mamba_impl"] or "cuda")
     if cfg["variant"] in ("B", "B-large"):

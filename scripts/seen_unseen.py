@@ -11,6 +11,9 @@ Part 1 (validation only)
   difference of differences DoD = (V - B)_seen - (V - B)_unseen for V in MD8, MDv8-16-32: rel_all (hypothesis:
   DoD < 0), rel_vy and rel_p (descriptive). 95 % percentile interval, bootstrap (--n-boot 10 000, seed 0) that resamples
   the seeds of each configuration once per repetition, jointly for both sets, and the profiles separately in each set.
+Night 6b (docs/preregistration-night6b.md): also DRv11 and TR (grouped-holdout, seeds 0-4), DoD vs B for each. B
+has seeds 0-4 there: MD8 and MDv8-16-32 are compared with B seeds 0-2 only (pre-registered, d46b279; amendment of
+night 6b), DRv11 and TR with all available B seeds (REF_SEEDS). The unseen / seen ratio of B uses all its seeds.
 Part 2 (only with --split test --allow-test; descriptive, no conclusion on the architectures)
   per configuration: rel_all and rel_vy on seen, unseen and test (means over seeds);
   (a) which validation has the error level closer to the test (|mean_val - mean_test|);
@@ -41,7 +44,10 @@ from mdf import data as mdata
 from mdf import explore, runinfo
 
 REF = "B"
-VARIANTS = ("MD8", "MDv8-16-32")
+VARIANTS = ("MD8", "MDv8-16-32", "DRv11", "TR")
+# B seeds each variant is compared with (None = all loaded): MD8 / MDv8-16-32 as pre-registered in d46b279 (B seeds 0-2;
+# B seeds 3-4 exist from night 6b, where they serve the DRv11 confirmation and are only descriptive here)
+REF_SEEDS = {"MD8": (0, 1, 2), "MDv8-16-32": (0, 1, 2), "DRv11": None, "TR": None}
 ORDER = (REF, *VARIANTS)
 METRICS = ("rel_all", "rel_vy", "rel_p")  # rel_all: hypothesis; the others descriptive
 CALIB_METRICS = ("rel_all", "rel_vy")
@@ -96,6 +102,15 @@ def dod_bootstrap(v, b, profiles, n_boot, seed):
     out["DoD"] = out["D_seen"] - out["D_unseen"]
     out["DoD_lo"], out["DoD_hi"] = np.percentile(boot["seen"] - boot["unseen"], [2.5, 97.5])
     return out
+
+
+def ref_rows(variant, ref_seeds):
+    """Row indices of the reference runs (seeds `ref_seeds`, in load order) used in the DoD of `variant`."""
+    keep = REF_SEEDS[variant]
+    rows = [i for i, s in enumerate(ref_seeds) if keep is None or s in keep]
+    if not rows:
+        sys.exit(f"{variant}: none of the reference seeds {keep} loaded")
+    return rows
 
 
 def kendall_tau(a, b):
@@ -178,11 +193,12 @@ def main():
     for v in VARIANTS:
         if v not in runs:
             continue
+        rows = ref_rows(v, seeds[REF])
         for m in METRICS:
-            r = dod_bootstrap({s: vals[s][v][m] for s in SETS}, {s: vals[s][REF][m] for s in SETS},
+            r = dod_bootstrap({s: vals[s][v][m] for s in SETS}, {s: vals[s][REF][m][rows] for s in SETS},
                               profiles, args.n_boot, args.boot_seed)
             t2.append({"comparison": f"{v} - {REF}", "metric": m, "role": "hypothesis" if m == "rel_all" else
-                       "descriptive", "seeds": f"{len(seeds[v])}/{len(seeds[REF])}",
+                       "descriptive", "seeds": f"{len(seeds[v])}/{len(rows)}",
                        **{k: f"{100 * r[k]:+.4f}" for k in ("D_seen", "D_unseen", "DoD")},
                        "D_seen 95% CI": f"[{100 * r['D_seen_lo']:+.4f}, {100 * r['D_seen_hi']:+.4f}]",
                        "D_unseen 95% CI": f"[{100 * r['D_unseen_lo']:+.4f}, {100 * r['D_unseen_hi']:+.4f}]",
@@ -203,7 +219,8 @@ def main():
           "## T2 Difference of differences DoD = (V - B)_seen - (V - B)_unseen (percentage points)", "",
           "Hypothesis (rel_all): DoD < 0, i.e. the variant looks better relative to B on seen shapes. Interval: "
           "seeds of each configuration resampled once per repetition, jointly for both sets; profiles resampled "
-          "separately in each set. Exploratory; no correction for two comparisons.", "",
+          "separately in each set. Exploratory; no correction for two comparisons. Seeds column: variant / B; "
+          "MD8 and MDv8-16-32 use B seeds 0-2 (pre-registered), DRv11 and TR all loaded B seeds.", "",
           av.md_table(t2, list(t2[0].keys())) if t2 else "(no variant loaded)", ""]
 
     # --- Part 2: calibration on the test set ---

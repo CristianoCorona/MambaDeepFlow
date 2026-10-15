@@ -2585,3 +2585,63 @@ this mixes shape familiarity with memorisation; diff/SE depends on the seed coun
 In "Reading", "at or above B on unseen shapes (-1.7 to +3.8)" is inaccurate: MD8 (-0.25), MDv32 (-0.29), MDv8-16-32
 (-0.63) and MDv64 (-1.71) are slightly below B on validation. Correct statement: on unseen shapes every block variant
 is within -1.7 and +3.8 SE of B (none below -2), while on the training set all are below B. The entry is not rewritten.
+
+---
+
+## 2026-10-15 — Night 6b: deep-path replacement models TR and DRv11 (implementation, tests; no run)
+
+**Context / why.** Night 6 of tonight is replaced by a "night 6b" (decided today, after the test passes of 14/10 and
+15/10): an experiment that **replaces DfpNet's deep path** (layer4-6, dlayer6-4, below 8x8) with a stack of Mamba
+blocks at 8x8, with a control network without the blocks. The night-6 runs on the grouped-holdout split move into
+night 6b; MDv64 seeds 3-7 move to a later night. Pre-registration in the next entry (separate commit, before any run
+of these models). Night-6 files (`queues/night6.txt`, `scripts/launch_night6.sh`, `scripts/test_session_night6.sh`)
+are untouched and remain the fallback.
+
+**Models** (new `mdf/deep_replace.py`, registered as variants in `mdf/models.py` by additions only; `train/DfpNet.py`
+untouched):
+- **TR** (control): TurbNetG, 32 base channels; kept unchanged layer1, layer2, layer2b, layer3, dlayer3, dlayer2b,
+  dlayer2, dlayer1; removed layer4, layer5, layer6, dlayer6, dlayer5, dlayer4. dlayer3 receives `cat([out3, out3])`
+  (256 channels, same layout as `cat([dout4, out3])` in the original).
+- **DRv11**: as TR with `h = Stack(out3)` (8x8, 128 channels) and `dlayer3(cat([h, out3]))`; Stack = 11 residual blocks
+  `x + SS2D(LN(x))` in sequence, each with its own weights, exactly the MDv block of MDv8 (`blocks.SS2DVMamba`,
+  forward_corev0, out_proj zero-initialised, no drop path).
+- Initialisation: `weights_init` on the **full** TurbNetG skeleton, then the deep layers are deleted, then the blocks
+  created. Alternative considered: building only the kept layers; rejected because it changes the RNG consumption, while
+  this way, with the same seed, the kept layers start from **the same weights as B** (tested) and DRv11 starts from the
+  same weights as TR, with every block exactly the identity.
+- Variant names `TR`, `DRv11` (no level / levels; channels fixed at 32; `--mamba-impl` for DRv11, default cuda); run
+  tag `TR_c32` / `DRv11_c32`; `train.py` / `evaluate.py` unchanged (choices from `models.VARIANTS`). The blocks are in
+  the attribute `mixers` (nn.Sequential), so `models.block_params` counts them unchanged.
+
+**Parameters (measured = hand count).** TR **493 315** (B 2 332 035 minus layer4 525 056, layer5 262 912, layer6
+262 400, dlayer6 66 304, dlayer5 131 840, dlayer4 590 208); one MDv block at 128 channels **169 216**; DRv11
+**2 354 691** = 493 315 + 11 x 169 216 (+22 656 = +0.97 % vs B).
+
+**Tests** (new `tests/test_deep_replace.py`, 9 passed): output shapes; parameter counts; kept layers of TR identical to
+B and to DRv11 for the same seed, out_proj of all blocks zero, blocks with different weights; DRv11 output == TR output
+at initialisation (exact, train and eval mode) and every block exactly the identity; TR forward == explicit original
+modules with `cat([out3, out3])`; after Adam step 1 only the 11 out_proj have a non-zero gradient, after step 2 all
+parameters of all 11 blocks; config normalisation (level / levels / other channel counts refused, run config.json
+round trip); existing variants unchanged (B, MD8, MDv8, MDv64, SA8, CBAM8, MDv8-16-32 parameter counts and state-dict
+keys; MDv8 block = 169 216). Note: the exact comparisons set `cudnn.deterministic` in the test (cuDNN's default
+algorithms differ at ~1.5e-8 between two passes of the same TR); the block term itself is exactly 0.
+**Full suite: 147 passed, 6 skipped** (the 6 skips are the existing "no block: level irrelevant" cases).
+Split files unchanged (`git diff HEAD -- splits/` empty; vs tag `main-results-2026-10-15` only the later
+`val_seen_holdout_seed0.txt` of `d84da2c` is added); the tag is not moved.
+
+**Analysis extensions (additions only).**
+- `scripts/final_analysis.py`: group `deep-replace` (DRv11 - B-GH, TR - B-GH, DRv11 - TR) appended after the existing
+  groups when the labels are loaded (each pair draws from a fresh RNG with the boot seed, so earlier pairs are not
+  affected); for these groups T2b also gives vx aggregate / median, and T1 gets vx columns only when one of the labels
+  B-GH / TR / DRv11 is loaded; `--confirm-dr` (refused unless 10 000 repetitions, seed 0) puts first in `summary.md`
+  the pre-registered decision on rel_all of DRv11 - B-GH (three outcomes) with the descriptive rows and the TR control.
+  Split mode: runs must share one mode, `grouped` (as before) or `grouped-holdout` (the latter loaded with
+  `explore.load_split(split, "grouped-holdout")`). **Existing outputs unchanged, verified**: the night-5 command for
+  `docs/results/val-positions-all/` (8 seeds, `--split val`) re-run into a scratch directory gives the 8 CSV
+  byte-identical and `summary.md` identical apart from its git / time line; `--confirm-mdv64 --split val` (B and MDv64
+  s0-2) gives identical outputs with the committed version (HEAD `9a892a1`) and the new one. Outputs not kept.
+- `scripts/seen_unseen.py`: DRv11 and TR added; the DoD of MD8 and MDv8-16-32 uses **B seeds 0-2 only** (pre-registered
+  in `d46b279`; B-GH has seeds 0-4 in night 6b), DRv11 and TR all loaded B seeds; calibration over all configurations.
+  New test: with B at 5 seeds, the DoD of MD8 / MDv8-16-32 equals the one with B seeds 0-2 exactly.
+
+**Open questions.** Throughput and memory of DRv11 (11 blocks at 64 tokens) unknown until the control run.

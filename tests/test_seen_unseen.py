@@ -39,3 +39,20 @@ def test_known_effect_recovered():
 def test_kendall_tau():
     assert su.kendall_tau([1, 2, 3], [10, 20, 30]) == 1
     assert su.kendall_tau([1, 2, 3], [30, 20, 10]) == -1
+
+
+def test_reference_seeds_of_md8_unchanged_by_extra_b_seeds():
+    """Night 6b: B has seeds 0-4; the DoD of MD8 / MDv8-16-32 must equal the one with B seeds 0-2 only."""
+    rng = np.random.default_rng(5)
+    profiles = {"seen": [f"p{i}" for i in range(40)], "unseen": [f"q{i // 3}" for i in range(60)]}
+    v = {s: rng.normal(size=(3, len(profiles[s]))) for s in su.SETS}
+    b5 = {s: rng.normal(size=(5, len(profiles[s]))) for s in su.SETS}
+    for variant in ("MD8", "MDv8-16-32"):
+        rows = su.ref_rows(variant, [0, 1, 2, 3, 4])
+        assert rows == [0, 1, 2]
+        r5 = su.dod_bootstrap(v, {s: b5[s][rows] for s in su.SETS}, profiles, 2000, 0)
+        r3 = su.dod_bootstrap(v, {s: b5[s][:3] for s in su.SETS}, profiles, 2000, 0)
+        assert r5 == r3
+    assert su.ref_rows("DRv11", [0, 1, 2, 3, 4]) == [0, 1, 2, 3, 4]
+    assert su.ref_rows("TR", [0, 2, 3]) == [0, 1, 2]
+    assert su.ref_rows("MD8", [0, 1, 2]) == [0, 1, 2]  # night-6 setting: unchanged

@@ -15,6 +15,11 @@ Contents
       confirm-mdv64 (only with --confirm-mdv64; pre-registration commit d46b279): MDv64 - B. Decision on rel_vy only:
       "CONFIRMED" if the upper bound of the two-level 95 % interval (10 000 repetitions) is < 0, else "NOT CONFIRMED";
       printed first in summary.md with the descriptive MDv64 - B rows of T2 / T2b / T3 (wall vy) / T4
+      deep-replace (night 6b, docs/preregistration-night6b.md; if the labels are loaded; runs with split mode
+      grouped-holdout): DRv11 - B-GH, TR - B-GH, DRv11 - TR; T1 / T2b also give vx aggregate and median for them
+      confirm-dr (only with --confirm-dr): DRv11 - B-GH, decision on rel_all: "IMPROVEMENT DEMONSTRATED" if the upper
+      bound of the two-level 95 % interval (10 000 repetitions) is < 0, "WORSENING DEMONSTRATED" if the lower bound
+      is > 0, else "NO DEMONSTRABLE DIFFERENCE"; printed first in summary.md with the descriptive rows (also TR)
   T3  regions (descriptive): MAE per region and channel, differences with the two-level CI
   T4  divergence (descriptive; mdf/explore.py DIV_MAPPING): mean |div pred|, mean |div target|,
       mean |div pred - div target| in the wall band and in the other fluid cells; differences of the last one
@@ -24,7 +29,8 @@ run's eval_<split>_samples.csv is printed when that file exists.
 
 Usage:
     python scripts/final_analysis.py --config B=GLOB [--config ...] [--seeds 0-7] [--split val]
-                                     [--out-dir DIR] [--fig-dir DIR] [--confirm-mdv64]
+                                     [--out-dir DIR] [--fig-dir DIR] [--confirm-mdv64] [--confirm-dr]
+All runs must share one split mode: grouped (all analyses up to night 6) or grouped-holdout (night 6b).
 """
 
 import argparse
@@ -52,7 +58,16 @@ POSITION = [("MDv32", "MD32"), ("MDv32", "B"), ("MDv64", "B"), ("MDv8-16-32", "M
 # confirmatory test of MDv64 (notebook 2026-10-15, pre-registration commit d46b279; only with --confirm-mdv64)
 CONFIRM_MDV64 = [("MDv64", "B")]
 CONFIRM_METRIC, CONFIRM_N_BOOT, CONFIRM_BOOT_SEED = "rel_vy", 10000, 0
-ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8", "MDv32", "MDv64", "MDv8-16-32"]
+# deep-path replacement (night 6b, pre-registration docs/preregistration-night6b.md; grouped-holdout runs)
+DEEP_REPLACE = [("DRv11", "B-GH"), ("TR", "B-GH"), ("DRv11", "TR")]
+CONFIRM_DR = [("DRv11", "B-GH")]
+CONFIRM_DR_METRIC = "rel_all"
+DR_LABELS = {"B-GH", "DRv11", "TR"}
+DR_GROUPS = ("deep-replace", "confirm-dr")
+DR_AGG_MEDIAN_CHANNELS = ("p", "vx", "vy")  # pre-registered descriptives of night 6b (vx added for these only)
+ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8", "MDv32", "MDv64", "MDv8-16-32",
+         "B-GH", "TR", "DRv11"]
+SPLIT_MODES_OK = ("grouped", "grouped-holdout")
 CH = explore.CHANNEL_NAMES
 FLUID = ("wall", "wake", "rest")
 # aggregate and median ratios: p (pre-registered, commit 26b6e7f) and vy (addendum of 2026-10-14, decided after the
@@ -74,7 +89,11 @@ def parse_args():
     ap.add_argument("--boot-seed", type=int, default=0)
     ap.add_argument("--confirm-mdv64", action="store_true",
                     help="add the pre-registered confirmatory comparison MDv64 - B (decision on rel_vy)")
+    ap.add_argument("--confirm-dr", action="store_true",
+                    help="add the pre-registered confirmatory comparison DRv11 - B-GH (night 6b, decision on rel_all)")
     args = ap.parse_args()
+    if args.confirm_dr and (args.n_boot, args.boot_seed) != (CONFIRM_N_BOOT, CONFIRM_BOOT_SEED):
+        ap.error(f"--confirm-dr is pre-registered with --n-boot {CONFIRM_N_BOOT} --boot-seed {CONFIRM_BOOT_SEED}")
     if args.confirm_mdv64 and (args.n_boot, args.boot_seed) != (CONFIRM_N_BOOT, CONFIRM_BOOT_SEED):
         ap.error(f"--confirm-mdv64 is pre-registered with --n-boot {CONFIRM_N_BOOT} --boot-seed {CONFIRM_BOOT_SEED}")
     return args
@@ -104,14 +123,21 @@ def main():
     labels = [l for l in ORDER if l in runs] + [l for l in runs if l not in ORDER]
     if args.confirm_mdv64 and not {"MDv64", "B"} <= set(runs):
         sys.exit("--confirm-mdv64 needs the labels MDv64 and B")
+    if args.confirm_dr and not {"DRv11", "B-GH"} <= set(runs):
+        sys.exit("--confirm-dr needs the labels DRv11 and B-GH")
     groups = [("main", MAIN), ("exploratory", EXPLORATORY), ("second pass", SECOND_PASS), ("position", POSITION)]
     if args.confirm_mdv64:
         groups.append(("confirm-mdv64", CONFIRM_MDV64))
+    groups.append(("deep-replace", DEEP_REPLACE))  # appended last: a fresh RNG per pair, earlier pairs unchanged
+    if args.confirm_dr:
+        groups.append(("confirm-dr", CONFIRM_DR))
+    t1_channels = AGG_MEDIAN_CHANNELS + (("vx",) if DR_LABELS & set(runs) else ())
     all_pairs = list(dict.fromkeys(pair for _, pairs in groups for pair in pairs))
     split_modes = {cfg.get("split", {}).get("split_mode", "random") for lst in runs.values() for _, _, cfg in lst}
-    if split_modes != {"grouped"}:
+    if len(split_modes) != 1 or not split_modes <= set(SPLIT_MODES_OK):
         sys.exit(f"runs use different / non-grouped splits: {split_modes}")
-    ds = explore.load_split(args.split, "grouped", allow_test=args.allow_test)
+    (split_mode,) = split_modes
+    ds = explore.load_split(args.split, split_mode, allow_test=args.allow_test)
     if args.split == "val":
         shas = {cfg["split"]["val_files_sha256"] for lst in runs.values() for _, _, cfg in lst}
         if shas != {mdata.file_list_sha256(ds.files)}:
@@ -158,7 +184,7 @@ def main():
         row = {"config": label, "seeds": len(res[label])}
         for m in av.METRICS:
             row[m] = fmt_msd(stack(label, m).mean(axis=1))
-        for c in AGG_MEDIAN_CHANNELS:
+        for c in t1_channels:
             row[f"agg_rel_{c}"] = fmt_msd(stack(label, f"abs_err_{c}").sum(1) / stack(label, f"abs_tgt_{c}").sum(1))
             row[f"median_rel_{c}"] = fmt_msd(np.median(stack(label, f"rel_{c}"), axis=1))
         mae = np.stack([per_sample_fluid_mae(r).mean(0) for r in res[label]])  # (S, 3)
@@ -191,7 +217,7 @@ def main():
         for v, ref in pairs:
             if v not in res or ref not in res:
                 continue
-            for c in AGG_MEDIAN_CHANNELS:
+            for c in DR_AGG_MEDIAN_CHANNELS if group in DR_GROUPS else AGG_MEDIAN_CHANNELS:
                 tgt = res[ref][0][f"abs_tgt_{c}"]
                 assert np.allclose(tgt, res[v][0][f"abs_tgt_{c}"])
                 bs = explore.paired_bootstrap_agg_median(stack(v, f"abs_err_{c}"), stack(ref, f"abs_err_{c}"), tgt,
@@ -301,6 +327,10 @@ def main():
     if args.confirm_mdv64:
         md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
             = confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d)
+    if args.confirm_dr:
+        first = next(i for i, x in enumerate(md) if x.startswith("## CONFIRMATORY TEST") or
+                     x == "## T1 Mean (std over seeds) per configuration")
+        md[first:first] = confirm_dr_section(args, t2, rows_md, rows_b, t3d, t4d)
     (args.out_dir / "summary.md").write_text("\n".join(md) + "\n")
     print(f"Wrote {args.out_dir}/summary.md")
 
@@ -330,6 +360,49 @@ def confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d):
            av.md_table(desc_t2, list(desc_t2[0].keys())), "", av.md_table(desc_t2b, list(desc_t2b[0].keys())), "",
            "Wall band, vy MAE x1e-3:", "", av.md_table(desc_t3, list(desc_t3[0].keys())), "",
            "Divergence error:", "", av.md_table(desc_t4, list(desc_t4[0].keys())), ""]
+    return out
+
+
+def dr_verdict(lo, hi):
+    """Three outcomes of the night-6b pre-registration (lower error = better)."""
+    if hi < 0:
+        return "IMPROVEMENT DEMONSTRATED"
+    if lo > 0:
+        return "WORSENING DEMONSTRATED"
+    return "NO DEMONSTRABLE DIFFERENCE"
+
+
+def confirm_dr_section(args, t2, rows_md, rows_b, t3d, t4d):
+    """Pre-registered decision DRv11 - B-GH on rel_all (docs/preregistration-night6b.md) and the descriptive rows of
+    DRv11 - B-GH and of the TR control (TR - B-GH, DRv11 - TR); also printed to stdout."""
+    comp = "DRv11 - B-GH"
+    (r,) = [x for x in t2 if x["group"] == "confirm-dr" and x["metric"] == CONFIRM_DR_METRIC]
+    verdict = dr_verdict(r["ci2_lo"], r["ci2_hi"])
+    seeds = args._seeds
+    line = (f"{comp} {CONFIRM_DR_METRIC}: {100 * r['mean_diff']:+.4f} points, two-level 95 % CI "
+            f"[{100 * r['ci2_lo']:+.4f}, {100 * r['ci2_hi']:+.4f}] ({CONFIRM_N_BOOT} repetitions, seed "
+            f"{CONFIRM_BOOT_SEED}); seeds DRv11 {seeds['DRv11']}, B-GH {seeds['B-GH']}; split {args.split}")
+    rule = ("Rule: IMPROVEMENT DEMONSTRATED if the upper bound < 0; WORSENING DEMONSTRATED if the lower bound > 0; "
+            "otherwise NO DEMONSTRABLE DIFFERENCE (estimate and interval reported).")
+    not_test = "" if args.split == "test" else "NOT THE TEST SET: functional check only, no decision."
+    banner = "=" * 100
+    print(f"\n{banner}\nCONFIRMATORY TEST DRv11 vs B-GH (pre-registered, docs/preregistration-night6b.md): "
+          f"**{verdict}**\n{line}\n{rule}" + (f"\n{not_test}" if not_test else "") + f"\n{banner}\n")
+    groups = {"confirm-dr": "Descriptive only (no decision), DRv11 - B-GH:",
+              "deep-replace": "TR control (descriptive, no decision; interpretation fixed in the pre-registration):"}
+    out = [f"## CONFIRMATORY TEST: DRv11 vs B-GH on rel_all (pre-registered, docs/preregistration-night6b.md) — "
+           f"**{verdict}**", "", f"**{line}.** {rule}" + (f" **{not_test}**" if not_test else ""), ""]
+    for g, title in groups.items():
+        keep = (lambda x: x["group"] == g) if g == "confirm-dr" else \
+            (lambda x: x["group"] == g and x["comparison"] != comp)
+        d2, d2b = [x for x in rows_md if keep(x)], [x for x in rows_b if keep(x)]
+        out += [title, "", av.md_table(d2, list(d2[0].keys())) if d2 else "", "",
+                av.md_table(d2b, list(d2b[0].keys())) if d2b else "", ""]
+    comps = ("DRv11 - B-GH", "TR - B-GH", "DRv11 - TR")
+    d3 = [x for x in t3d if x["comparison"] in comps and x["region"] == "wall"]
+    d4 = [x for x in t4d if x["comparison"] in comps]
+    out += ["Wall band, MAE x1e-3 (descriptive):", "", av.md_table(d3, list(d3[0].keys())) if d3 else "", "",
+            "Divergence error (descriptive):", "", av.md_table(d4, list(d4[0].keys())) if d4 else "", ""]
     return out
 
 
