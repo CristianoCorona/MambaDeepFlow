@@ -2498,3 +2498,43 @@ start that fits the cutoff at `est=`: ~01:30.
 
 **Launcher** `scripts/launch_night6.sh` (copy of `launch_night5.sh`; session `night6`; refuses on a dirty tree or an
 existing session; `bash -n` ok). **Not launched** (daytime session). Command: `scripts/launch_night6.sh`.
+
+---
+
+## 2026-10-15 — Analysis tooling for night 6 (prepared; test set not read)
+
+**Context / why.** The analyses of both pre-registrations (commit `d46b279`) are written and tried before the runs
+and before the test session, so that tomorrow's test pass only executes them.
+
+**Confirmatory test.** `scripts/final_analysis.py --confirm-mdv64`: adds the group `confirm-mdv64` (MDv64 - B) to T2 /
+T2b / T3 / T4 and puts first in `summary.md`, and on stdout between banners, the pre-registered decision on rel_vy
+(two-level interval, refused unless `--n-boot 10000 --boot-seed 0`; "CONFIRMED" iff upper bound < 0) with the
+descriptive MDv64 - B rows (T2 rel_all / rel_p / rel_vx / rel_vy / fluid MAE, T2b aggregate and median rel_p / rel_vy,
+wall-band vy MAE, divergence). Off by default: **without the flag the outputs are unchanged** — re-running the night-5
+command (`--seeds 0-2 --split val`, same configs) into a scratch directory gives files byte-identical to
+`docs/results/val-positions-s0-2/` (all 8 CSV; `summary.md` identical apart from its git / time line). Duplicate pairs
+are de-duplicated (the existing groups have none).
+- Tried on validation with **seeds 0-2 only** (B and MDv64 night 1 / night 5), functional check, no decision: MDv64 - B
+  rel_vy -0.6590 [-0.9558, -0.4099], as the night-5 analysis (-0.66 [-0.96, -0.41]); the banner says "NOT THE TEST
+  SET: functional check only". Outputs not kept.
+
+**Seen / unseen experiment.** New `scripts/seen_unseen.py`: per configuration and set, mean (sd) of rel_all, rel_vy,
+rel_p; B unseen / seen ratio; DoD = (V - B)_seen - (V - B)_unseen for MD8 and MDv8-16-32 with the pre-registered
+bootstrap (seed weights drawn once per repetition and applied to both sets; profiles resampled separately in each
+set); with `--split test --allow-test` the calibration (a) level closer to test, (b) same order as test and Kendall
+tau. Checks every run's split mode and both list hashes against `config.json`; `--split test` without `--allow-test`
+is refused. Tried on the 1-epoch functional run of `d84da2c` used as all three labels (DoD exactly 0, as it must be);
+part 2 tried by replacing, inside a scratch driver, the test loader with the unseen validation (**the test set was not
+read**). `tests/test_seen_unseen.py` (3 passed: identical configurations give point estimates 0 with an interval
+containing 0; an injected -0.002 effect on seen shapes only is recovered (DoD -0.002, upper bound < 0, D_unseen
+interval containing 0); Kendall tau). **Full suite: 137 passed, 6 skipped.** The 1-epoch run and the scratch caches
+were then deleted.
+
+**Test session of 2026-10-16 (one command).** `scripts/test_session_night6.sh --go`: refuses without `--go`, on a
+dirty tree, or if any new run already has `eval_test.json`; evaluates on test (batch 1, one run at a time) only the new
+runs (MDv64 night5 s0-2 + night6 s3-7, GH_{B, MD8, MDv8-16-32}_s0-2; missing / unfinished runs skipped, as
+pre-registered), then runs `final_analysis.py ... --seeds 0-7 --split test --allow-test --confirm-mdv64` (out
+`docs/results/test-confirm-mdv64`) and `seen_unseen.py ... --split test --allow-test` (out
+`docs/results/seen-unseen-test`); log in `~/runs/test-session-night6/`. Before it, on validation only (morning of
+2026-10-16): run check, `final_analysis.py ... --confirm-mdv64 --split val` with seeds 0-7 (reported, does not change
+the plan) and `seen_unseen.py` without `--split test` (part 1 of the experiment).

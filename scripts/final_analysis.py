@@ -12,6 +12,9 @@ Contents
       second pass (if the label is loaded): MDv8 - MD8, MDv8 - B
       position (night 5, exploratory, validation only; if the labels are loaded): MDv32 - MD32, MDv32 - B,
       MDv64 - B, MDv8-16-32 - MDv8, MDv8-16-32 - B
+      confirm-mdv64 (only with --confirm-mdv64; pre-registration commit d46b279): MDv64 - B. Decision on rel_vy only:
+      "CONFIRMED" if the upper bound of the two-level 95 % interval (10 000 repetitions) is < 0, else "NOT CONFIRMED";
+      printed first in summary.md with the descriptive MDv64 - B rows of T2 / T2b / T3 (wall vy) / T4
   T3  regions (descriptive): MAE per region and channel, differences with the two-level CI
   T4  divergence (descriptive; mdf/explore.py DIV_MAPPING): mean |div pred|, mean |div target|,
       mean |div pred - div target| in the wall band and in the other fluid cells; differences of the last one
@@ -21,7 +24,7 @@ run's eval_<split>_samples.csv is printed when that file exists.
 
 Usage:
     python scripts/final_analysis.py --config B=GLOB [--config ...] [--seeds 0-7] [--split val]
-                                     [--out-dir DIR] [--fig-dir DIR]
+                                     [--out-dir DIR] [--fig-dir DIR] [--confirm-mdv64]
 """
 
 import argparse
@@ -46,6 +49,9 @@ EXPLORATORY = [("MD32", "MD8"), ("SA32", "SA8"), ("MD32", "SA32"), ("CBAM8", "B"
 SECOND_PASS = [("MDv8", "MD8"), ("MDv8", "B")]
 # position experiment (notebook 2026-10-15, pre-registration commit 72e5b1b; validation only)
 POSITION = [("MDv32", "MD32"), ("MDv32", "B"), ("MDv64", "B"), ("MDv8-16-32", "MDv8"), ("MDv8-16-32", "B")]
+# confirmatory test of MDv64 (notebook 2026-10-15, pre-registration commit d46b279; only with --confirm-mdv64)
+CONFIRM_MDV64 = [("MDv64", "B")]
+CONFIRM_METRIC, CONFIRM_N_BOOT, CONFIRM_BOOT_SEED = "rel_vy", 10000, 0
 ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8", "MDv32", "MDv64", "MDv8-16-32"]
 CH = explore.CHANNEL_NAMES
 FLUID = ("wall", "wake", "rest")
@@ -66,7 +72,12 @@ def parse_args():
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--n-boot", type=int, default=10000)
     ap.add_argument("--boot-seed", type=int, default=0)
-    return ap.parse_args()
+    ap.add_argument("--confirm-mdv64", action="store_true",
+                    help="add the pre-registered confirmatory comparison MDv64 - B (decision on rel_vy)")
+    args = ap.parse_args()
+    if args.confirm_mdv64 and (args.n_boot, args.boot_seed) != (CONFIRM_N_BOOT, CONFIRM_BOOT_SEED):
+        ap.error(f"--confirm-mdv64 is pre-registered with --n-boot {CONFIRM_N_BOOT} --boot-seed {CONFIRM_BOOT_SEED}")
+    return args
 
 
 def msd(x):
@@ -89,7 +100,14 @@ def per_sample_fluid_mae(r):
 def main():
     args = parse_args()
     runs = av.collect_runs(args.config, av.parse_seeds(args.seeds))
+    args._seeds = {l: [s for s, _, _ in lst] for l, lst in runs.items()}
     labels = [l for l in ORDER if l in runs] + [l for l in runs if l not in ORDER]
+    if args.confirm_mdv64 and not {"MDv64", "B"} <= set(runs):
+        sys.exit("--confirm-mdv64 needs the labels MDv64 and B")
+    groups = [("main", MAIN), ("exploratory", EXPLORATORY), ("second pass", SECOND_PASS), ("position", POSITION)]
+    if args.confirm_mdv64:
+        groups.append(("confirm-mdv64", CONFIRM_MDV64))
+    all_pairs = list(dict.fromkeys(pair for _, pairs in groups for pair in pairs))
     split_modes = {cfg.get("split", {}).get("split_mode", "random") for lst in runs.values() for _, _, cfg in lst}
     if split_modes != {"grouped"}:
         sys.exit(f"runs use different / non-grouped splits: {split_modes}")
@@ -157,7 +175,7 @@ def main():
     # --- T2 ---
     t2 = []
     fluid_mae = {l: np.stack([per_sample_fluid_mae(r) for r in res[l]]) for l in labels}  # (S, N, 3)
-    for group, pairs in (("main", MAIN), ("exploratory", EXPLORATORY), ("second pass", SECOND_PASS), ("position", POSITION)):
+    for group, pairs in groups:
         for v, ref in pairs:
             if v not in res or ref not in res:
                 continue
@@ -169,7 +187,7 @@ def main():
                 t2.append({"group": group, "comparison": f"{v} - {ref}", "metric": name, "scale": sc, **bs})
     av.write_csv(args.out_dir / "t2_paired.csv", t2)
     t2b = []
-    for group, pairs in (("main", MAIN), ("exploratory", EXPLORATORY), ("second pass", SECOND_PASS), ("position", POSITION)):
+    for group, pairs in groups:
         for v, ref in pairs:
             if v not in res or ref not in res:
                 continue
@@ -215,7 +233,7 @@ def main():
             reg_mae[(label, g)] = e
             m = e.mean(axis=(0, 1))
             t3.append({"config": label, "region": g, **{f"mae_{c} x1e-3": f"{1e3 * m[i]:.4f}" for i, c in enumerate(CH)}})
-    for v, ref in MAIN + EXPLORATORY + SECOND_PASS + POSITION:
+    for v, ref in all_pairs:
         if v not in res or ref not in res:
             continue
         for g in ("wall", "wake", "rest"):
@@ -244,7 +262,7 @@ def main():
             for k in ("pred", "tgt", "err"):
                 row[f"{g} |div {k}| x1e-3"] = fmt_msd(stack(label, f"div_{k}_{g}").mean(1), scale=1e3)
         t4.append(row)
-    for v, ref in MAIN + EXPLORATORY + SECOND_PASS + POSITION:
+    for v, ref in all_pairs:
         if v not in res or ref not in res:
             continue
         for g in explore.DIV_REGIONS:
@@ -280,8 +298,39 @@ def main():
     fig.savefig(args.fig_dir / "per_seed.png", dpi=120)
     plt.close(fig)
 
+    if args.confirm_mdv64:
+        md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
+            = confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d)
     (args.out_dir / "summary.md").write_text("\n".join(md) + "\n")
     print(f"Wrote {args.out_dir}/summary.md")
+
+
+def confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d):
+    """Pre-registered decision (commit d46b279) and the descriptive MDv64 - B rows; also printed to stdout."""
+    comp = "MDv64 - B"
+    (r,) = [x for x in t2 if x["group"] == "confirm-mdv64" and x["metric"] == CONFIRM_METRIC]
+    confirmed = r["ci2_hi"] < 0
+    verdict = "CONFIRMED" if confirmed else "NOT CONFIRMED"
+    seeds = args._seeds
+    line = (f"{comp} {CONFIRM_METRIC}: {100 * r['mean_diff']:+.4f} points, two-level 95 % CI "
+            f"[{100 * r['ci2_lo']:+.4f}, {100 * r['ci2_hi']:+.4f}] ({CONFIRM_N_BOOT} repetitions, seed "
+            f"{CONFIRM_BOOT_SEED}); seeds MDv64 {seeds['MDv64']}, B {seeds['B']}; split {args.split}")
+    banner = "=" * 100
+    print(f"\n{banner}\nCONFIRMATORY TEST MDv64 vs B (pre-registered, commit d46b279): **{verdict}**\n{line}\n"
+          f"Rule: CONFIRMED only if the upper bound of the interval is < 0."
+          + ("" if args.split == "test" else "\nNOT THE TEST SET: functional check only, no decision.") + f"\n{banner}\n")
+    desc_t2 = [x for x in rows_md if x["group"] == "confirm-mdv64"]
+    desc_t2b = [x for x in rows_b if x["group"] == "confirm-mdv64"]
+    desc_t3 = [x for x in t3d if x["comparison"] == comp and x["region"] == "wall" and x["channel"] == "vy"]
+    desc_t4 = [x for x in t4d if x["comparison"] == comp]
+    out = [f"## CONFIRMATORY TEST: MDv64 vs B on rel_vy (pre-registered, commit d46b279) — **{verdict}**", "",
+           f"**{line}.** Rule: CONFIRMED only if the upper bound of the two-level 95 % interval is < 0; no other metric "
+           "decides." + ("" if args.split == "test" else " **Not the test set: functional check only, no decision.**"),
+           "", "Descriptive only (no decision), MDv64 - B:", "",
+           av.md_table(desc_t2, list(desc_t2[0].keys())), "", av.md_table(desc_t2b, list(desc_t2b[0].keys())), "",
+           "Wall band, vy MAE x1e-3:", "", av.md_table(desc_t3, list(desc_t3[0].keys())), "",
+           "Divergence error:", "", av.md_table(desc_t4, list(desc_t4[0].keys())), ""]
+    return out
 
 
 if __name__ == "__main__":
