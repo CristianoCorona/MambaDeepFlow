@@ -2685,3 +2685,12 @@ would be seen before the design is fixed). Choosing N after the control runs (re
 parameter match with B).
 
 **Open questions.** None for the design; durations come from the control runs (next entry).
+
+---
+
+## 2026-10-15 — Night 6b: control-run queue
+
+**Action.** `queues/control-night6b.txt`: DRv11 and TR, `--seed 0 --epochs 17 --split-mode grouped-holdout`, run with
+`scripts/run_queue.py --out-root ~/runs/control-2026-10-15b` (evaluated on val and val_seen). Criteria as pre-registered
+(`a986ca1`): no NaN / Inf, train L1 last 3 < first 3; the val L1 ratio to the B control of 2026-10-12 (linked as `B`
+in the out root for `scripts/control_gates.py`) is reported only (different split). Results in the next entry.

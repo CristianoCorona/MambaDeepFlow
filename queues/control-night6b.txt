@@ -1,0 +1,6 @@
+# Control runs for night 6b (docs/preregistration-night6b.md, commit a986ca1): 17 epochs, seed 0, grouped-holdout split.
+# Purpose: find faults only (no NaN / Inf, train L1 decreasing: last 3 epochs < first 3); the ratio of the final val L1 to
+# the B control of 2026-10-12 (~/runs/control-2026-10-12/B, grouped split: a different split) is reported, not a
+# criterion. Also measures it/s and peak VRAM for the night-6b estimate. Out root ~/runs/control-2026-10-15b.
+DRv11  est=8m --seed 0 --epochs 17 --variant DRv11 --split-mode grouped-holdout
+TR     est=3m --seed 0 --epochs 17 --variant TR --split-mode grouped-holdout
