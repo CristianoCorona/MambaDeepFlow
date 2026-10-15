@@ -2645,3 +2645,43 @@ Split files unchanged (`git diff HEAD -- splits/` empty; vs tag `main-results-20
   New test: with B at 5 seeds, the DoD of MD8 / MDv8-16-32 equals the one with B seeds 0-2 exactly.
 
 **Open questions.** Throughput and memory of DRv11 (11 blocks at 64 tokens) unknown until the control run.
+
+---
+
+## 2026-10-15 — PRE-REGISTRATION: night 6b (deep-path replacement DRv11, control TR)
+
+**Context / why.** Decided on 2026-10-15, **after the test set was opened** (14/10, 15/10). Full text:
+`docs/preregistration-night6b.md` (committed alone, before the control runs and before the launch; implementation
+`3f4f785`, previous entry). No number of TR / DRv11 exists at this point.
+
+**Decision (summary; the file is authoritative).**
+- Experiment: DfpNet's deep path (layer4-6, dlayer6-4) replaced by 11 Mamba SS2D blocks at 8x8 (DRv11, parameters
+  matched to B), and the control TR (same truncated network, no blocks). All models: grouped-holdout split seed 0
+  (`d84da2c`), 133 epochs, Adam lr 6e-4 betas (0.5, 0.999), L1, batch 10, final epoch, protocol unchanged; **N = 11
+  fixed now, not modified after the validation**.
+- **Confirmatory (the only one)**: on the official test, rel_all (original definition, mean of the ratios) of DRv11
+  seeds 0-4 vs B-GH seeds 0-4; DRv11 - B-GH with the two-level bootstrap (seeds + profiles, 10 000, seed 0) as in the
+  main analysis. "Improvement demonstrated" if upper bound < 0; "worsening demonstrated" if lower bound > 0; otherwise
+  "no demonstrable difference", with estimate and interval. Descriptive: rel_p, rel_vx, rel_vy (mean, aggregate,
+  median), MAE per channel.
+- **TR control** (descriptive, validation and test): TR - B-GH and DRv11 - TR, same metrics and bootstrap.
+  Interpretation fixed now: TR ~ B-GH -> the deep path is not necessary and DRv11 - B-GH says nothing about global
+  mixing; TR worse than B-GH -> DRv11 - TR measures how much of what the deep path provided the blocks recover.
+- **Exploratory** (validation only): DoD seen vs unseen shapes relative to B-GH for DRv11 and TR, next to MD8 and
+  MDv8-16-32.
+- **Amendment to `d46b279` (seen / unseen)**: moved to night 6b; the DoD of MD8-GH and MDv8-16-32-GH uses B-GH seeds
+  0-2 as pre-registered; B-GH seeds 3-4 serve the DRv11 confirmation and are only descriptive there.
+- **Validation calibration**: extended to all GH configurations (B, MD8, MDv8-16-32, DRv11, TR); descriptive, no
+  architectural conclusion.
+- **Amendment to `d46b279` (MDv64)**: the confirmatory test (content unchanged) is postponed: MDv64 seeds 3-7 trained
+  on the night of Friday 2026-10-16, test pass Saturday 2026-10-17 morning. A failed run is repeated identically once;
+  otherwise declared missing.
+- Operational: control runs (17 epochs, seed 0, grouped-holdout) judged only on no NaN / Inf and train L1 decreasing
+  (last 3 < first 3); ratio vs the B control of 2026-10-12 reported, not a criterion. Queue cut order if the estimate
+  exceeds 9.5 h: MDv8-16-32-GH s2, s1, s0, then MD8-GH s2, s1, s0; the core (DRv11, B-GH, TR) is never cut.
+
+**Alternatives considered.** Running the control runs before this commit (rejected: the 17-epoch validation numbers
+would be seen before the design is fixed). Choosing N after the control runs (rejected: N = 11 is fixed by the
+parameter match with B).
+
+**Open questions.** None for the design; durations come from the control runs (next entry).
