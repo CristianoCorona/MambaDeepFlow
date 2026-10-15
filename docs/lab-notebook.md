@@ -2232,3 +2232,21 @@ confirmatory evidence of any configuration.
   measure throughput and memory; their validation numbers do not shape expectations or decisions about this experiment.
 - Limits: parameter counts differ (MDv32 +55 936, MDv64 +20 800, MDv8-16-32 +281 088 vs B); 3 seeds; validation already
   used for many decisions in this project.
+
+---
+
+## 2026-10-15 — Night 5: run check; analysis tooling for the position experiment
+
+**Run check.** Read `~/runs/night5/queue.log`, every run's `config.json` / `queue_timing.json` / `metrics.csv`, and the
+logs. Queue started **2026-10-15 01:34:14**, ended **06:32:49**, before the cutoff (08:30). **9 / 9 runs finished and
+evaluated on validation** (MDv32, MDv64, MDv8-16-32, seeds 0-2), all at commit `72e5b1b` (the pre-registration
+commit), clean tree; none interrupted, no `*.interrupted-*` directory, no STOP file, no `Traceback` / `Error:` in the
+logs, no NaN / Inf in `metrics.csv` (133 rows each), no `eval_test*` file. Training wall times, min (`est=` in the queue;
+estimate in the entry "Control runs MDv32, MDv64, MDv8-16-32: pass"): MDv32 24.7 (27; 25.5), MDv64 44.5-44.6 (48;
+45.7), MDv8-16-32 29.9 (33; 31.0). Evaluation 7 s per run. Nothing to complete in a following night.
+
+**Tooling.** `scripts/final_analysis.py`: new comparison group `position` = the five pre-registered comparisons
+(MDv32 - MD32, MDv32 - B, MDv64 - B, MDv8-16-32 - MDv8, MDv8-16-32 - B), used in T2 / T2b / T3 / T4 only when the
+labels are loaded (as `second pass`); the three labels appended to `ORDER`. The main / exploratory / second-pass groups
+are unchanged, so earlier outputs are reproducible. `scripts/train_fit.py` unchanged. Test set not used (the runs are
+never given `--split test` / `--allow-test`). Results: next entry.

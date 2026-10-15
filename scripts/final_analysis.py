@@ -10,6 +10,8 @@ Contents
       also the one-level CI (profiles); metrics rel_all, rel_p, rel_vx, rel_vy and fluid MAE per channel
       main: MD8 - B, MD8 - SA8, MD8 - B-large; exploratory: MD32 - MD8, SA32 - SA8, MD32 - SA32, CBAM8 - B;
       second pass (if the label is loaded): MDv8 - MD8, MDv8 - B
+      position (night 5, exploratory, validation only; if the labels are loaded): MDv32 - MD32, MDv32 - B,
+      MDv64 - B, MDv8-16-32 - MDv8, MDv8-16-32 - B
   T3  regions (descriptive): MAE per region and channel, differences with the two-level CI
   T4  divergence (descriptive; mdf/explore.py DIV_MAPPING): mean |div pred|, mean |div target|,
       mean |div pred - div target| in the wall band and in the other fluid cells; differences of the last one
@@ -42,7 +44,9 @@ REPO = Path(__file__).resolve().parent.parent
 MAIN = [("MD8", "B"), ("MD8", "SA8"), ("MD8", "B-large")]
 EXPLORATORY = [("MD32", "MD8"), ("SA32", "SA8"), ("MD32", "SA32"), ("CBAM8", "B")]
 SECOND_PASS = [("MDv8", "MD8"), ("MDv8", "B")]
-ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8"]
+# position experiment (notebook 2026-10-15, pre-registration commit 72e5b1b; validation only)
+POSITION = [("MDv32", "MD32"), ("MDv32", "B"), ("MDv64", "B"), ("MDv8-16-32", "MDv8"), ("MDv8-16-32", "B")]
+ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8", "MDv32", "MDv64", "MDv8-16-32"]
 CH = explore.CHANNEL_NAMES
 FLUID = ("wall", "wake", "rest")
 # aggregate and median ratios: p (pre-registered, commit 26b6e7f) and vy (addendum of 2026-10-14, decided after the
@@ -153,7 +157,7 @@ def main():
     # --- T2 ---
     t2 = []
     fluid_mae = {l: np.stack([per_sample_fluid_mae(r) for r in res[l]]) for l in labels}  # (S, N, 3)
-    for group, pairs in (("main", MAIN), ("exploratory", EXPLORATORY), ("second pass", SECOND_PASS)):
+    for group, pairs in (("main", MAIN), ("exploratory", EXPLORATORY), ("second pass", SECOND_PASS), ("position", POSITION)):
         for v, ref in pairs:
             if v not in res or ref not in res:
                 continue
@@ -165,7 +169,7 @@ def main():
                 t2.append({"group": group, "comparison": f"{v} - {ref}", "metric": name, "scale": sc, **bs})
     av.write_csv(args.out_dir / "t2_paired.csv", t2)
     t2b = []
-    for group, pairs in (("main", MAIN), ("exploratory", EXPLORATORY), ("second pass", SECOND_PASS)):
+    for group, pairs in (("main", MAIN), ("exploratory", EXPLORATORY), ("second pass", SECOND_PASS), ("position", POSITION)):
         for v, ref in pairs:
             if v not in res or ref not in res:
                 continue
@@ -211,7 +215,7 @@ def main():
             reg_mae[(label, g)] = e
             m = e.mean(axis=(0, 1))
             t3.append({"config": label, "region": g, **{f"mae_{c} x1e-3": f"{1e3 * m[i]:.4f}" for i, c in enumerate(CH)}})
-    for v, ref in MAIN + EXPLORATORY + SECOND_PASS:
+    for v, ref in MAIN + EXPLORATORY + SECOND_PASS + POSITION:
         if v not in res or ref not in res:
             continue
         for g in ("wall", "wake", "rest"):
@@ -240,7 +244,7 @@ def main():
             for k in ("pred", "tgt", "err"):
                 row[f"{g} |div {k}| x1e-3"] = fmt_msd(stack(label, f"div_{k}_{g}").mean(1), scale=1e3)
         t4.append(row)
-    for v, ref in MAIN + EXPLORATORY + SECOND_PASS:
+    for v, ref in MAIN + EXPLORATORY + SECOND_PASS + POSITION:
         if v not in res or ref not in res:
             continue
         for g in explore.DIV_REGIONS:
