@@ -80,3 +80,21 @@ No correction for multiple comparisons: exploratory, every comparison reported w
   (`scripts/analyze_night8.sh`), with the seed counts printed.
 - Control runs (17 epochs, seed 0, `~/runs/control-2026-10-16`) only look for faults (no NaN / Inf, train L1
   decreasing); their ratio to B is reported, not a criterion. They are not part of the analysis.
+
+## Amendment 2026-10-16 (after the control runs, before the launch): queue version and launch rule
+
+Control runs (17 epochs, seed 0, `~/runs/control-2026-10-16`, commit `ccdd0f1`): all four pass (no NaN / Inf, train L1
+decreasing). Estimated durations at 133 epochs (linear extrapolation of the per-epoch times + start-up; nominal 0.98 x,
+worst case 1.05 x + 1 min; `queues/night8-*.txt` header): MDv64-local 18.5 / 21 min, **SA64 195.6 / 211 min**,
+MDv64-dec 44.3 / 49 min, MDv16 15.3 / 18 min (nominal / worst case).
+
+- `queues/night8-full.txt`: 20 runs, nominal 22.8 h, worst case 24.9 h.
+- `queues/night8-cut.txt`: without MDv16 s4, s3, MDv64-dec s4, s3, SA64 s4, s3 (14 runs; MDv64-local s0-4, the
+  others s0-2): nominal 14.3 h, worst case 15.7 h. This exceeds the ~13 h window: **not cut further** (decision left to
+  the experimenter before the launch; any change is a new dated amendment, committed before the launch).
+- Cutoff 12:00 (2026-10-17) for both. **T_full** (latest launch for which the full queue ends by 12:00 in the worst
+  case) = 2026-10-16 **11:05**, already past: tonight the full queue cannot end by the cutoff.
+- **Rule:** launch at or before T_full -> `scripts/launch_night8.sh full`; launch after T_full ->
+  `scripts/launch_night8.sh cut`. The cut queue ends by 12:00 in the worst case if launched by **20:21** (nominal by
+  21:42); with a later launch `run_queue.py` stops before the cutoff and the runs not started (the last of the queue:
+  MDv64-local s4, s3, ...) are declared missing as stated above.

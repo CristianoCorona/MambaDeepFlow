@@ -3024,3 +3024,40 @@ and four variants); test-set evaluation (rejected: exploratory, the test set sta
 
 **Open questions.** Queue version (full / cut) depends on the measured durations: rule added as a dated amendment
 after the control runs.
+
+---
+
+## 2026-10-16 — Night 8: control runs (pass), duration estimates, queues, launcher, launch-rule amendment
+
+**Context / why.** Phase 4-5 of night 8 (pre-registration `d65894c`): find faults, measure speed and memory, prepare
+the queues for tonight. The queue is NOT launched here.
+
+**Action.** `run_queue.py queues/control-night8.txt --out-root ~/runs/control-2026-10-16` (commit `ccdd0f1`,
+15:25-16:02; B of 2026-10-12 linked as reference); `scripts/control_gates.py --root ~/runs/control-2026-10-16`.
+Estimates: linear extrapolation of the per-epoch times (metrics.csv) to 133 epochs plus the start-up; checked on earlier
+pairs control -> 133 epochs (MDv64, SA32, B, MDv32): the real duration was 0.973-0.990 of this prediction; nominal =
+0.98 x prediction + evaluation, worst case (`est=`) = 1.05 x prediction + evaluation + 1 min. Queues
+`queues/night8-full.txt` (20 runs) and `queues/night8-cut.txt` (14 runs), `scripts/launch_night8.sh full|cut`,
+amendment to `docs/preregistration-night8.md` (queue version and launch rule).
+
+**Evidence.**
+
+| run (17 ep, s0) | train | it/s | peak alloc / reserved MiB | val L1 / B | train L1 first3 -> last3 | val rel_vy | est. 133 ep nominal / worst |
+|---|---|---|---|---|---|---|---|
+| MDv64-local | 157 s | 73.5 | 266 / 308 | 0.960 | 0.0220 -> 0.0062 | 7.86 % | 18.5 / 21 min |
+| MDv64-dec | 358 s | 30.2 | 496 / 528 | 0.997 | 0.0237 -> 0.0065 | 9.27 % | 44.3 / 49 min |
+| MDv16 | 130 s | 88.8 | 197 / 248 | 1.053 | 0.0236 -> 0.0069 | 9.02 % | 15.3 / 18 min |
+| SA64 | 1540 s | 6.8 | 198 / 252 | 0.979 | 0.0227 -> 0.0063 | 8.09 % | **195.6 / 211 min** |
+
+(B control: 115 it/s.) All PASS (no NaN / Inf, train L1 decreasing); the ratio to B is reported only. Rel_vy at 17
+epochs is not comparable with 133-epoch runs. SA64 is ~17x slower than B per iteration (4 096 tokens, efficient SDPA
+kernel in float32, memory small).
+- Full queue: nominal 22.8 h, worst case 24.9 h -> **T_full = 2026-10-16 11:05** (past). Cut queue (14 runs, all six
+  cuts applied): nominal 14.3 h, worst case 15.7 h: **exceeds the ~13 h window; not cut further** (as instructed;
+  decision to the experimenter). Latest launch for the cut queue to end by 12:00: 20:21 worst case, 21:42 nominal.
+- Launcher checks: no argument / invalid argument -> usage, exit 1; dirty tree -> refused; end-time calculation dry run:
+  full "worst case Sat 17:00 ... WARNING", cut "worst case Sat 07:44" (from 16:03).
+
+**Open questions.** SA64 dominates the queue (3 x 3.3 h even in the cut version). Options for the experimenter before
+the launch (each would be a dated amendment): accept the cut queue with a launch by ~20:20; fewer SA64 seeds; SA64 in
+a separate night; reorder so that the cheap ablations finish first.
