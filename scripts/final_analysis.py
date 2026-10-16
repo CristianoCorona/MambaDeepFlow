@@ -20,6 +20,11 @@ Contents
       confirm-dr (only with --confirm-dr): DRv11 - B-GH, decision on rel_all: "IMPROVEMENT DEMONSTRATED" if the upper
       bound of the two-level 95 % interval (10 000 repetitions) is < 0, "WORSENING DEMONSTRATED" if the lower bound
       is > 0, else "NO DEMONSTRABLE DIFFERENCE"; printed first in summary.md with the descriptive rows (also TR)
+      ablation64 (night 8, docs/preregistration-night8.md; exploratory, validation only; if the labels are loaded):
+      MDv64-local - MDv64 / - B, SA64 - MDv64 / - B, MDv64-dec - MDv64 / - B, MDv16 - B, MDv16 - MDv64; section
+      "Ablations of MDv64" first in summary.md (rel_vy rows, wall-band vy, divergence) and the figure
+      ablation64_rel_vy.{pdf,png} (IEEE one column: rel_vy per variant, seeds and mean, B / MDv64 reference lines;
+      rel_vy against the MDv block level 8 / 16 / 32 / 64). Pairs with a missing label are skipped.
   T3  regions (descriptive): MAE per region and channel, differences with the two-level CI
   T4  divergence (descriptive; mdf/explore.py DIV_MAPPING): mean |div pred|, mean |div target|,
       mean |div pred - div target| in the wall band and in the other fluid cells; differences of the last one
@@ -65,8 +70,13 @@ CONFIRM_DR_METRIC = "rel_all"
 DR_LABELS = {"B-GH", "DRv11", "TR"}
 DR_GROUPS = ("deep-replace", "confirm-dr")
 DR_AGG_MEDIAN_CHANNELS = ("p", "vx", "vy")  # pre-registered descriptives of night 6b (vx added for these only)
-ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8", "MDv32", "MDv64", "MDv8-16-32",
-         "B-GH", "TR", "DRv11"]
+# ablations of MDv64 (night 8, docs/preregistration-night8.md; exploratory, validation only)
+ABLATION64 = [("MDv64-local", "MDv64"), ("MDv64-local", "B"), ("SA64", "MDv64"), ("SA64", "B"),
+              ("MDv64-dec", "MDv64"), ("MDv64-dec", "B"), ("MDv16", "B"), ("MDv16", "MDv64")]
+ABLATION64_LABELS = ("MDv64-local", "SA64", "MDv64-dec", "MDv16")
+LEVEL_CURVE = (("MDv8", 8), ("MDv16", 16), ("MDv32", 32), ("MDv64", 64))
+ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8", "MDv16", "MDv32", "MDv64", "MDv8-16-32",
+         "B-GH", "TR", "DRv11", "MDv64-local", "SA64", "MDv64-dec"]
 SPLIT_MODES_OK = ("grouped", "grouped-holdout")
 CH = explore.CHANNEL_NAMES
 FLUID = ("wall", "wake", "rest")
@@ -131,6 +141,11 @@ def main():
     groups.append(("deep-replace", DEEP_REPLACE))  # appended last: a fresh RNG per pair, earlier pairs unchanged
     if args.confirm_dr:
         groups.append(("confirm-dr", CONFIRM_DR))
+    ablation = bool(set(ABLATION64_LABELS) & set(runs))
+    if ablation:
+        if args.split != "val":
+            sys.exit("ablation64 (night 8) is pre-registered on validation only")
+        groups.append(("ablation64", ABLATION64))  # appended last: a fresh RNG per pair, earlier pairs unchanged
     t1_channels = AGG_MEDIAN_CHANNELS + (("vx",) if DR_LABELS & set(runs) else ())
     all_pairs = list(dict.fromkeys(pair for _, pairs in groups for pair in pairs))
     split_modes = {cfg.get("split", {}).get("split_mode", "random") for lst in runs.values() for _, _, cfg in lst}
@@ -324,6 +339,10 @@ def main():
     fig.savefig(args.fig_dir / "per_seed.png", dpi=120)
     plt.close(fig)
 
+    if ablation:
+        ablation64_figure(args, labels, lambda l: 100 * stack(l, "rel_vy").mean(axis=1))
+        md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
+            = ablation64_section(args, t1, rows_md, rows_b, t3d, t4d)
     if args.confirm_mdv64:
         md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
             = confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d)
@@ -361,6 +380,85 @@ def confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d):
            "Wall band, vy MAE x1e-3:", "", av.md_table(desc_t3, list(desc_t3[0].keys())), "",
            "Divergence error:", "", av.md_table(desc_t4, list(desc_t4[0].keys())), ""]
     return out
+
+
+def ablation64_section(args, t1, rows_md, rows_b, t3d, t4d):
+    """Night-8 ablations (docs/preregistration-night8.md): primary rel_vy rows first, then the descriptive ones."""
+    comps = [f"{v} - {r}" for v, r in ABLATION64]
+    seeds = "; ".join(f"{l} {s}" for l, s in args._seeds.items())
+    prim = [x for x in rows_md if x["group"] == "ablation64" and x["metric"] == "rel_vy"]
+    prim_b = [x for x in rows_b if x["group"] == "ablation64" and x["metric"].endswith("_vy")]
+    desc = [x for x in rows_md if x["group"] == "ablation64" and x["metric"] in ("rel_all", "rel_p")]
+    d3 = [x for x in t3d if x["comparison"] in comps and x["region"] == "wall" and x["channel"] == "vy"]
+    d4 = [x for x in t4d if x["comparison"] in comps]
+    t1v = [{k: r[k] for k in ("config", "seeds", "rel_vy", "agg_rel_vy", "median_rel_vy", "rel_all", "rel_p")}
+           for r in t1]
+    missing = [l for l in ABLATION64_LABELS if l not in args._seeds]
+    print("\nablation64 rel_vy (variant - reference, points; two-level 95 % CI):")
+    for x in prim:
+        print(f"  {x['comparison']:<22} {x['mean diff']}  {x['95% CI seeds+profiles']}  seeds {x['seeds']}")
+    return ["## Ablations of MDv64 (night 8; EXPLORATORY, validation only; docs/preregistration-night8.md)", "",
+            f"Seeds: {seeds}." + (f" **Missing configurations: {', '.join(missing)}.**" if missing else ""),
+            "Interpretation rules in the pre-registration: an interval including 0 does not demonstrate equality.", "",
+            "rel_vy per configuration (mean (std) over seeds, %):", "", av.md_table(t1v, list(t1v[0].keys())), "",
+            "Primary, rel_vy (points, negative = variant better):", "",
+            av.md_table(prim, list(prim[0].keys())) if prim else "(no pair available)", "",
+            av.md_table(prim_b, list(prim_b[0].keys())) if prim_b else "", "",
+            "Descriptive, rel_all and rel_p:", "", av.md_table(desc, list(desc[0].keys())) if desc else "", "",
+            "Descriptive, wall band vy MAE x1e-3:", "", av.md_table(d3, list(d3[0].keys())) if d3 else "", "",
+            "Descriptive, divergence error:", "", av.md_table(d4, list(d4[0].keys())) if d4 else "", "",
+            "Figure: `ablation64_rel_vy.pdf` in the figure directory.", ""]
+
+
+def ablation64_figure(args, labels, rel_vy):
+    """IEEE one-column figure (3.5 in): (a) rel_vy per variant, seeds (grey) and mean (black), B and MDv64 means as
+    labelled reference lines; (b) rel_vy against the level of the MDv block (8, 16, 32, 64) with the B line."""
+    plt.rcParams.update({"font.size": 7, "axes.titlesize": 7, "axes.labelsize": 7, "xtick.labelsize": 6.5,
+                         "ytick.labelsize": 6.5, "pdf.fonttype": 42})
+    show = [l for l in ("B", "MDv64") + ABLATION64_LABELS if l in labels]
+    curve = [(l, lv) for l, lv in LEVEL_CURVE if l in labels]
+    fig, axes = plt.subplots(2, 1, figsize=(3.5, 3.9), constrained_layout=True,
+                             gridspec_kw={"height_ratios": [1.25, 1]})
+    ax = axes[0]
+    for name, ls in (("B", "--"), ("MDv64", "-")):
+        if name in labels:
+            m = rel_vy(name).mean()
+            ax.axhline(m, color="0.55", lw=0.8, ls=ls, zorder=1)
+            ax.annotate(f"{name} mean", (len(show) - 0.5, m), xytext=(0, 1.5), textcoords="offset points",
+                        ha="right", va="bottom", fontsize=6, color="0.35")
+    for j, l in enumerate(show):
+        v = rel_vy(l)
+        jit = (np.arange(v.size) - (v.size - 1) / 2) * 0.06
+        ax.scatter(j + jit, v, s=9, color="0.6", edgecolors="none", zorder=2)
+        ax.scatter([j], [v.mean()], s=90, marker="_", color="k", linewidths=1.6, zorder=3)
+    ax.set_xticks(range(len(show)), [f"{l}\n(n={rel_vy(l).size})" for l in show])
+    ax.set_xlim(-0.5, len(show) - 0.5)
+    ax.set_ylabel("rel. error $v_y$ (%)")
+    ax.set_title("(a) per variant: seeds (grey), mean (black)", loc="left")
+    ax.grid(axis="y", color="0.92", lw=0.5)
+    ax = axes[1]
+    if curve:
+        xs = [lv for _, lv in curve]
+        ms = [rel_vy(l).mean() for l, _ in curve]
+        for (l, lv), m in zip(curve, ms):
+            v = rel_vy(l)
+            ax.scatter(np.full(v.size, lv), v, s=9, color="0.6", edgecolors="none", zorder=2)
+        ax.plot(xs, ms, color="k", lw=1.0, marker="o", ms=3.5, zorder=3)
+        if "B" in labels:
+            ax.axhline(rel_vy("B").mean(), color="0.55", lw=0.8, ls="--", zorder=1)
+            ax.annotate("B mean", (64, rel_vy("B").mean()), xytext=(0, 1.5), textcoords="offset points",
+                        ha="right", va="bottom", fontsize=6, color="0.35")
+        ax.set_xscale("log", base=2)
+        ax.set_xticks([8, 16, 32, 64], ["8x8", "16x16", "32x32", "64x64"])
+        ax.minorticks_off()
+    ax.set_xlabel("feature-map size of the MDv block (encoder)")
+    ax.set_ylabel("rel. error $v_y$ (%)")
+    ax.set_title("(b) MDv block level: seeds (grey), mean (line)", loc="left")
+    ax.grid(axis="y", color="0.92", lw=0.5)
+    for ext in ("pdf", "png"):
+        fig.savefig(args.fig_dir / f"ablation64_rel_vy.{ext}", dpi=300)
+    plt.close(fig)
+    plt.rcParams.update(plt.rcParamsDefault)
 
 
 def dr_verdict(lo, hi):

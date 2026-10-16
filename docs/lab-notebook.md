@@ -3061,3 +3061,29 @@ kernel in float32, memory small).
 **Open questions.** SA64 dominates the queue (3 x 3.3 h even in the cut version). Options for the experimenter before
 the launch (each would be a dated amendment): accept the cut queue with a launch by ~20:20; fewer SA64 seeds; SA64 in
 a separate night; reorder so that the cheap ablations finish first.
+
+---
+
+## 2026-10-16 — Night 8: analysis prepared (group ablation64, figure, scripts/analyze_night8.sh; no new run)
+
+**Context / why.** Phase 6: tomorrow's validation analysis must compute every pre-registered comparison of
+`docs/preregistration-night8.md` and work with missing runs (cut queue, cutoff, failures).
+
+**Action.**
+- `scripts/final_analysis.py` (additive): group `ablation64` (MDv64-local / SA64 / MDv64-dec − MDv64 and − B,
+  MDv16 − B, MDv16 − MDv64), active only if one of the new labels is loaded, appended after the existing groups (one
+  RNG per pair: earlier outputs unchanged), refused on a split other than val; section "Ablations of MDv64" first in
+  summary.md (rel_vy mean / aggregate / median, rel_all, rel_p, wall-band vy MAE, divergence, missing configurations);
+  figure `ablation64_rel_vy.{pdf,png}`, 3.5 in (IEEE one column): (a) rel_vy per variant, seeds and mean, B / MDv64
+  mean lines; (b) rel_vy against the MDv block level 8 / 16 / 32 / 64. Labels MDv16, MDv64-local, SA64, MDv64-dec
+  added to ORDER.
+- `scripts/analyze_night8.sh`: main reading (`--seeds 0-4`) -> `docs/results/val-ablation64`, secondary reading
+  (`--seeds 0-7`: references with 8 seeds, new variants with 0-4) -> `docs/results/val-ablation64-8seed`, verification
+  5a (`train_fit.py`, seeds 0-4) -> `docs/results/val-ablation64/train_fit`. Validation only.
+
+**Evidence.** Functional run on the control runs (17 epochs, seed 0, references at 133 epochs; numbers meaningless,
+not reported), 1 000 bootstrap repetitions, scratch output (not committed): all 8 pairs computed ("seeds 1/5"),
+consistency with the eval CSVs max 2.0e-07, figure written and inspected; `train_fit.py` on the 4 control runs ran
+(55 s). Pairs with missing labels are skipped, the missing configurations are listed in the section.
+
+**Open questions.** None for the analysis; launch decision pending (previous entry).
