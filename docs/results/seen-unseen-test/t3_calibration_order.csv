@@ -1,0 +1,5 @@
+metric,validation,order (best first),test order,(b) same order as test,Kendall tau vs test
+rel_all,seen,DRv11 < MD8 < MDv8-16-32 < B < TR,DRv11 < MDv8-16-32 < B < MD8 < TR,no,+0.60
+rel_all,unseen,DRv11 < MD8 < B < MDv8-16-32 < TR,DRv11 < MDv8-16-32 < B < MD8 < TR,no,+0.40
+rel_vy,seen,MDv8-16-32 < DRv11 < MD8 < B < TR,MDv8-16-32 < DRv11 < MD8 < B < TR,yes,+1.00
+rel_vy,unseen,MDv8-16-32 < DRv11 < MD8 < B < TR,MDv8-16-32 < DRv11 < MD8 < B < TR,yes,+1.00

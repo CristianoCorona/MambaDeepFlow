@@ -1,0 +1,16 @@
+label,seed,run_dir,commit,max_abs_diff_vs_eval_csv
+B-GH,0,~/runs/night6b/GH_B_s0,5bbac5c,2.4829663e-07
+B-GH,1,~/runs/night6b/GH_B_s1,5bbac5c,4.5573366e-08
+B-GH,2,~/runs/night6b/GH_B_s2,5bbac5c,1.4981037e-07
+B-GH,3,~/runs/night6b/GH_B_s3,5bbac5c,8.1779335e-08
+B-GH,4,~/runs/night6b/GH_B_s4,5bbac5c,5.4703138e-08
+TR,0,~/runs/night6b/TR_s0,5bbac5c,3.9218394e-08
+TR,1,~/runs/night6b/TR_s1,5bbac5c,5.1005962e-08
+TR,2,~/runs/night6b/TR_s2,5bbac5c,1.1221068e-07
+TR,3,~/runs/night6b/TR_s3,5bbac5c,6.1040837e-08
+TR,4,~/runs/night6b/TR_s4,5bbac5c,6.5593037e-08
+DRv11,0,~/runs/night6b/DRv11_s0,5bbac5c,1.1246058e-07
+DRv11,1,~/runs/night6b/DRv11_s1,5bbac5c,5.8932541e-08
+DRv11,2,~/runs/night6b/DRv11_s2,5bbac5c,1.0049683e-07
+DRv11,3,~/runs/night6b/DRv11_s3,5bbac5c,4.5054339e-08
+DRv11,4,~/runs/night6b/DRv11_s4,5bbac5c,7.0505223e-08

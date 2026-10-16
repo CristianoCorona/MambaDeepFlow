@@ -2835,3 +2835,35 @@ configurations. All exploratory; they do not change the pre-registered test.
   (ii) −0.64) is satisfied, descriptive only.
 
 **Open questions.** Whether the validation level and order hold on the test set (calibration, test session).
+
+## 2026-10-16 — Night 6b: single test session — DRv11 vs B-GH: NO DEMONSTRABLE DIFFERENCE
+
+**Context / why.** The single test pass pre-registered in `a986ca1` (docs/preregistration-night6b.md). Conditions
+checked before it: run check passed (no core run missing or failed), validation analyses ran without errors, clean
+tree, HEAD `c20441c` descends from `a986ca1`, no night-6b run had `eval_test.json`.
+
+**Action.** `scripts/test_session_night6b.sh --go`, run once (2026-10-16 02:24:18-02:26:16, exit 0; log
+`~/runs/test-session-night6b/session.log`): test evaluation of the 21 night-6b runs (none skipped), then
+`final_analysis.py ... --seeds 0-4 --split test --allow-test --confirm-dr` -> `docs/results/test-confirm-dr`,
+`docs/figures/test-confirm-dr`, and `seen_unseen.py ... --split test --allow-test` -> `docs/results/seen-unseen-test`.
+No re-run, no further analysis. Results committed immediately with this entry.
+
+**Evidence** (test, 90 samples, 30 profiles; differences in percentage points; 95 % two-level bootstrap, seeds +
+profiles, 10 000 repetitions, seed 0; consistency with the evaluation CSVs 2.5e-7).
+- **CONFIRMATORY: DRv11 − B-GH rel_all = −0.116 points, 95 % CI [−0.506, +0.285] -> "no demonstrable difference".**
+  rel_all mean (sd) over seeds 0-4: DRv11 2.788 (0.082), B-GH 2.903 (0.187), TR 3.473 (0.045).
+- Descriptive DRv11 − B-GH: rel_p −1.37 [−5.46, +1.05], rel_vx −0.07 [−0.34, +0.21], rel_vy −0.69 [−2.12, +0.24];
+  agg_rel_p −0.20 [−2.34, +2.24], median_rel_p −0.27 [−1.45, +0.92]; MAE fluid p / vx / vy (x1e-3) −0.06 / −0.34 /
+  −0.25, all intervals including 0.
+- **TR control (descriptive):** TR − B-GH rel_all +0.570 [−0.007, +1.028] (TR worse on 90 % of profiles); DRv11 − TR
+  −0.685 [−1.097, −0.256]. Per the fixed interpretation: TR is worse than B-GH (the bound touches 0 on test, clearly
+  above it on validation), so DRv11 − TR is the part of the deep path the 11 SS2D blocks recover — on test at least
+  as much as the deep path gives (point estimate), with DRv11 − B-GH not distinguishable from 0.
+- **Validation calibration** (all GH configurations, descriptive, no architectural conclusion): test rel_all is
+  higher than both validations; unseen-shape validation is closer to test for every configuration (test / unseen
+  1.07-1.19, test / seen 1.10-1.34; B 1.153 / 1.296). Order on rel_all: test DRv11 < MDv8-16-32 < B < MD8 < TR;
+  unseen validation DRv11 < MD8 < B < MDv8-16-32 < TR (Kendall tau +0.40), seen +0.60; on rel_vy both validations give
+  the test order exactly (tau +1.00). DRv11 best and TR worst in all three sets.
+- B-GH seed 0 is the worst run on test (rel_all 3.214, vs 2.73-2.91 for seeds 1-4): it drives the larger B-GH sd.
+
+**Open questions.** None for this experiment (closed). MDv64 confirmatory test pending (night 7).
