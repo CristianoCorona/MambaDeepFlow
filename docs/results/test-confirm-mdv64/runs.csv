@@ -1,0 +1,17 @@
+label,seed,run_dir,commit,max_abs_diff_vs_eval_csv
+B,0,~/runs/night1/ep133_s0,3e69402,8.7029984e-08
+B,1,~/runs/night1/ep133_s1,3e69402,9.4234392e-08
+B,2,~/runs/night1/ep133_s2,3e69402,1.9566822e-07
+B,3,~/runs/night3/B_s3,7b663e2,8.9754294e-08
+B,4,~/runs/night3/B_s4,7b663e2,7.7490838e-08
+B,5,~/runs/night3/B_s5,7b663e2,1.5246309e-07
+B,6,~/runs/night3/B_s6,7b663e2,6.0199664e-08
+B,7,~/runs/night3/B_s7,7b663e2,7.5564079e-08
+MDv64,0,~/runs/night5/MDv64_s0,72e5b1b,1.6356965e-07
+MDv64,1,~/runs/night5/MDv64_s1,72e5b1b,1.3780144e-07
+MDv64,2,~/runs/night5/MDv64_s2,72e5b1b,4.658547e-08
+MDv64,3,~/runs/night7/MDv64_s3,13ea632,5.1590901e-08
+MDv64,4,~/runs/night7/MDv64_s4,13ea632,8.1216753e-08
+MDv64,5,~/runs/night7/MDv64_s5,13ea632,4.8078539e-08
+MDv64,6,~/runs/night7/MDv64_s6,13ea632,2.1629362e-07
+MDv64,7,~/runs/night7/MDv64_s7,13ea632,1.3043709e-07
