@@ -78,6 +78,9 @@ B_PARAMS = 2332035  # TurbNetG, 32 base channels
 VARIANTS = ("B", "B-large", "CBAM", "SA", "MD", "MDv")  # MDv: faithful SS2D (notebook 2026-10-14)
 DEEP_REPLACE_VARIANTS = ("TR", "DRv11")  # deep path removed / replaced by MDv blocks (mdf/deep_replace.py)
 VARIANTS = VARIANTS + DEEP_REPLACE_VARIANTS
+ABLATION_VARIANTS = ("MDv-local", "MDv-dec")  # ablations of MDv64 (night 8, mdf/ablation.py; notebook 2026-10-16)
+VARIANTS = VARIANTS + ABLATION_VARIANTS
+MAMBA_VARIANTS = ("MD", "MDv") + ABLATION_VARIANTS
 TEST_VARIANTS = ("identity",)  # unit tests only
 LEVELS = (64, 32, 16, 8)
 # level (feature-map size) -> encoder layer after which the block sits, and its channel multiplier
@@ -235,19 +238,25 @@ def normalize_cfg(cfg):
     channels = 32 if channels is None else int(channels)
     has_block = variant not in ("B", "B-large")
     levels = normalize_levels(cfg.get("levels"))
+    if variant in ABLATION_VARIANTS and levels is not None:
+        raise ValueError(f"variant {variant} has a single level, levels not allowed")
+    if variant == "MDv-dec" and cfg.get("level") not in (None, 64):
+        raise ValueError(f"variant MDv-dec is defined at level 64 (decoder, after dlayer2), got {cfg.get('level')}")
+    if variant == "MDv-dec" and cfg.get("level") is None:
+        cfg = {**cfg, "level": 64}
     if levels is not None:
         if not has_block:
             raise ValueError(f"variant {variant} has no block, levels not allowed")
         if cfg.get("level") is not None:
             raise ValueError("give level or levels, not both")
         return {"variant": variant, "level": None, "levels": levels, "channels": channels,
-                "mamba_impl": (cfg.get("mamba_impl") or "cuda") if variant in ("MD", "MDv") else None}
+                "mamba_impl": (cfg.get("mamba_impl") or "cuda") if variant in MAMBA_VARIANTS else None}
     level = cfg.get("level")
     level = (8 if level is None else int(level)) if has_block else None
     if has_block and level not in LEVELS:
         raise ValueError(f"level must be one of {LEVELS}, got {level}")
     return {"variant": variant, "level": level, "channels": channels,
-            "mamba_impl": (cfg.get("mamba_impl") or "cuda") if variant in ("MD", "MDv") else None}
+            "mamba_impl": (cfg.get("mamba_impl") or "cuda") if variant in MAMBA_VARIANTS else None}
 
 
 def build_from_cfg(cfg):
@@ -258,6 +267,9 @@ def build_from_cfg(cfg):
         return deep_replace.build(cfg["variant"], cfg["channels"], cfg["mamba_impl"])
     if cfg.get("levels"):
         return make_turbnet_multi_mixer()(cfg["variant"], cfg["levels"], cfg["channels"], cfg["mamba_impl"] or "cuda")
+    if cfg["variant"] == "MDv-dec":
+        from mdf import ablation
+        return ablation.make_turbnet_dec_mixer()(cfg["channels"], cfg["mamba_impl"])
     if cfg["variant"] in ("B", "B-large"):
         net = build_dfpnet(expo=channel_exponent(cfg["channels"]))
         if net.layer1.layer1_conv.out_channels != cfg["channels"]:

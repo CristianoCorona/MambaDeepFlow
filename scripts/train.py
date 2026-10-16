@@ -26,7 +26,7 @@ and data loading). it_per_s_incl_val additionally includes the validation passes
 Usage:
     python scripts/train.py --seed 0 [--epochs 133 | --iterations 10000]
                             [--split-mode {grouped,random,kfold} [--n-folds 5 --fold K]]
-                            [--variant {B,B-large,CBAM,SA,MD}] [--level {64,32,16,8} | --levels 8,16,32] [--channels N]
+                            [--variant {B,B-large,CBAM,SA,MD,MDv,TR,DRv11,MDv-local,MDv-dec}] [--level {64,32,16,8} | --levels 8,16,32] [--channels N]
                             [--mamba-impl {cuda,ref}] [--lr 6e-4] [--batch-size 10] [--out-dir DIR]
                             [--deterministic]
                             [--train-fraction F --total-steps N [--lr-ref-epochs 133] [--log-every 599]]

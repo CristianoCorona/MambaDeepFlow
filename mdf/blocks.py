@@ -219,6 +219,9 @@ def make_block(kind, channels, size, mamba_impl="cuda"):
         return SS2DMamba(channels, mamba_impl)
     if kind == "MDv":
         return SS2DVMamba(channels, mamba_impl)
+    if kind == "MDv-local":  # ablation of MDv (night 8): no propagation along the scan
+        from mdf.ablation import SS2DVMambaLocal
+        return SS2DVMambaLocal(channels, mamba_impl)
     if kind == "CBAM":
         return CBAM(channels)
     if kind == "identity":

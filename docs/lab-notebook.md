@@ -2956,3 +2956,51 @@ superseded by `13ea632`.)
 **Open questions.** The hypothesis was chosen after seeing the validation set and the test set had been opened for
 other configurations: the confirmation holds for this single pre-registered hypothesis and metric; the descriptive
 metrics (rel_all, rel_p) do not show a demonstrable difference. One comparison only, no correction needed.
+
+---
+
+## 2026-10-16 — Night 8: ablation variants of MDv64 (implementation, tests; no run)
+
+**Context / why.** MDv64 reduces the vy error (confirmed on test, `817c558`). To understand why, four ablations, each
+different from MDv64 in one thing only (pre-registration in the next entry): no long-range propagation (MDv64-local),
+another global mixer at the same place (SA64), the same block in the decoder (MDv64-dec), the same block at 16x16
+(MDv16). Additive code only; existing variants unchanged.
+
+**Decision / action.**
+- `mdf/ablation.py` (new):
+  - `SS2DVMambaLocal` (variant `MDv-local`): subclass of `SS2DVMamba` whose `forward_core` returns `sum_k D_k * x`,
+    i.e. the selective-scan output of each of the 4 directions is replaced by its D-skip term only (the term the scan
+    already adds); everything else inherited (in_proj, depthwise 3x3 conv + SiLU, sum of the directions, out_norm,
+    * SiLU(z), zero out_proj). Same `__init__`, hence at a given seed the same weights as MDv64 (tested).
+    `x_proj_weight`, `dt_projs_weight`, `dt_projs_bias`, `A_logs` stay in the module (same state dict) and get no
+    gradient.
+  - `TurbNetGDecMixer` (variant `MDv-dec`, level 64 only): unchanged MDv block applied to the output of `dlayer2`
+    (32 channels, 64x64; checked in `train/DfpNet.py`) before the concatenation `[dout2, out1]` that feeds `dlayer1`.
+    Block created after `weights_init` on the skeleton, so its weights equal MDv64's at a given seed (tested).
+  - Implemented as variants (`MDv-local`, `MDv-dec`; run tags `MDv-local64_c32`, `MDv-dec64_c32`) rather than a new
+    level "dec64": `--level` stays an integer and `LEVEL_LAYER` is untouched. Hooks: `ABLATION_VARIANTS` appended to
+    `models.VARIANTS`, `normalize_cfg` (mamba_impl, MDv-dec level 64 only, no `levels`), one `build_from_cfg` branch,
+    one `blocks.make_block` branch. SA64 (`--variant SA --level 64`) and MDv16 (`--variant MDv --level 16`) use the
+    existing code.
+- `tests/test_ablation64.py` (new, 18 tests).
+
+**Evidence.**
+- Parameters (block / total; B 2 332 035): MDv64-local 20 800 / 2 352 835, of which **used 7 232** (total used
+  2 339 267; unused 13 568 = x_proj 8 704 + dt_proj 768 + A_log 4 096); SA64 4 288 / 2 336 323; MDv64-dec 20 800 /
+  2 352 835 (= MDv64); MDv16 55 936 / 2 387 971.
+- At init, output vs B with the same skeleton weights: max |diff| 1.49e-08 (CUDA) and 0 (CPU / reference scan) for all
+  four. Two Adam steps: step 1 only the output projection gets a gradient; after step 2 every used block parameter has
+  a non-zero gradient; the 4 unused parameters of MDv64-local have `grad None`.
+- Locality (mixer alone, random out_proj, perturbation of pixel (32, 32) on 64x64): MDv64-local changes exactly 0
+  outside the 3x3 neighbourhood (min change inside 2.5e-3); MDv64 with the same weights changes 94.8 % of the pixels
+  >= 16 px away at the upstream init (small: max 8.5e-7, one pixel among 4096 in the scan sums) and 100 % with a
+  test-only slow-decay setting (A = -1e-3, dt = 0.5; max 2.6e-5). The forward is deterministic, so any non-zero change
+  is caused by the perturbation.
+- SA64, float32, training step batch 10: the profiler shows the memory-efficient SDPA kernel
+  (`fmha_cutlassF_f32_aligned_64x64...`, `_efficient_attention_backward`), no flash; same output as with SDPA
+  restricted to EFFICIENT_ATTENTION; peak allocated ~181 MiB.
+- Full suite `python -m pytest -q tests/`: **165 passed, 6 skipped** (incl. the fingerprints of the existing variants,
+  `tests/test_multilevel.py::test_existing_variants_unchanged`). `splits/` unchanged (`val_grouped_seed0.txt`
+  sha256 3b26466a...).
+
+**Open questions.** Training speed of SA64 (4 096 tokens) at 133 epochs: from the control runs.
