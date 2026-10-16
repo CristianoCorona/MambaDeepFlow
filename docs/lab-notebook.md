@@ -2867,3 +2867,16 @@ profiles, 10 000 repetitions, seed 0; consistency with the evaluation CSVs 2.5e-
 - B-GH seed 0 is the worst run on test (rel_all 3.214, vs 2.73-2.91 for seeds 1-4): it drives the larger B-GH sd.
 
 **Open questions.** None for this experiment (closed). MDv64 confirmatory test pending (night 7).
+
+## 2026-10-16 — Night 7: timing change of the launch
+
+**Context / why.** Free Friday evening.
+
+**Decision.** Timing change of the night-7 run (MDv64 s3-7): launched on 2026-10-16 at about 02:26 instead of the
+evening of 16/10, to free Friday evening. Content of the confirmatory MDv64 test unchanged (d46b279 as amended in
+a986ca1). Decided before any result of MDv64 seeds 3-7. Test session on 16/10 after the queue instead of 17/10.
+
+**Evidence.** Launch with `scripts/launch_night7.sh` (`queues/night7.txt`, out root `~/runs/night7`, cutoff 08:30)
+right after this commit; expected ~44.7 min per run, ~3.7 h for 5 runs.
+
+**Open questions.** None.
