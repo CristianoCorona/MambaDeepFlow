@@ -2742,3 +2742,56 @@ MD8-GH / MDv8-16-32-GH 11.4 / 14.0 / 28.2 min (night-6 estimates). Expected tota
 All scripts pass `bash -n`; `test_session_night6b.sh` without `--go` refuses (exit 1).
 
 **Open questions.** None before the launch.
+
+## 2026-10-16 — Night 6b: run check (all 21 runs finished, no NaN / Inf)
+
+**Context / why.** Phase A of the 2026-10-16 session: the pre-registration (`a986ca1`) allows the test session only
+if every core run (DRv11, B-GH, TR, seeds 0-4) is present and finished; MD8-GH / MDv8-16-32-GH are exploratory.
+
+**Action.** Read `~/runs/night6b/queue.log`, `config.json` (status), `metrics.csv` and `eval_val{,_seen}.json` of the
+21 runs; NaN / Inf scan of every numeric value in `metrics.csv` and in the two evaluation JSON files; grep for
+tracebacks in the per-run logs. Read-only.
+
+**Evidence.**
+- 21 / 21 runs `status: finished`, 133 epochs each, `model.pt` + evaluation on `val` (402 samples) and `val_seen`
+  (400 samples); no `eval_test.json` anywhere. 0 non-finite values (1197 per `metrics.csv`, 0 in the evaluation
+  files); no traceback. Train L1 (mean of batches) first 3 -> last 3 epochs decreasing in every run (e.g. DRv11 s0
+  0.0245 -> 0.0020, TR s0 0.0258 -> 0.0051).
+- **Interruption (reported, no run repeated).** Queue started 2026-10-15 18:24 (commit `5bbac5c`). DRv11 s0 finished
+  training at 18:56:20 (133 epochs, `model.pt` and `config.json` written, status `finished`, 1924.6 s), but the queue
+  process ended right after (its tmux scope stopped at 18:56:21) before logging the end and evaluating; the machine
+  was shut down at 19:01 and rebooted at 19:43. The queue was relaunched at 19:48 (same commit, same queue): it found
+  DRv11 s0 finished, ran only its evaluation ("training finished but not evaluated - evaluation only") and continued.
+  No training was repeated or lost; the cause of the queue process ending is not recorded in the logs.
+- Real vs estimated training time per run: DRv11 31.6 min (est. 35.1; `est=` 38), B-GH 11.2 (11.4), TR 8.5 (10.5),
+  MD8-GH 13.7 (14.0), MDv8-16-32-GH 27.9 (28.2). Queue end 2026-10-16 01:41:32; compute time 385 min (32 + 353,
+  excluding the 52-min gap) vs 412 min expected.
+- Per-run val rel_all (%, seeds 0-4 / 0-2, from `queue.log`): DRv11 2.396 / 2.487 / 2.415 / 2.354 / 2.467;
+  B-GH 2.513 / 2.515 / 2.545 / 2.459 / 2.556; TR 3.290 / 3.316 / 3.215 / 3.193 / 3.237; MD8-GH 2.582 / 2.451 / 2.408;
+  MDv8-16-32-GH 2.564 / 2.522 / 2.556.
+
+**Decision.** No core run missing or failed -> the test session may proceed after the validation analyses (Phase B).
+
+**Open questions.** Why the first queue process ended at 18:56 (probably the session being closed before the
+shutdown; not verifiable from the logs).
+
+## 2026-10-16 — `train_fit.py` (verification 5a) for grouped-holdout runs
+
+**Context / why.** Verification 5a on the GH configurations (train L1 in eval mode vs unseen- and seen-shape
+validation) was asked for night 6b. `scripts/train_fit.py` always loaded the *grouped* split: on grouped-holdout runs it
+would have measured "train" on files partly not used in training and "val" on a different validation set, and it had
+no seen-shape validation.
+
+**Action.** `scripts/train_fit.py`: the split mode is read from the runs' `config.json`; if all runs are
+grouped-holdout, train / val are the parts of that split and `val_seen` (400 samples, batch 1, cached inference) is
+added (columns `val_seen_*`, `gap_seen_L1`, Welch diff/SE vs B); a mix of grouped-holdout and other runs is refused;
+any other run keeps the grouped split exactly as before. Alternative considered: a new script (rejected: the code
+path is the same, and the change keeps old outputs identical). The pre-registered 5a condition section is only
+repeated on this split, marked descriptive.
+
+**Evidence.** Regression: `train_fit.py --config B=~/runs/night3/B_s* --seeds 3-4` (scratch output) gives rows
+identical to `docs/results/train-fit/train_fit_runs.csv` in every column except `train_seconds`.
+`pytest tests/test_holdout.py tests/test_seen_unseen.py tests/test_deep_replace.py`: 21 passed. Results in the next
+entry.
+
+**Open questions.** None.

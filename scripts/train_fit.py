@@ -11,6 +11,11 @@ then means over samples. The same quantities on validation (402 samples) come fr
 Batch 10 vs batch 1 only changes the cuDNN TF32 rounding (notebook 2026-10-13: <= 0.001 points on run means),
 negligible against the seed spread.
 
+Grouped-holdout runs (notebook 2026-10-16): when every run was trained with --split-mode grouped-holdout, train and
+val are the parts of that split, and the seen-shape validation (val_seen, 400 samples, batch 1 via the cache) is added
+(val_seen_* columns, gap_seen_L1 = val_seen L1 - train L1). Any other run keeps the grouped split as before (outputs
+unchanged); a mix of grouped-holdout and other runs is refused.
+
 Pre-registered condition (notebook 2026-10-14, commit 26b6e7f): for MD8 or SA8, both
   (i)  train L1: (mean_var - mean_B) / SE_Welch <= -2,   (ii) val L1: (mean_var - mean_B) / SE_Welch >= -1,
 SE_Welch = sqrt(s_var^2/n_var + s_B^2/n_B), std ddof=1 over seeds. Printed and written to --out-dir.
@@ -33,6 +38,7 @@ import numpy as np
 import torch
 
 import analyze_val as av
+from mdf import data as mdata
 from mdf import explore, models, runinfo
 
 NPIX = 3 * 128 * 128
@@ -72,6 +78,13 @@ def train_metrics(run_dir, inputs, targets, batch_size):
     return out
 
 
+def val_metrics(run_dir, ds, regions, cache_dir, split):
+    """Mean L1 / relative errors on a validation set from explore.cached_inference (batch 1, as evaluate.py)."""
+    r, _ = explore.cached_inference(run_dir, ds, regions, [], cache_dir, split)
+    return {"L1": float(np.mean(r["abs_err_all"] / NPIX)), "rel_all": float(r["rel_all"].mean()),
+            **{f"rel_{c}": float(r[f"rel_{c}"].mean()) for c in CH}}
+
+
 def welch(a, b):
     a, b = np.asarray(a), np.asarray(b)
     se = np.sqrt(a.var(ddof=1) / a.size + b.var(ddof=1) / b.size)
@@ -82,12 +95,22 @@ def welch(a, b):
 def main():
     args = parse_args()
     runs = av.collect_runs(args.config, av.parse_seeds(args.seeds))
+    modes = {cfg.get("split", {}).get("split_mode") == mdata.HOLDOUT for lst in runs.values() for _, _, cfg in lst}
+    if len(modes) != 1:
+        sys.exit(f"runs mix split mode {mdata.HOLDOUT} with other split modes")
+    holdout = modes == {True}
+    split_mode = mdata.HOLDOUT if holdout else "grouped"
     t0 = time.perf_counter()
-    train_ds = explore.load_split("train", "grouped")
-    val_ds = explore.load_split("val", "grouped")
-    print(f"loaded train {len(train_ds)} / val {len(val_ds)} samples in {time.perf_counter() - t0:.1f} s")
+    train_ds = explore.load_split("train", split_mode)
+    val_ds = explore.load_split("val", split_mode)
+    print(f"split {split_mode}: loaded train {len(train_ds)} / val {len(val_ds)} samples in "
+          f"{time.perf_counter() - t0:.1f} s")
     props = explore.sample_properties(val_ds)
     regions = explore.all_region_masks(val_ds, props)
+    if holdout:
+        seen_ds = explore.load_split("val_seen", split_mode)
+        seen_regions = explore.all_region_masks(seen_ds, explore.sample_properties(seen_ds))
+        print(f"loaded val_seen {len(seen_ds)} samples")
 
     rows = []
     gpu_s = 0.0
@@ -98,13 +121,15 @@ def main():
             torch.cuda.synchronize()
             dt = time.perf_counter() - t1
             gpu_s += dt
-            r, _ = explore.cached_inference(d, val_ds, regions, [], args.cache_dir, "val")
-            va = {"L1": float(np.mean(r["abs_err_all"] / NPIX)), "rel_all": float(r["rel_all"].mean()),
-                  **{f"rel_{c}": float(r[f"rel_{c}"].mean()) for c in CH}}
-            rows.append({"config": label, "seed": seed, **{f"train_{k}": v for k, v in tr.items()},
-                         **{f"val_{k}": v for k, v in va.items()}, "gap_L1": va["L1"] - tr["L1"],
-                         "train_seconds": dt})
-            print(f"{label} s{seed}: train L1 {tr['L1']:.6e} val L1 {va['L1']:.6e} ({dt:.1f} s)", flush=True)
+            va = val_metrics(d, val_ds, regions, args.cache_dir, "val")
+            row = {"config": label, "seed": seed, **{f"train_{k}": v for k, v in tr.items()},
+                   **{f"val_{k}": v for k, v in va.items()}, "gap_L1": va["L1"] - tr["L1"]}
+            if holdout:
+                vs = val_metrics(d, seen_ds, seen_regions, args.cache_dir, "val_seen")
+                row.update({**{f"val_seen_{k}": v for k, v in vs.items()}, "gap_seen_L1": vs["L1"] - tr["L1"]})
+            rows.append({**row, "train_seconds": dt})
+            print(f"{label} s{seed}: train L1 {tr['L1']:.6e} val L1 {va['L1']:.6e}"
+                  + (f" val_seen L1 {vs['L1']:.6e}" if holdout else "") + f" ({dt:.1f} s)", flush=True)
     av.write_csv(args.out_dir / "train_fit_runs.csv", rows)
 
     labels = list(runs)
@@ -113,14 +138,15 @@ def main():
     for l in labels:
         rr = by[l]
         row = {"config": l, "seeds": len(rr)}
-        for k in ("train_L1", "val_L1", "gap_L1"):
+        for k in ("train_L1", "val_L1", "gap_L1") + (("val_seen_L1", "gap_seen_L1") if holdout else ()):
             x = 1e3 * np.array([r[k] for r in rr])
             row[f"{k} x1e-3"] = f"{x.mean():.4f} ({x.std(ddof=1):.4f})" if x.size > 1 else f"{x.mean():.4f}"
-        for k in ("train_rel_all", "train_rel_p", "train_rel_vx", "train_rel_vy", "val_rel_all"):
+        for k in ("train_rel_all", "train_rel_p", "train_rel_vx", "train_rel_vy", "val_rel_all") + (
+                ("val_seen_rel_all",) if holdout else ()):
             x = 100 * np.array([r[k] for r in rr])
             row[f"{k} %"] = f"{x.mean():.4f} ({x.std(ddof=1):.4f})" if x.size > 1 else f"{x.mean():.4f}"
         if l != "B" and "B" in by:
-            for k in ("train_L1", "val_L1"):
+            for k in ("train_L1", "val_L1") + (("val_seen_L1",) if holdout else ()):
                 d, se, z = welch([r[k] for r in rr], [r[k] for r in by["B"]])
                 row[f"{k} - B x1e-3 (diff/SE)"] = f"{1e3 * d:+.4f} ({z:+.2f})"
         summ.append(row)
@@ -144,11 +170,14 @@ def main():
     md = ["# Training error in eval mode vs validation (verification 5a)", "",
           f"Generated by `scripts/train_fit.py`, git {runinfo.git_info()}, {runinfo.utc_now()}. Train: "
           f"{len(train_ds)} samples, batch {args.batch_size}, eval mode; val: {len(val_ds)} samples, batch 1 "
-          f"(cache). GPU inference time on the training set: {gpu_s:.0f} s in total.", "",
+          "(cache)" + (f"; split {split_mode}, val_seen: {len(seen_ds)} samples, batch 1 (cache)" if holdout else "")
+          + f". GPU inference time on the training set: {gpu_s:.0f} s in total.", "",
           "L1 = mean |o - t| per sample (normalised fields, whole grid), mean over samples; mean (std ddof=1) over "
           "seeds; diff/SE = (mean - mean_B) / sqrt(s^2/n + s_B^2/n_B).", "",
           av.md_table(summ, fields), "",
           "## Pre-registered condition (commit 26b6e7f)", "",
+          *(["Grouped-holdout runs: the condition is only repeated here on this split (descriptive, not a new "
+             "decision).", ""] if holdout else []),
           av.md_table(cond_rows, list(cond_rows[0].keys())) if cond_rows else "(not applicable)", "",
           f"**Condition satisfied: {'YES' if any_ok else 'NO'}** (MD8 or SA8 with both (i) and (ii)).", ""]
     (args.out_dir / "summary.md").write_text("\n".join(md) + "\n")
