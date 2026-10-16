@@ -3087,3 +3087,38 @@ consistency with the eval CSVs max 2.0e-07, figure written and inspected; `train
 (55 s). Pairs with missing labels are skipped, the missing configurations are listed in the section.
 
 **Open questions.** None for the analysis; launch decision pending (previous entry).
+
+---
+
+## 2026-10-16 — Night 8: AMENDMENT, SA64 in a separate night (night 8a tonight, night 9 on Saturday)
+
+**Context / why.** The control runs measured SA64 at ~3.3 h per run (6.8 it/s): even the cut queue (15.7 h worst case)
+did not fit one night, and a late launch would have dropped MDv64-local seeds (previous entries, `56d3792`).
+
+**Decision.** Experimenter's decision, taken on the measured durations only, before any 133-epoch run: SA64 moves to
+a separate night. Night 8a (tonight): MDv64-local, MDv64-dec, MDv16, seeds 0-4, by seed, cutoff 12:00 of 17/10.
+Night 9 (Saturday evening): SA64 seeds 0-4, cutoff 13:00 of Sunday 18/10; remaining seeds, if any, completed the
+following night, none added. The full / cut rule of `56d3792` is superseded; the rest of the pre-registration is
+unchanged. Alternatives considered (previous entry): fewer SA64 seeds (rejected: 5 seeds pre-registered); the cut
+queue as it was (rejected: 3 seeds for three variants and a launch deadline at 20:21).
+
+**Action.** Amendment in `docs/preregistration-night8.md`; `queues/night8a.txt` (15 runs), `queues/night9.txt`
+(5 runs), `scripts/launch_night8a.sh`, `scripts/launch_night9.sh` (as `launch_night7.sh`: tmux, systemd-inhibit,
+refuse on a dirty tree or an existing session, expected end nominal / worst case printed before starting);
+`scripts/launch_night8.sh` marked superseded; `scripts/analyze_night8.sh` reads night8a (three variants) and night9
+(SA64).
+
+**Evidence.**
+- Estimates (same method as the control-run entry): night 8a nominal 390 min (6.5 h), worst case 440 min (7.3 h);
+  latest launch for the worst case by 12:00: Saturday 04:40. Night 9 nominal 978 min (16.3 h), worst case 1055 min
+  (17.6 h); latest launch for the worst case by Sunday 13:00: Saturday 19:25 (nominal 20:42).
+- End times (nominal / worst): night 8a launched Fri 18:00 -> Sat 00:30 / 01:20; 20:00 -> 02:30 / 03:20;
+  22:00 -> 04:30 / 05:20; Sat 00:00 -> 06:30 / 07:20. Night 9 launched Sat 16:00 -> Sun 08:18 / 09:35;
+  17:00 -> 09:18 / 10:35; 18:00 -> 10:18 / 11:35; 19:00 -> 11:18 / 12:35; 20:00 -> 12:18 / 13:35 (worst case past
+  the cutoff: the last seed would move to the next night).
+- `scripts/analyze_night8.sh` functional run with SA64 absent (NIGHT8A = links named `<variant>_s0` to the control runs,
+  NIGHT9 nonexistent; scratch output, not committed): both readings and 5a ran (2 min 18 s); 6 ablation pairs
+  computed, "Missing configurations: SA64" in summary.md; figure written.
+- New launchers: dirty tree -> refused; no tmux session started.
+
+**Open questions.** None.

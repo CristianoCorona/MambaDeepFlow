@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SUPERSEDED (amendment 2026-10-16 "SA64 in a separate night"): use scripts/launch_night8a.sh and launch_night9.sh.
 # Launch the night-8 queue (docs/preregistration-night8.md: ablations of MDv64, seeds 0-4, grouped split, validation
 # only) as nights 1-7: detached tmux session, sleep / idle / lid switch inhibited, cutoff 12:00, out root ~/runs/night8.
 # Which queue (rule in the amendment of docs/preregistration-night8.md): `full` (queues/night8-full.txt) if launched

@@ -1,0 +1,14 @@
+# Night 9 (Saturday 2026-10-17 evening): SA64 of the night-8 ablations (docs/preregistration-night8.md, commit d65894c,
+# amendment "SA64 in a separate night"). SA64 seeds 0-4, grouped split, 133 epochs, validation only. Out root
+# ~/runs/night9, cutoff 13:00 (Sunday 2026-10-18). Runs not done by the cutoff are completed the following night by
+# re-launching this same queue (finished runs are skipped); no seed is added. Launch: scripts/launch_night9.sh.
+# Totals: nominal 978 min (16.3 h), worst case 1055 min (17.6 h).
+# Estimates from the control runs of 2026-10-16 (~/runs/control-2026-10-16, 17 epochs; notebook entry "Night 8: control
+# runs"): nominal = 0.98 x linear extrapolation to 133 epochs + evaluation; est= (worst case, used by run_queue.py for the
+# cutoff) = 1.05 x that + evaluation + 1 min. After the first run of a configuration run_queue.py uses its real duration.
+# A failed run is repeated identically once (re-run this queue), otherwise declared missing.
+SA64_s0          est=211m --seed 0 --epochs 133 --variant SA --level 64        # nominal=195.6m
+SA64_s1          est=211m --seed 1 --epochs 133 --variant SA --level 64        # nominal=195.6m
+SA64_s2          est=211m --seed 2 --epochs 133 --variant SA --level 64        # nominal=195.6m
+SA64_s3          est=211m --seed 3 --epochs 133 --variant SA --level 64        # nominal=195.6m
+SA64_s4          est=211m --seed 4 --epochs 133 --variant SA --level 64        # nominal=195.6m

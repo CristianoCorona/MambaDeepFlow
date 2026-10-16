@@ -98,3 +98,21 @@ MDv64-dec 44.3 / 49 min, MDv16 15.3 / 18 min (nominal / worst case).
   `scripts/launch_night8.sh cut`. The cut queue ends by 12:00 in the worst case if launched by **20:21** (nominal by
   21:42); with a later launch `run_queue.py` stops before the cutoff and the runs not started (the last of the queue:
   MDv64-local s4, s3, ...) are declared missing as stated above.
+
+## Amendment 2026-10-16 (later the same afternoon, before any 133-epoch run): SA64 in a separate night
+
+Decision of the experimenter, taken only on the durations measured by the control runs (SA64 ~3.3 h per run, 6.8 it/s;
+previous amendment, commit `56d3792`) and before any long run. **This amendment supersedes the full / cut rule of the
+previous amendment**; `queues/night8-full.txt`, `queues/night8-cut.txt` and `scripts/launch_night8.sh` stay in the
+repository but are not used.
+
+- **Night 8a** (Friday 2026-10-16 night): MDv64-local, MDv64-dec, MDv16, **seeds 0-4** (5 seeds as pre-registered),
+  in seed order (s0 of the three, then s1, ...): `queues/night8a.txt`, `scripts/launch_night8a.sh`, out root
+  `~/runs/night8a`, cutoff 12:00 of 2026-10-17. Estimate: nominal 6.5 h, worst case 7.3 h.
+- **Night 9** (Saturday 2026-10-17 evening): SA64 **seeds 0-4**: `queues/night9.txt`, `scripts/launch_night9.sh`, out
+  root `~/runs/night9`, cutoff 13:00 of Sunday 2026-10-18. Estimate: nominal 16.3 h, worst case 17.6 h. If part of it
+  does not fit, the remaining seeds are completed the following night (same launcher, queue and out root: finished
+  runs are skipped); **no seed is added**.
+- Everything else unchanged (models, seeds, comparisons, metrics, readings, interpretation rules, reporting). The
+  analysis (`scripts/analyze_night8.sh`) reads MDv64-local / MDv64-dec / MDv16 from `~/runs/night8a` and SA64 from
+  `~/runs/night9`; until SA64 exists, the SA64 comparisons are absent and listed as missing.

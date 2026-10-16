@@ -5,16 +5,19 @@
 #   2. secondary reading: references B / MDv64 (and MDv8) with seeds 0-7, new variants with their seeds 0-4
 #      -> docs/results/val-ablation64-8seed, docs/figures/val-ablation64-8seed
 #   3. verification 5a (scripts/train_fit.py) on the main-reading configurations -> docs/results/val-ablation64/train_fit
-# Missing runs (cut queue, cutoff, failures) are skipped: the seed counts are printed in summary.md.
+# Runs (amendment "SA64 in a separate night"): MDv64-local, MDv64-dec, MDv16 from ~/runs/night8a, SA64 from ~/runs/night9
+# (also when completed on a later night: same queue and out root). Missing runs (SA64 not yet run, cutoff, failures) are
+# skipped: the seed counts and the missing configurations are printed in summary.md.
 # Never reads the test set (final_analysis refuses --split test without --allow-test; train_fit reads train / val).
 #
 # Usage: scripts/analyze_night8.sh
-# Overridable: NIGHT8 (~/runs/night8), RESULTS (docs/results), FIGURES (docs/figures), TAG (val-ablation64)
+# Overridable: NIGHT8A (~/runs/night8a), NIGHT9 (~/runs/night9), RESULTS (docs/results), FIGURES (docs/figures), TAG (val-ablation64)
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 R="$HOME/runs"
-NIGHT8="${NIGHT8:-$R/night8}"
+NIGHT8A="${NIGHT8A:-$R/night8a}"
+NIGHT9="${NIGHT9:-$R/night9}"
 RESULTS="${RESULTS:-docs/results}"
 FIGURES="${FIGURES:-docs/figures}"
 TAG="${TAG:-val-ablation64}"
@@ -26,8 +29,8 @@ mkdir -p "$TMPDIR"
 REFS=(--config "B=$R/night1/ep133_s*" --config "B=$R/night3/B_s*"
       --config "MDv64=$R/night5/MDv64_s*" --config "MDv64=$R/night7/MDv64_s*"
       --config "MDv8=$R/night4/MDv8_s*" --config "MDv32=$R/night5/MDv32_s*")
-NEW=(--config "MDv64-local=$NIGHT8/MDv64-local_s*" --config "SA64=$NIGHT8/SA64_s*"
-     --config "MDv64-dec=$NIGHT8/MDv64-dec_s*" --config "MDv16=$NIGHT8/MDv16_s*")
+NEW=(--config "MDv64-local=$NIGHT8A/MDv64-local_s*" --config "MDv64-dec=$NIGHT8A/MDv64-dec_s*"
+     --config "MDv16=$NIGHT8A/MDv16_s*" --config "SA64=$NIGHT9/SA64_s*")
 
 echo "=== main reading: seeds 0-4"
 "$PY" scripts/final_analysis.py "${REFS[@]}" "${NEW[@]}" --seeds 0-4 --split val \
