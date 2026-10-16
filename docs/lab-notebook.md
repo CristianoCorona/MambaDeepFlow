@@ -2795,3 +2795,43 @@ identical to `docs/results/train-fit/train_fit_runs.csv` in every column except 
 entry.
 
 **Open questions.** None.
+
+## 2026-10-16 — Night 6b: validation analyses (exploratory, before the test session)
+
+**Context / why.** Phase B of the 2026-10-16 session, planned in the entry "Night 6b: control runs (pass), queue,
+launchers, test-session scripts": on validation, before the single test pass, the same comparisons as the
+confirmatory analysis (no decision), the seen- vs unseen-shape experiment (part 1) and verification 5a on the GH
+configurations. All exploratory; they do not change the pre-registered test.
+
+**Action** (commit `1c70c39`, clean tree; `N=~/runs/night6b`):
+- `scripts/final_analysis.py --config B-GH=$N/GH_B_s* --config DRv11=$N/DRv11_s* --config TR=$N/TR_s* --seeds 0-4
+  --split val --confirm-dr` -> `docs/results/val-confirm-dr`, `docs/figures/val-confirm-dr` (banner "NOT THE TEST
+  SET").
+- `scripts/seen_unseen.py --config B=GH_B --config MD8=GH_MD8 --config MDv8-16-32=GH_MDv8-16-32 --config DRv11
+  --config TR` (validation) -> `docs/results/seen-unseen-val` (DoD of MD8 / MDv8-16-32 vs B seeds 0-2, as
+  pre-registered; DRv11 / TR vs B seeds 0-4).
+- `scripts/train_fit.py` with the same five configurations -> `docs/results/train-fit-gh` (split grouped-holdout:
+  train 5598 samples, val 402, val_seen 400).
+
+**Evidence** (validation; differences in percentage points, 95 % two-level bootstrap, 10 000 repetitions, seed 0).
+- Consistency with the per-run evaluation CSVs: max deviation 1.7e-7 (final_analysis), 2.3e-6 (seen_unseen).
+- rel_all mean (sd) over seeds, unseen / seen: B-GH 2.517 (0.038) / 2.241 (0.064); DRv11 2.424 (0.054) / 2.177
+  (0.053); TR 3.250 (0.052) / 3.149 (0.054); MD8-GH 2.480 (0.091) / 2.201 (0.042); MDv8-16-32-GH 2.547 (0.022) /
+  2.202 (0.017).
+- **DRv11 − B-GH rel_all −0.094 [−0.203, +0.021]** (would read "no demonstrable difference" with the test rule;
+  profiles-only interval [−0.186, −0.004]); rel_p −0.61 [−1.36, +0.04], rel_vy −0.37 [−0.86, +0.14].
+- **TR − B-GH rel_all +0.733 [+0.583, +0.889]** (TR worse on 94 % of profiles); **DRv11 − TR −0.826 [−0.973,
+  −0.681]**. With the interpretation fixed in the pre-registration: TR is worse than B-GH, so DRv11 − TR measures how
+  much of the deep path the blocks recover — on validation all of it (DRv11 − TR ≈ −(TR − B-GH) − 0.09).
+- DoD (seen − unseen, rel_all): MD8 −0.018 [−0.169, +0.129]; MDv8-16-32 −0.084 [−0.236, +0.057]; DRv11 +0.030
+  [−0.116, +0.178]; TR +0.175 [+0.000, +0.350]. No DoD upper bound < 0: no sign that the Mamba variants gain more on
+  seen shapes than on new shapes.
+- Verification 5a (L1 x1e-3, mean (sd); diff/SE vs B-GH, Welch, B seeds 0-4): train (eval mode) / val unseen / val
+  seen — B-GH 2.786 / 5.029 / 4.347; MD8 2.581 (−2.06) / 4.956 (−0.64) / 4.272 (−1.01); MDv8-16-32 2.322 (−4.62) /
+  5.103 (+1.89) / 4.281 (−1.12); DRv11 1.832 (−9.29) / 4.840 (−3.43) / 4.236 (−1.57); TR 5.072 (+19.96) / 6.435
+  (+25.74) / 6.112 (+23.95). Gap val − train: B-GH 2.24, DRv11 3.01, MDv8-16-32 2.78, TR 1.36. DRv11 fits the
+  training set much better (−34 % train L1) but only a small part reaches validation; the same pattern as the block
+  variants on the grouped split (entry of 2026-10-14). The 5a condition repeated on this split (MD8: (i) −2.06,
+  (ii) −0.64) is satisfied, descriptive only.
+
+**Open questions.** Whether the validation level and order hold on the test set (calibration, test session).
