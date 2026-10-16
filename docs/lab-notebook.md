@@ -2880,3 +2880,48 @@ a986ca1). Decided before any result of MDv64 seeds 3-7. Test session on 16/10 af
 right after this commit; expected ~44.7 min per run, ~3.7 h for 5 runs.
 
 **Open questions.** None.
+
+---
+
+## 2026-10-16 — Night 7: run check (5 / 5 finished, no NaN / Inf)
+
+**Context / why.** Phase A of the MDv64 confirmatory session (pre-registration `d46b279`, amended in `a986ca1`,
+timing in `13ea632`): a failed run would be repeated identically once, otherwise declared missing.
+
+**Action.** Read `~/runs/night7/queue.log`, `config.json` (status), `metrics.csv` and `eval_val.json` of MDv64 s3-7;
+numeric NaN / Inf scan of every value in `metrics.csv` and `eval_val.json`; grep for tracebacks in the per-run logs.
+Read-only.
+
+**Evidence.**
+- Queue 02:26:53 -> 06:08:32 (commit `13ea632`), well before the 08:30 cutoff. 5 / 5 runs `status: finished`,
+  133 epochs (79 667 iterations) each, training 2649-2657 s (44.2-44.3 min; estimate was ~44.7), peak VRAM alloc
+  434 MiB, evaluation on `val` (402 samples, grouped split) 7 s each.
+- 0 non-finite values (1197 per `metrics.csv`, 0 in `eval_val.json`); no traceback. Train L1 (mean of batches) first
+  3 -> last 3 epochs decreasing in every run (0.020-0.023 -> 0.0023-0.0026).
+- Val rel_vy (%) s3-7: 5.359 / 5.269 / 5.451 / 5.206 / 5.277; rel_all 2.401 / 2.412 / 2.446 / 2.345 / 2.351.
+- No `eval_test.json` for any MDv64 run (night5 s0-2, night7 s3-7). No run repeated, none missing.
+
+**Open questions.** None: the test session can proceed with MDv64 seeds 0-7 vs B seeds 0-7.
+
+---
+
+## 2026-10-16 — MDv64 vs B on validation with 8 seeds (descriptive, before the test pass)
+
+**Context / why.** Phase B, as pre-registered in `d46b279`: the validation results of seeds 3-7 are reported but do
+not change the plan. Also a functional run of `--confirm-mdv64` with the full set of runs used by the test session.
+
+**Action.** `scripts/final_analysis.py --config "B=~/runs/night1/ep133_s*" --config "B=~/runs/night3/B_s*"
+--config "MDv64=~/runs/night5/MDv64_s*" --config "MDv64=~/runs/night7/MDv64_s*" --seeds 0-7 --split val
+--confirm-mdv64` -> `docs/results/val-confirm-mdv64`, `docs/figures/val-confirm-mdv64` (same arguments as
+`scripts/test_session_night7.sh` apart from the split).
+
+**Evidence** (402 samples, 85 profiles; two-level bootstrap 10 000, seed 0; consistency vs eval CSV max 1.5e-07).
+- MDv64 - B rel_vy **-0.747 points, 95 % CI [-1.027, -0.496]** (the rule, if this were the test, would give
+  "CONFIRMED"; NOT the test set, no decision). Night 5 with 3 vs 3 seeds: -0.66 [-0.96, -0.41].
+- rel_vy mean (sd) over seeds: B 6.067 (0.204), MDv64 5.320 (0.075); MDv64 better on 87 % of profiles.
+- Descriptive: rel_all -0.042 [-0.110, +0.041]; rel_p -0.36 [-0.93, +0.10]; rel_vx +0.001 [-0.048, +0.064];
+  agg_rel_vy -0.28 [-0.46, -0.07]; median_rel_vy -0.64 [-0.92, -0.32]; agg_rel_p +0.11 [-0.26, +0.53];
+  MAE fluid vy -0.20 x1e-3 [-0.34, -0.04]; wall-band vy MAE -8.8 %; divergence error wall -1.08 x1e-3
+  [-1.38, -0.71], other fluid -0.12 [-0.14, -0.10].
+
+**Open questions.** Whether this reproduces on the test set (next: single test pass, unchanged plan).
