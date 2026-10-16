@@ -3004,3 +3004,23 @@ another global mixer at the same place (SA64), the same block in the decoder (MD
   sha256 3b26466a...).
 
 **Open questions.** Training speed of SA64 (4 096 tokens) at 133 epochs: from the control runs.
+
+---
+
+## 2026-10-16 — PRE-REGISTRATION: night 8 (ablations of MDv64 at 64x64; exploratory, validation only)
+
+**Context / why.** Why does MDv64 reduce rel_vy? Three explanations: global mixing, more local processing at high
+resolution, position in the network. Decided after the results of phase 1 (including the MDv64 test, `817c558`),
+before any run of the new models (control runs included). Implementation `b3a85c2` (previous entry).
+
+**Decision.** Full text in `docs/preregistration-night8.md` (committed with this entry, on its own). In short:
+MDv64-local, SA64, MDv64-dec, MDv16; grouped split, 133 epochs, seeds 0-4; validation only, never test; primary rel_vy
+(mean, aggregate, median); main reading paired on seeds 0-4 with B and MDv64 s0-4, secondary with all 8 reference
+seeds; two-level bootstrap; interpretation rules fixed now (an interval including 0 does not demonstrate equality);
+all runs reported, no seeds added. Alternatives considered: more seeds per variant (does not fit one night with SA64
+and four variants); test-set evaluation (rejected: exploratory, the test set stays reserved).
+
+**Evidence.** This commit (hash in the next entry and in the report).
+
+**Open questions.** Queue version (full / cut) depends on the measured durations: rule added as a dated amendment
+after the control runs.
