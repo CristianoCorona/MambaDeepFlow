@@ -3411,3 +3411,28 @@ planned" of the previous entry is superseded by this decision.
   identical to before the change.
 
 **Open questions.** None for the implementation; pre-registration in the next commit, before any run.
+
+## 2026-10-17 PRE-REGISTRATION: night 9 (ladder of one-ingredient ablations of MDv64-local; exploratory, validation only)
+
+**Context / why.** Which ingredient of MDv64-local carries its rel_vy gain (MDv64-local better than B, Conv64 not)?
+Decided at 09:29 on 17/10, **after** the results of nights 8a (`f99f3d8`) and 8b (`1188c12`), **before** any run of
+the new models (control runs included). Implementation `1e3a3a8` (previous entry).
+
+**Decision.** `docs/preregistration-night9.md`, committed alone before the control runs.
+- Models: L-nogate, L-nonorm, L-noprenorm, L-noexp, L-dense (each MDv64-local minus one ingredient), seeds 0-4,
+  grouped split, 133 epochs, protocol unchanged; validation only, never test.
+- Comparisons: every variant − MDv64-local and every variant − B, paired on seeds 0-4, two-level interval; secondary
+  reading with B on 8 seeds.
+- Metrics: primary rel_vy (mean, aggregate, median); descriptive rel_all, rel_p, wall-band vy MAE, divergence, 5a.
+- Interpretation rules, fixed now: an ingredient "matters" if removing it makes rel_vy worse than MDv64-local with an
+  interval excluding 0; an interval including 0 is "not demonstrated", not "does not matter"; L-noexp and L-dense are
+  read taking their parameter change into account.
+- One queue with SA64 right after the ladder (amendment to the night-8 pre-registration, next commit); cutoff Sunday
+  18/10 13:00; all runs reported, no seed added.
+- Alternatives considered: more seeds per variant (rejected: the ladder plus SA64 already fills the weekend window);
+  removing two ingredients together (rejected: would not isolate one); also removing the activation SiLU of the conv
+  (not in the brief; not pre-registered).
+
+**Evidence.** This commit (hash in the next entry and in the report).
+
+**Open questions.** None before the control runs.
