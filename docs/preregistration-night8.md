@@ -116,3 +116,19 @@ repository but are not used.
 - Everything else unchanged (models, seeds, comparisons, metrics, readings, interpretation rules, reporting). The
   analysis (`scripts/analyze_night8.sh`) reads MDv64-local / MDv64-dec / MDv16 from `~/runs/night8a` and SA64 from
   `~/runs/night9`; until SA64 exists, the SA64 comparisons are absent and listed as missing.
+
+## Amendment 2026-10-17 (before any SA64 run or result): SA64 in the same queue as the night-9 ladder
+
+Decision of the experimenter, taken on 2026-10-17 at 09:29 together with the new, separate pre-registration
+docs/preregistration-night9.md (ladder of one-ingredient ablations of MDv64-local, commit `4f1d86a`), **before any
+SA64 run (control runs excepted) and before any SA64 result**.
+
+- SA64 night 9 starts in **one queue with the ladder**, right after it: `queues/night9.txt` = ladder in seed order
+  (L-nogate, L-nonorm, L-noprenorm, L-noexp, L-dense s0, then s1, ..., s4), then **SA64 s0, s1, s2, s3, s4**. The queue
+  starts on **Saturday 2026-10-17 in the afternoon** instead of Saturday evening.
+- **SA64 content unchanged**: model, seeds 0-4, grouped split, 133 epochs, out root `~/runs/night9`, comparisons,
+  metrics, readings, interpretation rules, reporting.
+- **Cutoff unchanged: 13:00 of Sunday 2026-10-18** (no new run started after it). Seeds not completed by then are
+  completed the following night (same launcher, queue and out root; finished runs are skipped), **no seed is added**.
+- The previous SA64-only queue is kept, unused, as `queues/night9-sa64only.txt` (renamed, content unchanged);
+  `scripts/launch_night9.sh` is updated to launch the joint queue.
