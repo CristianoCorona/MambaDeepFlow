@@ -3241,3 +3241,15 @@ explains the gain of MDv64-local, or whether its gating and normalisation are ne
 **Evidence.** This commit; implementation and tests in `feb7162`.
 
 **Open questions.** None before the control run.
+
+## 2026-10-17 Night 8b: control-run queue
+
+**Context / why.** The pre-registration (`31a57ae`) requires a 17-epoch control run of Conv64 before the launch.
+
+**Action.** `queues/control-night8b.txt` (Conv64, 17 epochs, seed 0), run with `scripts/run_queue.py` into
+`~/runs/control-2026-10-17`, with the B control of 2026-10-12 linked as `B`. Fault criteria as night 8; it/s for the
+estimate at 133 epochs.
+
+**Evidence.** Results in the next entry.
+
+**Open questions.** None.
