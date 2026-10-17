@@ -3436,3 +3436,22 @@ the new models (control runs included). Implementation `1e3a3a8` (previous entry
 **Evidence.** This commit (hash in the next entry and in the report).
 
 **Open questions.** None before the control runs.
+
+## 2026-10-17 Night 8 AMENDMENT (SA64 joins the night-9 queue) and night-9 control-run queue
+
+**Context / why.** With the ladder pre-registered (`4f1d86a`) and the PC free from now, SA64 (night 9 of the night-8
+pre-registration) can run in the same queue right after the ladder, starting this afternoon instead of this evening.
+
+**Decision.** Amendment in `docs/preregistration-night8.md`, commit `b60cdb0`, decided before any SA64 run or result:
+one queue `queues/night9.txt` (ladder by seed, then SA64 s0-s4), start Saturday afternoon, SA64 content unchanged,
+cutoff Sunday 18/10 13:00, unfinished seeds completed the following night, none added. The SA64-only queue is kept,
+unused, as `queues/night9-sa64only.txt` (renamed in `b60cdb0`). Alternative considered: SA64 first, then the ladder
+(rejected: the brief orders the ladder first, so its results are ready tonight).
+
+**Action.** `queues/control-night9.txt` (five ladder variants, 17 epochs, seed 0), to be run with
+`scripts/run_queue.py` into `~/runs/control-2026-10-17` (the B control of 2026-10-12 is already linked there as `B`).
+Fault criteria as night 8; it/s and memory for the 133-epoch estimates.
+
+**Evidence.** Results in the next entry.
+
+**Open questions.** None.

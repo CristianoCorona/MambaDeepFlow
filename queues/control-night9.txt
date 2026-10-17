@@ -1,0 +1,10 @@
+# Control runs for night 9 (docs/preregistration-night9.md, commit 4f1d86a): ladder of one-ingredient ablations of
+# MDv64-local, 17 epochs, seed 0, grouped split. Purpose: find faults only (no NaN / Inf, train L1 decreasing: last 3
+# epochs < first 3); the ratio of the final val L1 to the B control of 2026-10-12 (~/runs/control-2026-10-12/B, same
+# split, linked as B) is reported, not a criterion. Also measures it/s and peak VRAM for the night-9 duration estimates.
+# Out root ~/runs/control-2026-10-17 (shared with the night-8b control run, different names).
+L-nogate     est=8m  --seed 0 --epochs 17 --variant L-nogate --level 64
+L-nonorm     est=8m  --seed 0 --epochs 17 --variant L-nonorm --level 64
+L-noprenorm  est=8m  --seed 0 --epochs 17 --variant L-noprenorm --level 64
+L-noexp      est=8m  --seed 0 --epochs 17 --variant L-noexp --level 64
+L-dense      est=10m --seed 0 --epochs 17 --variant L-dense --level 64
