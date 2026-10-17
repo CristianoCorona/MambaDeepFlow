@@ -3122,3 +3122,54 @@ refuse on a dirty tree or an existing session, expected end nominal / worst case
 - New launchers: dirty tree -> refused; no tmux session started.
 
 **Open questions.** None.
+
+## 2026-10-17 Night 8a run check (15/15) and interim ablation analysis on validation (SA64 pending)
+
+**Context / why.** Night 8a (`queues/night8a.txt`, commit `635b69c`, pre-registration `d65894c` with the amendment in
+`635b69c`) ran MDv64-local, MDv64-dec and MDv16, seeds 0-4. SA64 runs in night 9, so this reading is interim: the
+SA64 comparisons are missing and the final reading waits for them. Validation only; the test split was not read.
+
+**Action.** Run check of `~/runs/night8a`, then `scripts/analyze_night8.sh` (unchanged) to
+`docs/results/val-ablation64{,-8seed}/` (including `train_fit/`) and `docs/figures/val-ablation64{,-8seed}/`.
+
+**Evidence.**
+- Queue: start 2026-10-16 20:16, end 2026-10-17 02:50 (394 min, estimate 390 nominal / 440 worst case). 15/15 runs
+  trained and evaluated. Each run has `model.pt`, 133 rows in `metrics.csv`, no NaN / Inf, its seed in `config.json`,
+  commit `635b69c`, and a clean tree. Train times: MDv64-local 1120-1127 s, MDv64-dec 2679-2684 s, MDv16 900-903 s.
+- rel_vy (%), mean (std) over seeds 0-4: B 6.127 (0.237), MDv64 5.325 (0.044), MDv64-local 5.408 (0.179), MDv64-dec
+  5.763 (0.121), MDv16 5.888 (0.096); MDv8 5.876 (0.159), MDv32 5.731 (0.160, 3 seeds).
+- Paired differences, rel_vy, points, 95% two-level interval (seeds + profiles), seeds 0-4:
+
+  | comparison | diff | interval | reading under the pre-registered rules |
+  |---|---|---|---|
+  | MDv64-local − MDv64 | +0.08 | [−0.13, +0.31] | not determined (the interval includes 0) |
+  | MDv64-local − B | −0.72 | [−1.13, −0.34] | better than B |
+  | MDv64-dec − MDv64 | +0.44 | [+0.23, +0.68] | worse than MDv64 |
+  | MDv64-dec − B | −0.36 | [−0.64, −0.13] | better than B |
+  | MDv16 − MDv64 | +0.56 | [+0.35, +0.80] | worse than MDv64 |
+  | MDv16 − B | −0.24 | [−0.54, +0.04] | not determined |
+
+  The 8-seed reading (B and MDv64 with s0-7) gives the same picture, for example MDv64-local − MDv64 +0.09
+  [−0.12, +0.31] and MDv64-dec − MDv64 +0.44 [+0.24, +0.68].
+- MDv64-local: its interval against B lies entirely below 0. Its upper end against MDv64 (+0.31) is well below the
+  MDv64 − B gain (−0.80). The local block (in_proj, 3x3 depthwise conv, gating, out_proj, no propagation) therefore
+  keeps a large share of the gain. Whether it equals MDv64 is not determined with 5 seeds.
+- Position and level matter: on the decoder side, and at 16x16, the gain is smaller than MDv64 at 64x64 in the
+  encoder. The level curve rel_vy for MDv8/16/32/64 is 5.88 / 5.89 / 5.73 / 5.33 (figure
+  `ablation64_rel_vy.pdf`, panel b).
+- Descriptive: wall band vy MAE x1e-3 (relative change in brackets):
+
+  | comparison | wall band vy MAE x1e-3 |
+  |---|---|
+  | MDv64-dec − MDv64 | −0.52 [−0.74, −0.32] (−5.3 %) |
+  | MDv64-local − MDv64 | +0.06 [−0.11, +0.23] |
+  | MDv16 − MDv64 | +0.62 [+0.41, +0.84] |
+
+  Wall-band divergence error follows the same pattern. So MDv64-dec has a lower wall-band error but a higher rel_vy
+  than MDv64. No conclusion is drawn from this; it is noted for the final reading.
+- 5a (`train_fit/summary.md`), train L1 − B, diff/SE: MDv64-local −4.41, MDv64-dec −4.79, MDv16 −4.13. Val L1 − B:
+  −0.11, −1.43, +1.54. All variants fit the training set better than B; on validation L1 none separates from B by
+  more than 2 SE.
+
+**Open questions.** SA64 (night 9, Saturday 17/10, cutoff Sunday 13:00). After it, rerun `scripts/analyze_night8.sh`
+for the final reading of all four ablations, including "SA64 close to MDv64 or to B".
