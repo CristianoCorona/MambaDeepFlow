@@ -3217,3 +3217,27 @@ Alternatives considered:
   passes. `sha256sum splits/*` is identical to the values before the change.
 
 **Open questions.** None for the implementation; pre-registration follows in the next commit, before any run.
+
+## 2026-10-17 PRE-REGISTRATION: night 8b (Conv64, exploratory, validation only)
+
+**Context / why.** The night-8a results (`f99f3d8`) raise the question whether any extra local processing at 64x64
+explains the gain of MDv64-local, or whether its gating and normalisation are needed. Decided at 03:10 on 17/10,
+**after** seeing night 8a, **before** any Conv64 run (control run included).
+
+**Decision.** `docs/preregistration-night8b.md`, committed alone before the control run.
+- Model and seeds: Conv64 (`--variant Conv --level 64`, implementation `feb7162`), seeds 0-4, grouped split,
+  133 epochs, protocol unchanged.
+- Validation only, never test.
+- Comparisons: Conv64 − B, Conv64 − MDv64-local, Conv64 − MDv64. Main reading on seeds 0-4; secondary reading with
+  the 8-seed references where they exist.
+- Metrics: primary rel_vy, with aggregate and median; descriptive rel_all, rel_p, wall-band vy MAE, divergence, 5a.
+- Interpretation rules, fixed now:
+  - Conv64 − B similar to MDv64-local − B -> any local processing is enough;
+  - Conv64 close to B and worse than MDv64-local -> gating and normalisation matter;
+  - both are read from the intervals; an interval including 0 does not demonstrate equality ("not determined").
+- The 5x5 receptive field (vs 3x3) is a declared confound.
+- All runs reported; no seed added after the results.
+
+**Evidence.** This commit; implementation and tests in `feb7162`.
+
+**Open questions.** None before the control run.
