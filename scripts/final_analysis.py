@@ -25,6 +25,9 @@ Contents
       "Ablations of MDv64" first in summary.md (rel_vy rows, wall-band vy, divergence) and the figure
       ablation64_rel_vy.{pdf,png} (IEEE one column: rel_vy per variant, seeds and mean, B / MDv64 reference lines;
       rel_vy against the MDv block level 8 / 16 / 32 / 64). Pairs with a missing label are skipped.
+      conv64 (night 8b, docs/preregistration-night8b.md; exploratory, validation only; if Conv64 is loaded):
+      Conv64 - B, Conv64 - MDv64-local, Conv64 - MDv64; section "Conv64" after the ablation section in summary.md;
+      Conv64 is added to panel (a) of ablation64_rel_vy. Appended after all other groups: earlier results unchanged.
   T3  regions (descriptive): MAE per region and channel, differences with the two-level CI
   T4  divergence (descriptive; mdf/explore.py DIV_MAPPING): mean |div pred|, mean |div target|,
       mean |div pred - div target| in the wall band and in the other fluid cells; differences of the last one
@@ -74,9 +77,12 @@ DR_AGG_MEDIAN_CHANNELS = ("p", "vx", "vy")  # pre-registered descriptives of nig
 ABLATION64 = [("MDv64-local", "MDv64"), ("MDv64-local", "B"), ("SA64", "MDv64"), ("SA64", "B"),
               ("MDv64-dec", "MDv64"), ("MDv64-dec", "B"), ("MDv16", "B"), ("MDv16", "MDv64")]
 ABLATION64_LABELS = ("MDv64-local", "SA64", "MDv64-dec", "MDv16")
+# plain residual conv block at 64x64 (night 8b, docs/preregistration-night8b.md; exploratory, validation only)
+CONV64 = [("Conv64", "B"), ("Conv64", "MDv64-local"), ("Conv64", "MDv64")]
+CONV64_LABELS = ("Conv64",)
 LEVEL_CURVE = (("MDv8", 8), ("MDv16", 16), ("MDv32", 32), ("MDv64", 64))
 ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8", "MDv16", "MDv32", "MDv64", "MDv8-16-32",
-         "B-GH", "TR", "DRv11", "MDv64-local", "SA64", "MDv64-dec"]
+         "B-GH", "TR", "DRv11", "MDv64-local", "SA64", "MDv64-dec", "Conv64"]
 SPLIT_MODES_OK = ("grouped", "grouped-holdout")
 CH = explore.CHANNEL_NAMES
 FLUID = ("wall", "wake", "rest")
@@ -146,6 +152,11 @@ def main():
         if args.split != "val":
             sys.exit("ablation64 (night 8) is pre-registered on validation only")
         groups.append(("ablation64", ABLATION64))  # appended last: a fresh RNG per pair, earlier pairs unchanged
+    conv64 = bool(set(CONV64_LABELS) & set(runs))
+    if conv64:
+        if args.split != "val":
+            sys.exit("conv64 (night 8b) is pre-registered on validation only")
+        groups.append(("conv64", CONV64))  # appended last: a fresh RNG per pair, earlier pairs unchanged
     t1_channels = AGG_MEDIAN_CHANNELS + (("vx",) if DR_LABELS & set(runs) else ())
     all_pairs = list(dict.fromkeys(pair for _, pairs in groups for pair in pairs))
     split_modes = {cfg.get("split", {}).get("split_mode", "random") for lst in runs.values() for _, _, cfg in lst}
@@ -339,10 +350,16 @@ def main():
     fig.savefig(args.fig_dir / "per_seed.png", dpi=120)
     plt.close(fig)
 
-    if ablation:
+    if ablation or conv64:
         ablation64_figure(args, labels, lambda l: 100 * stack(l, "rel_vy").mean(axis=1))
+    if ablation:
         md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
             = ablation64_section(args, t1, rows_md, rows_b, t3d, t4d)
+    if conv64:
+        md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
+            = ablation64_section(args, t1, rows_md, rows_b, t3d, t4d, "conv64", CONV64, CONV64_LABELS,
+                                 "## Conv64: plain residual conv block at 64x64 (night 8b; EXPLORATORY, validation only; "
+                                 "docs/preregistration-night8b.md)", "conv64")
     if args.confirm_mdv64:
         md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
             = confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d)
@@ -382,22 +399,26 @@ def confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d):
     return out
 
 
-def ablation64_section(args, t1, rows_md, rows_b, t3d, t4d):
-    """Night-8 ablations (docs/preregistration-night8.md): primary rel_vy rows first, then the descriptive ones."""
-    comps = [f"{v} - {r}" for v, r in ABLATION64]
+def ablation64_section(args, t1, rows_md, rows_b, t3d, t4d, group="ablation64", pairs=ABLATION64,
+                       expected=ABLATION64_LABELS,
+                       title="## Ablations of MDv64 (night 8; EXPLORATORY, validation only; docs/preregistration-night8.md)",
+                       name="ablation64"):
+    """Night-8 ablations (docs/preregistration-night8.md; with the other arguments the night-8b Conv64 group): primary
+    rel_vy rows first, then the descriptive ones."""
+    comps = [f"{v} - {r}" for v, r in pairs]
     seeds = "; ".join(f"{l} {s}" for l, s in args._seeds.items())
-    prim = [x for x in rows_md if x["group"] == "ablation64" and x["metric"] == "rel_vy"]
-    prim_b = [x for x in rows_b if x["group"] == "ablation64" and x["metric"].endswith("_vy")]
-    desc = [x for x in rows_md if x["group"] == "ablation64" and x["metric"] in ("rel_all", "rel_p")]
+    prim = [x for x in rows_md if x["group"] == group and x["metric"] == "rel_vy"]
+    prim_b = [x for x in rows_b if x["group"] == group and x["metric"].endswith("_vy")]
+    desc = [x for x in rows_md if x["group"] == group and x["metric"] in ("rel_all", "rel_p")]
     d3 = [x for x in t3d if x["comparison"] in comps and x["region"] == "wall" and x["channel"] == "vy"]
     d4 = [x for x in t4d if x["comparison"] in comps]
     t1v = [{k: r[k] for k in ("config", "seeds", "rel_vy", "agg_rel_vy", "median_rel_vy", "rel_all", "rel_p")}
            for r in t1]
-    missing = [l for l in ABLATION64_LABELS if l not in args._seeds]
-    print("\nablation64 rel_vy (variant - reference, points; two-level 95 % CI):")
+    missing = [l for l in expected if l not in args._seeds]
+    print(f"\n{name} rel_vy (variant - reference, points; two-level 95 % CI):")
     for x in prim:
         print(f"  {x['comparison']:<22} {x['mean diff']}  {x['95% CI seeds+profiles']}  seeds {x['seeds']}")
-    return ["## Ablations of MDv64 (night 8; EXPLORATORY, validation only; docs/preregistration-night8.md)", "",
+    return [title, "",
             f"Seeds: {seeds}." + (f" **Missing configurations: {', '.join(missing)}.**" if missing else ""),
             "Interpretation rules in the pre-registration: an interval including 0 does not demonstrate equality.", "",
             "rel_vy per configuration (mean (std) over seeds, %):", "", av.md_table(t1v, list(t1v[0].keys())), "",
@@ -415,7 +436,7 @@ def ablation64_figure(args, labels, rel_vy):
     labelled reference lines; (b) rel_vy against the level of the MDv block (8, 16, 32, 64) with the B line."""
     plt.rcParams.update({"font.size": 7, "axes.titlesize": 7, "axes.labelsize": 7, "xtick.labelsize": 6.5,
                          "ytick.labelsize": 6.5, "pdf.fonttype": 42})
-    show = [l for l in ("B", "MDv64") + ABLATION64_LABELS if l in labels]
+    show = [l for l in ("B", "MDv64") + ABLATION64_LABELS + CONV64_LABELS if l in labels]
     curve = [(l, lv) for l, lv in LEVEL_CURVE if l in labels]
     fig, axes = plt.subplots(2, 1, figsize=(3.5, 3.9), constrained_layout=True,
                              gridspec_kw={"height_ratios": [1.25, 1]})
@@ -431,7 +452,8 @@ def ablation64_figure(args, labels, rel_vy):
         jit = (np.arange(v.size) - (v.size - 1) / 2) * 0.06
         ax.scatter(j + jit, v, s=9, color="0.6", edgecolors="none", zorder=2)
         ax.scatter([j], [v.mean()], s=90, marker="_", color="k", linewidths=1.6, zorder=3)
-    ax.set_xticks(range(len(show)), [f"{l}\n(n={rel_vy(l).size})" for l in show])
+    wrap = (lambda l: l.replace("-", "-\n", 1)) if len(show) > 5 else (lambda l: l)  # > 5 columns: avoid overlaps
+    ax.set_xticks(range(len(show)), [f"{wrap(l)}\n(n={rel_vy(l).size})" for l in show])
     ax.set_xlim(-0.5, len(show) - 0.5)
     ax.set_ylabel("rel. error $v_y$ (%)")
     ax.set_title("(a) per variant: seeds (grey), mean (black)", loc="left")

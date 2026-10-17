@@ -8,16 +8,19 @@
 # Runs (amendment "SA64 in a separate night"): MDv64-local, MDv64-dec, MDv16 from ~/runs/night8a, SA64 from ~/runs/night9
 # (also when completed on a later night: same queue and out root). Missing runs (SA64 not yet run, cutoff, failures) are
 # skipped: the seed counts and the missing configurations are printed in summary.md.
+# Night 8b (docs/preregistration-night8b.md): Conv64 from ~/runs/night8b, group conv64 (Conv64 - B / - MDv64-local /
+# - MDv64) and Conv64 in the figure and in 5a; appended after the other groups, so earlier results are unchanged.
 # Never reads the test set (final_analysis refuses --split test without --allow-test; train_fit reads train / val).
 #
 # Usage: scripts/analyze_night8.sh
-# Overridable: NIGHT8A (~/runs/night8a), NIGHT9 (~/runs/night9), RESULTS (docs/results), FIGURES (docs/figures), TAG (val-ablation64)
+# Overridable: NIGHT8A (~/runs/night8a), NIGHT9 (~/runs/night9), NIGHT8B (~/runs/night8b), RESULTS (docs/results), FIGURES (docs/figures), TAG (val-ablation64)
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 R="$HOME/runs"
 NIGHT8A="${NIGHT8A:-$R/night8a}"
 NIGHT9="${NIGHT9:-$R/night9}"
+NIGHT8B="${NIGHT8B:-$R/night8b}"
 RESULTS="${RESULTS:-docs/results}"
 FIGURES="${FIGURES:-docs/figures}"
 TAG="${TAG:-val-ablation64}"
@@ -30,7 +33,7 @@ REFS=(--config "B=$R/night1/ep133_s*" --config "B=$R/night3/B_s*"
       --config "MDv64=$R/night5/MDv64_s*" --config "MDv64=$R/night7/MDv64_s*"
       --config "MDv8=$R/night4/MDv8_s*" --config "MDv32=$R/night5/MDv32_s*")
 NEW=(--config "MDv64-local=$NIGHT8A/MDv64-local_s*" --config "MDv64-dec=$NIGHT8A/MDv64-dec_s*"
-     --config "MDv16=$NIGHT8A/MDv16_s*" --config "SA64=$NIGHT9/SA64_s*")
+     --config "MDv16=$NIGHT8A/MDv16_s*" --config "SA64=$NIGHT9/SA64_s*" --config "Conv64=$NIGHT8B/Conv64_s*")
 
 echo "=== main reading: seeds 0-4"
 "$PY" scripts/final_analysis.py "${REFS[@]}" "${NEW[@]}" --seeds 0-4 --split val \
