@@ -18,7 +18,9 @@ State of <out-root>/<name>/ when its line is reached:
                                                    <name>.interrupted-<UTC> and the run is redone from scratch
 A training process that exits non-zero gets status "interrupted" (with the exit code); the queue goes on.
 
-Cutoff: the next occurrence of --cutoff HH:MM (local time) after the queue starts. A run starts only if
+Cutoff: the next occurrence of --cutoff HH:MM (local time) after the queue starts, or an absolute local date-time
+--cutoff YYYY-MM-DDTHH:MM (added 2026-10-17 for night 9, launched before the cutoff hour on the day before; it must lie
+after the start). A run starts only if
 now + estimated duration <= cutoff, otherwise the queue stops (later runs are not tried). Estimated
 duration = max wall time (train + eval) of finished runs under <out-root> with the same train.py arguments
 apart from --seed (from their queue_timing.json); otherwise the est= of the line; with neither, the run
@@ -141,6 +143,11 @@ def estimate(run, out_root):
 
 
 def next_cutoff(hhmm, start):
+    if "T" in hhmm:  # absolute local date-time YYYY-MM-DDTHH:MM
+        cut = datetime.fromisoformat(hhmm).astimezone()  # naive -> local time zone (DST-aware)
+        if cut <= start:
+            raise SystemExit(f"cutoff {hhmm} is not after the start {stamp(start)}")
+        return cut
     h, m = (int(x) for x in hhmm.split(":"))
     cut = start.replace(hour=h, minute=m, second=0, microsecond=0)
     return cut if cut > start else cut + timedelta(days=1)
@@ -228,7 +235,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("queue_file", type=Path)
     ap.add_argument("--out-root", type=Path, required=True)
-    ap.add_argument("--cutoff", default="07:00", help="HH:MM local time, next occurrence after start")
+    ap.add_argument("--cutoff", default="07:00", help="HH:MM local time, next occurrence after start; or YYYY-MM-DDTHH:MM (absolute, local time)")
     args = ap.parse_args()
 
     runs = parse_queue(args.queue_file)

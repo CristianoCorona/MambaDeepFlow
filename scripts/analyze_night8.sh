@@ -10,6 +10,12 @@
 # skipped: the seed counts and the missing configurations are printed in summary.md.
 # Night 8b (docs/preregistration-night8b.md): Conv64 from ~/runs/night8b, group conv64 (Conv64 - B / - MDv64-local /
 # - MDv64) and Conv64 in the figure and in 5a; appended after the other groups, so earlier results are unchanged.
+# Night 9 (docs/preregistration-night9.md): ladder L-nogate / L-nonorm / L-noprenorm / L-noexp / L-dense from
+# ~/runs/night9 (same out root as SA64), group ladder64 (each - MDv64-local / - B) and the ladder in the figure and in 5a;
+# appended after the other groups, so earlier results are unchanged. Only finished runs are read (config.json status
+# finished): the script can run while the night-9 queue is still training SA64; it never touches the queue. While the
+# queue runs, write outside the repository (RESULTS / FIGURES overrides), so that the runs still to start record a
+# clean tree.
 # Never reads the test set (final_analysis refuses --split test without --allow-test; train_fit reads train / val).
 #
 # Usage: scripts/analyze_night8.sh
@@ -33,7 +39,10 @@ REFS=(--config "B=$R/night1/ep133_s*" --config "B=$R/night3/B_s*"
       --config "MDv64=$R/night5/MDv64_s*" --config "MDv64=$R/night7/MDv64_s*"
       --config "MDv8=$R/night4/MDv8_s*" --config "MDv32=$R/night5/MDv32_s*")
 NEW=(--config "MDv64-local=$NIGHT8A/MDv64-local_s*" --config "MDv64-dec=$NIGHT8A/MDv64-dec_s*"
-     --config "MDv16=$NIGHT8A/MDv16_s*" --config "SA64=$NIGHT9/SA64_s*" --config "Conv64=$NIGHT8B/Conv64_s*")
+     --config "MDv16=$NIGHT8A/MDv16_s*" --config "SA64=$NIGHT9/SA64_s*" --config "Conv64=$NIGHT8B/Conv64_s*"
+     --config "L-nogate=$NIGHT9/L-nogate_s*" --config "L-nonorm=$NIGHT9/L-nonorm_s*"
+     --config "L-noprenorm=$NIGHT9/L-noprenorm_s*" --config "L-noexp=$NIGHT9/L-noexp_s*"
+     --config "L-dense=$NIGHT9/L-dense_s*")
 
 echo "=== main reading: seeds 0-4"
 "$PY" scripts/final_analysis.py "${REFS[@]}" "${NEW[@]}" --seeds 0-4 --split val \

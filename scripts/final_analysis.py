@@ -28,6 +28,10 @@ Contents
       conv64 (night 8b, docs/preregistration-night8b.md; exploratory, validation only; if Conv64 is loaded):
       Conv64 - B, Conv64 - MDv64-local, Conv64 - MDv64; section "Conv64" after the ablation section in summary.md;
       Conv64 is added to panel (a) of ablation64_rel_vy. Appended after all other groups: earlier results unchanged.
+      ladder64 (night 9, docs/preregistration-night9.md; exploratory, validation only; if a ladder label is loaded):
+      L-nogate / L-nonorm / L-noprenorm / L-noexp / L-dense - MDv64-local and - B; section "Ladder" after the Conv64
+      section, with the reading of each comparison under the pre-registered rule; the ladder is added to panel (a) of
+      ablation64_rel_vy. Appended after all other groups: earlier results unchanged.
   T3  regions (descriptive): MAE per region and channel, differences with the two-level CI
   T4  divergence (descriptive; mdf/explore.py DIV_MAPPING): mean |div pred|, mean |div target|,
       mean |div pred - div target| in the wall band and in the other fluid cells; differences of the last one
@@ -80,9 +84,14 @@ ABLATION64_LABELS = ("MDv64-local", "SA64", "MDv64-dec", "MDv16")
 # plain residual conv block at 64x64 (night 8b, docs/preregistration-night8b.md; exploratory, validation only)
 CONV64 = [("Conv64", "B"), ("Conv64", "MDv64-local"), ("Conv64", "MDv64")]
 CONV64_LABELS = ("Conv64",)
+# one-ingredient ablations of MDv64-local (night 9, docs/preregistration-night9.md; exploratory, validation only)
+LADDER64_LABELS = ("L-nogate", "L-nonorm", "L-noprenorm", "L-noexp", "L-dense")
+LADDER64 = [(v, ref) for v in LADDER64_LABELS for ref in ("MDv64-local", "B")]
+LADDER64_PARAMS = {"L-noexp": "fewer parameters (block used 3 648 vs 7 232)",
+                   "L-dense": "many more parameters (block used 43 520 vs 7 232)"}
 LEVEL_CURVE = (("MDv8", 8), ("MDv16", 16), ("MDv32", 32), ("MDv64", 64))
 ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8", "MDv16", "MDv32", "MDv64", "MDv8-16-32",
-         "B-GH", "TR", "DRv11", "MDv64-local", "SA64", "MDv64-dec", "Conv64"]
+         "B-GH", "TR", "DRv11", "MDv64-local", "SA64", "MDv64-dec", "Conv64", *LADDER64_LABELS]
 SPLIT_MODES_OK = ("grouped", "grouped-holdout")
 CH = explore.CHANNEL_NAMES
 FLUID = ("wall", "wake", "rest")
@@ -157,6 +166,11 @@ def main():
         if args.split != "val":
             sys.exit("conv64 (night 8b) is pre-registered on validation only")
         groups.append(("conv64", CONV64))  # appended last: a fresh RNG per pair, earlier pairs unchanged
+    ladder = bool(set(LADDER64_LABELS) & set(runs))
+    if ladder:
+        if args.split != "val":
+            sys.exit("ladder64 (night 9) is pre-registered on validation only")
+        groups.append(("ladder64", LADDER64))  # appended last: a fresh RNG per pair, earlier pairs unchanged
     t1_channels = AGG_MEDIAN_CHANNELS + (("vx",) if DR_LABELS & set(runs) else ())
     all_pairs = list(dict.fromkeys(pair for _, pairs in groups for pair in pairs))
     split_modes = {cfg.get("split", {}).get("split_mode", "random") for lst in runs.values() for _, _, cfg in lst}
@@ -350,7 +364,7 @@ def main():
     fig.savefig(args.fig_dir / "per_seed.png", dpi=120)
     plt.close(fig)
 
-    if ablation or conv64:
+    if ablation or conv64 or ladder:
         ablation64_figure(args, labels, lambda l: 100 * stack(l, "rel_vy").mean(axis=1))
     if ablation:
         md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
@@ -360,6 +374,9 @@ def main():
             = ablation64_section(args, t1, rows_md, rows_b, t3d, t4d, "conv64", CONV64, CONV64_LABELS,
                                  "## Conv64: plain residual conv block at 64x64 (night 8b; EXPLORATORY, validation only; "
                                  "docs/preregistration-night8b.md)", "conv64")
+    if ladder:
+        md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
+            = ladder64_section(args, t1, t2, rows_md, rows_b, t3d, t4d)
     if args.confirm_mdv64:
         md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
             = confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d)
@@ -431,14 +448,46 @@ def ablation64_section(args, t1, rows_md, rows_b, t3d, t4d, group="ablation64", 
             "Figure: `ablation64_rel_vy.pdf` in the figure directory.", ""]
 
 
+def ladder_reading(row):
+    """Pre-registered rule of night 9 on the two-level interval of variant - reference (rel_vy)."""
+    if row["ci2_lo"] > 0:
+        return "matters (worse without it)" if row["comparison"].endswith("MDv64-local") else "worse than B"
+    if row["ci2_hi"] < 0:
+        return "variant better than MDv64-local" if row["comparison"].endswith("MDv64-local") else "better than B"
+    return "not demonstrated (interval includes 0)"
+
+
+def ladder64_section(args, t1, t2, rows_md, rows_b, t3d, t4d):
+    """Night-9 ladder (docs/preregistration-night9.md): the ablation section for group ladder64, then the reading of
+    every rel_vy comparison under the pre-registered rule (parameter change of L-noexp / L-dense stated)."""
+    out = ablation64_section(args, t1, rows_md, rows_b, t3d, t4d, "ladder64", LADDER64, LADDER64_LABELS,
+                             "## Ladder: one-ingredient ablations of MDv64-local (night 9; EXPLORATORY, validation "
+                             "only; docs/preregistration-night9.md)", "ladder64")
+    reading = []
+    for r in t2:
+        if r["group"] == "ladder64" and r["metric"] == "rel_vy":
+            v = r["comparison"].split(" - ")[0]
+            reading.append({"comparison": r["comparison"], "seeds": f"{r['seeds_var']}/{r['seeds_ref']}",
+                            "rel_vy diff": f"{100 * r['mean_diff']:+.4f}",
+                            "95% CI seeds+profiles": f"[{100 * r['ci2_lo']:+.4f}, {100 * r['ci2_hi']:+.4f}]",
+                            "reading (pre-registered rule)": ladder_reading(r),
+                            "note": LADDER64_PARAMS.get(v, "")})
+    out[-1:-1] = ["Reading of the primary comparisons (rule of docs/preregistration-night9.md: an ingredient "
+                  "\"matters\" if the interval of variant - MDv64-local lies above 0; an interval including 0 is "
+                  "\"not demonstrated\", not \"does not matter\"):", "",
+                  av.md_table(reading, list(reading[0].keys())) if reading else "(no pair available)", ""]
+    return out
+
+
 def ablation64_figure(args, labels, rel_vy):
     """IEEE one-column figure (3.5 in): (a) rel_vy per variant, seeds (grey) and mean (black), B and MDv64 means as
     labelled reference lines; (b) rel_vy against the level of the MDv block (8, 16, 32, 64) with the B line."""
     plt.rcParams.update({"font.size": 7, "axes.titlesize": 7, "axes.labelsize": 7, "xtick.labelsize": 6.5,
                          "ytick.labelsize": 6.5, "pdf.fonttype": 42})
-    show = [l for l in ("B", "MDv64") + ABLATION64_LABELS + CONV64_LABELS if l in labels]
+    show = [l for l in ("B", "MDv64") + ABLATION64_LABELS + CONV64_LABELS + LADDER64_LABELS if l in labels]
     curve = [(l, lv) for l, lv in LEVEL_CURVE if l in labels]
-    fig, axes = plt.subplots(2, 1, figsize=(3.5, 3.9), constrained_layout=True,
+    rotate = len(show) > 8  # night-9 ladder loaded: vertical tick labels, taller figure
+    fig, axes = plt.subplots(2, 1, figsize=(3.5, 4.6 if rotate else 3.9), constrained_layout=True,
                              gridspec_kw={"height_ratios": [1.25, 1]})
     ax = axes[0]
     for name, ls in (("B", "--"), ("MDv64", "-")):
@@ -453,7 +502,10 @@ def ablation64_figure(args, labels, rel_vy):
         ax.scatter(j + jit, v, s=9, color="0.6", edgecolors="none", zorder=2)
         ax.scatter([j], [v.mean()], s=90, marker="_", color="k", linewidths=1.6, zorder=3)
     wrap = (lambda l: l.replace("-", "-\n", 1)) if len(show) > 5 else (lambda l: l)  # > 5 columns: avoid overlaps
-    ax.set_xticks(range(len(show)), [f"{wrap(l)}\n(n={rel_vy(l).size})" for l in show])
+    if rotate:
+        ax.set_xticks(range(len(show)), [f"{l} (n={rel_vy(l).size})" for l in show], rotation=90, fontsize=6)
+    else:
+        ax.set_xticks(range(len(show)), [f"{wrap(l)}\n(n={rel_vy(l).size})" for l in show])
     ax.set_xlim(-0.5, len(show) - 0.5)
     ax.set_ylabel("rel. error $v_y$ (%)")
     ax.set_title("(a) per variant: seeds (grey), mean (black)", loc="left")
