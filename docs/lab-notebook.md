@@ -3173,3 +3173,47 @@ SA64 comparisons are missing and the final reading waits for them. Validation on
 
 **Open questions.** SA64 (night 9, Saturday 17/10, cutoff Sunday 13:00). After it, rerun `scripts/analyze_night8.sh`
 for the final reading of all four ablations, including "SA64 close to MDv64 or to B".
+
+## 2026-10-17 Night 8b: Conv64 variant (plain residual conv block at 64x64; implementation, tests; no run)
+
+**Context / why.** Night 8a (`f99f3d8`, exploratory, validation): MDv64-local keeps a large share of the rel_vy gain of
+MDv64. MDv64-local is the MDv block without propagation along the scan: in_proj, 3x3 depthwise conv + SiLU, out_norm,
+SiLU gating and out_proj. New question, decided at 03:10 on 17/10 after seeing those results: is any extra local
+processing at 64x64 enough, or are the gating and normalisation of the block needed?
+
+**Decision.** New variant `Conv` (run tag `Conv64_c32`, analysis label `Conv64`) in `mdf/ablation.py`
+(`ConvResBlock64`). It is a residual block at the place of MDv64 (after layer1, 32 channels, 64x64):
+y = x + Conv3x3(12 -> 32)(LeakyReLU(0.2)(Conv3x3(32 -> 12)(x))), padding 1, with bias.
+- No normalisation and no gating.
+- conv2 (weight and bias) is zero-initialised, so the network equals B at initialisation.
+- conv1 keeps the PyTorch default initialisation; weights_init is not applied to blocks, as for the other blocks.
+- **6956 parameters**, close to the 7232 used by MDv64-local.
+- **Receptive field of the block: 5x5**, against 3x3 for the depthwise conv of MDv64-local. This difference is
+  declared, not removed.
+- Hidden width 12 was chosen to match the parameter count.
+- Level 64 only.
+
+Additive hooks:
+- `models.CONV_VARIANTS` appended to `VARIANTS`; existing order unchanged.
+- `normalize_cfg`: level 64, no `levels`, no mamba_impl.
+- `blocks.make_block("Conv")`.
+- Usage line of `scripts/train.py`.
+
+Alternatives considered:
+- A 3x3-only block (single conv): rejected, because the brief fixes the two-conv design.
+- Matching the receptive field with a depthwise conv: rejected, because it would reintroduce part of the MDv design.
+
+**Evidence.**
+- `tests/test_conv64.py` (7 tests): pass.
+  - Shapes: mixer (2,32,64,64) -> (2,32,64,64).
+  - Parameters: block 6956, total 2338991 (B 2332035).
+  - Skeleton weights equal to B at seeds 0 and 3.
+  - Output at initialisation vs B: max |diff| 1.49e-08 (cuda).
+  - Gradients: after the first Adam step only conv2 has a gradient; after the second, all 4 block parameters.
+  - Locality: a one-pixel perturbation changes the residual branch in the whole 5x5 neighbourhood (min |delta|
+    0.0256) and exactly 0 outside.
+  - Config handling and round trip.
+- Full suite: 172 passed, 6 skipped (165 before + 7). Existing-variant fingerprints: `test_existing_variants_unchanged`
+  passes. `sha256sum splits/*` is identical to the values before the change.
+
+**Open questions.** None for the implementation; pre-registration follows in the next commit, before any run.

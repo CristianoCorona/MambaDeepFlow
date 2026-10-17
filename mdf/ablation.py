@@ -15,9 +15,19 @@ Each variant differs from MDv64 (SS2DVMamba after layer1, 32 channels, 64x64) in
              those of the MDv64 block.
 
 SA64 (variant SA, level 64) and MDv16 (variant MDv, level 16) use the existing code unchanged.
+
+Night 8b (docs/lab-notebook.md 2026-10-17; docs/preregistration-night8b.md), exploratory, after the night-8a results:
+
+  Conv       ConvResBlock64: a plain residual convolutional block at the place of MDv64 (after layer1, 32 channels,
+             64x64), y = x + Conv3x3(12 -> 32)(LeakyReLU(0.2)(Conv3x3(32 -> 12)(x))), padding 1, with bias; no
+             normalisation, no gating. The last convolution (weight and bias) is zero-initialised, so the network equals
+             B at initialisation; the first convolution keeps the PyTorch default initialisation (weights_init is not
+             applied to blocks). 6956 parameters at 32 channels (MDv-local uses 7232). Receptive field of the block
+             5x5 (two 3x3 convolutions; the depthwise conv of MDv-local gives 3x3).
 """
 
 import torch
+import torch.nn as nn
 
 from mdf import blocks
 
@@ -35,6 +45,21 @@ class SS2DVMambaLocal(blocks.SS2DVMamba):
         d = self.Ds.float().view(self.K, e)  # (K, E), direction k = rows, columns, rows reversed, columns reversed
         xf = x.float().reshape(b, e, h * w)
         return sum(d[k][None, :, None] * xf for k in range(self.K))
+
+
+class ConvResBlock64(nn.Module):
+    """Residual block x + conv2(LeakyReLU(0.2)(conv1(x))), 3x3 convolutions with padding 1 and bias, conv2 zero."""
+
+    def __init__(self, channels=32, hidden=12):
+        super().__init__()
+        self.conv1 = nn.Conv2d(channels, hidden, 3, padding=1, bias=True)
+        self.act = nn.LeakyReLU(0.2)
+        self.conv2 = nn.Conv2d(hidden, channels, 3, padding=1, bias=True)
+        nn.init.zeros_(self.conv2.weight)
+        nn.init.zeros_(self.conv2.bias)
+
+    def forward(self, x):
+        return x + self.conv2(self.act(self.conv1(x)))
 
 
 def unused_param_names(module):

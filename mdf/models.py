@@ -81,6 +81,8 @@ VARIANTS = VARIANTS + DEEP_REPLACE_VARIANTS
 ABLATION_VARIANTS = ("MDv-local", "MDv-dec")  # ablations of MDv64 (night 8, mdf/ablation.py; notebook 2026-10-16)
 VARIANTS = VARIANTS + ABLATION_VARIANTS
 MAMBA_VARIANTS = ("MD", "MDv") + ABLATION_VARIANTS
+CONV_VARIANTS = ("Conv",)  # plain residual conv block at 64x64 (night 8b, mdf/ablation.py; notebook 2026-10-17)
+VARIANTS = VARIANTS + CONV_VARIANTS
 TEST_VARIANTS = ("identity",)  # unit tests only
 LEVELS = (64, 32, 16, 8)
 # level (feature-map size) -> encoder layer after which the block sits, and its channel multiplier
@@ -243,6 +245,12 @@ def normalize_cfg(cfg):
     if variant == "MDv-dec" and cfg.get("level") not in (None, 64):
         raise ValueError(f"variant MDv-dec is defined at level 64 (decoder, after dlayer2), got {cfg.get('level')}")
     if variant == "MDv-dec" and cfg.get("level") is None:
+        cfg = {**cfg, "level": 64}
+    if variant in CONV_VARIANTS:
+        if levels is not None:
+            raise ValueError(f"variant {variant} has a single level, levels not allowed")
+        if cfg.get("level") not in (None, 64):
+            raise ValueError(f"variant {variant} is defined at level 64 (after layer1), got {cfg.get('level')}")
         cfg = {**cfg, "level": 64}
     if levels is not None:
         if not has_block:
