@@ -24,10 +24,28 @@ Night 8b (docs/lab-notebook.md 2026-10-17; docs/preregistration-night8b.md), exp
              B at initialisation; the first convolution keeps the PyTorch default initialisation (weights_init is not
              applied to blocks). 6956 parameters at 32 channels (MDv-local uses 7232). Receptive field of the block
              5x5 (two 3x3 convolutions; the depthwise conv of MDv-local gives 3x3).
+
+Night 9 (docs/lab-notebook.md 2026-10-17; docs/preregistration-night9.md), exploratory, after nights 8a and 8b: a
+ladder of one-ingredient ablations of MDv-local (SS2DVMambaLocalLadder, at the place of MDv64). Each differs from
+MDv-local in ONE thing only; out_proj stays zero-initialised (network = B at init); the 3x3 receptive field is kept.
+
+  L-nogate     no gating: the output is not multiplied by SiLU(z); in_proj still produces z (same weights as
+               MDv-local) but z is not used, so the z rows of in_proj get a zero gradient.
+  L-nonorm     out_norm (LayerNorm of the SS2D output) replaced by the identity.
+  L-noprenorm  the LayerNorm at the input of the residual block replaced by the identity: y = x + SS2D(x).
+  L-noexp      no channel expansion: inner channels E = 32 instead of 64 (expand = 1). Changes the parameter count and,
+               since the shapes differ, the initial weights; it equals SS2DVMambaLocal(32, expand=1) at the same seed.
+  L-dense      dense 3x3 convolution (E -> E, bias, PyTorch default initialisation) instead of the depthwise one.
+               Changes the parameter count. Created after the parent __init__, so every other weight equals MDv-local's
+               at the same seed.
+
+L-nogate, L-nonorm, L-noprenorm: same __init__ as MDv-local (LayerNorm consumes no RNG), hence the same weights at a
+given seed (minus the removed LayerNorm for L-nonorm / L-noprenorm).
 """
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from mdf import blocks
 
@@ -60,6 +78,47 @@ class ConvResBlock64(nn.Module):
 
     def forward(self, x):
         return x + self.conv2(self.act(self.conv1(x)))
+
+
+class SS2DVMambaLocalLadder(SS2DVMambaLocal):
+    """MDv-local without one ingredient (`kind`, one of models.LADDER_VARIANTS; see the module docstring)."""
+
+    def __init__(self, channels, kind, mamba_impl="cuda"):
+        from mdf.models import LADDER_VARIANTS
+        if kind not in LADDER_VARIANTS:
+            raise ValueError(f"kind must be one of {LADDER_VARIANTS}, got {kind!r}")
+        super().__init__(channels, mamba_impl, expand=1 if kind == "L-noexp" else 2)
+        self.kind = kind
+        if kind == "L-nonorm":
+            self.out_norm = nn.Identity()
+        if kind == "L-noprenorm":
+            self.norm = nn.Identity()
+        if kind == "L-dense":  # replaces the depthwise conv in place (same state-dict position)
+            dw = self.conv2d
+            self.conv2d = nn.Conv2d(self.d_inner, self.d_inner, dw.kernel_size, padding=dw.padding, bias=True)
+
+    def ss2d(self, t):
+        if self.kind != "L-nogate":
+            return super().ss2d(t)
+        b, h, w, _ = t.shape
+        xi, _ = self.in_proj(t).chunk(2, dim=-1)  # z computed as in MDv-local, not used
+        xi = F.silu(self.conv2d(xi.permute(0, 3, 1, 2).contiguous()))
+        y = self.forward_core(xi).transpose(1, 2).reshape(b, h, w, -1)
+        return self.out_proj(self.out_norm(y))
+
+    def unused_rows(self):
+        """Parameters used only in part: {name: slice of unused rows} (the z rows of in_proj for L-nogate)."""
+        e = self.d_inner
+        return {"in_proj.weight": slice(e, 2 * e)} if self.kind == "L-nogate" else {}
+
+
+def used_param_count(module):
+    """Number of block parameters that the forward uses (unused parameters and unused rows excluded)."""
+    unused = unused_param_names(module)
+    rows = module.unused_rows() if isinstance(module, SS2DVMambaLocalLadder) else {}
+    params = dict(module.named_parameters())
+    return (sum(p.numel() for k, p in params.items() if k not in unused)
+            - sum(params[k][sl].numel() for k, sl in rows.items()))
 
 
 def unused_param_names(module):

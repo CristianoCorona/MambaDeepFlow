@@ -3351,3 +3351,63 @@ complete.
 **Open questions.**
 - SA64 (night 9, tonight, launch by 19:25), then the final rerun of `scripts/analyze_night8.sh`.
 - Isolating gating vs normalisation vs expansion would need new variants and a new pre-registration. Not planned.
+
+## 2026-10-17 Night 9: ladder of one-ingredient ablations of MDv64-local (implementation, tests; no run)
+
+**Context / why.** Night 8a (`f99f3d8`): MDv64-local keeps a large share of the rel_vy gain of MDv64. Night 8b
+(`1188c12`): Conv64, a plain residual conv block, does not. Conv64 and MDv64-local differ in several ingredients at
+once (gating, normalisation, pre-norm, channel expansion, depthwise vs dense convolution, activation). Decided at 09:29
+on 17/10, after both results: remove ONE ingredient at a time from MDv64-local to see which one matters
+(pre-registration in the next entry). The open question "Isolating gating vs normalisation vs expansion ... Not
+planned" of the previous entry is superseded by this decision.
+
+**Decision / action.**
+- `mdf/ablation.py`: `SS2DVMambaLocalLadder(channels, kind)`, subclass of `SS2DVMambaLocal`, at the place of MDv64
+  (after layer1, 32 channels, 64x64). Each kind differs from MDv64-local in one thing only:
+  - `L-nogate`: the output is not multiplied by SiLU(z); in_proj still produces z (same weights), z is unused.
+  - `L-nonorm`: out_norm -> `nn.Identity`.
+  - `L-noprenorm`: the block input LayerNorm -> `nn.Identity` (y = x + SS2D(x)).
+  - `L-noexp`: expand = 1 (inner channels 32 instead of 64). **Changes the parameter count** and every inner shape.
+  - `L-dense`: dense 3x3 conv (E -> E, bias, PyTorch default init) instead of the depthwise one, created after the
+    parent `__init__` (so every other weight equals MDv64-local's at a given seed). **Changes the parameter count.**
+  - out_proj stays zero-initialised (network = B at init); receptive field 3x3 in all five.
+  - `used_param_count()` (unused parameters and, for L-nogate, the z rows of in_proj excluded).
+- Hooks (additive): `models.LADDER_VARIANTS` appended to `VARIANTS` and `MAMBA_VARIANTS` (mamba_impl recorded as for
+  MDv-local; the scan is never called); `normalize_cfg` (level 64 only, no `levels`); `blocks.make_block` branch for
+  kinds starting with `L-`; usage line of `scripts/train.py`. Run tags `L-nogate64_c32` etc.
+- `tests/test_ladder64.py` (33 tests). One existing assertion adapted: `tests/test_conv64.py::test_config_handling`
+  checked `VARIANTS[-1] == "Conv"` (Conv appended last); now `VARIANTS[10] == "Conv"` (same position, the ladder is
+  appended after it).
+- Alternatives considered: separate classes per ingredient (rejected: one subclass with a `kind` makes "one thing
+  only" visible in a few lines); removing the z rows of in_proj for L-nogate (rejected: it would change in_proj's
+  shape and RNG draws, i.e. two things at once).
+
+**Evidence.**
+- Parameters (block total / used; total network; B 2 332 035; MDv64-local 20 800 / 7 232):
+
+  | variant | block total | block used | network total | vs MDv64-local (used) |
+  |---|---|---|---|---|
+  | L-nogate | 20 800 | 5 184 | 2 352 835 | −2 048 (z rows of in_proj) |
+  | L-nonorm | 20 672 | 7 104 | 2 352 707 | −128 |
+  | L-noprenorm | 20 736 | 7 168 | 2 352 771 | −64 |
+  | L-noexp | 10 432 | 3 648 | 2 342 467 | −3 584 |
+  | L-dense | 57 088 | 43 520 | 2 389 123 | +36 288 |
+
+  As for MDv64-local, x_proj / dt_proj / A_log stay in the module, unused (grad None).
+- Tests (`python -m pytest -s tests/test_ladder64.py`, 33 passed):
+  - shapes (2,32,64,64) -> (2,32,64,64); parameter counts as above (computed from the layer shapes);
+  - skeleton equal to B at seeds 0 and 3; output at init vs B max |diff| 1.49e-08 (CUDA), 0 (CPU), all five;
+  - two Adam steps: step 1 only out_proj has a gradient; after step 2 every used parameter has a non-zero gradient;
+    unused parameters grad None; L-nogate z rows of in_proj exactly 0;
+  - locality (random out_proj, pixel (32, 32)): change > 0 at every pixel of the 3x3 neighbourhood (min 1.06e-3 to
+    4.2e-2) and exactly 0 outside, all five;
+  - one-thing-only: at seeds 0 and 3 L-nogate has MDv64-local's state dict; L-nonorm / L-noprenorm the same minus
+    the removed LayerNorm; L-dense the same except conv2d (weight shape (64,64,3,3), bias drawn last). Functional:
+    L-nonorm / L-noprenorm equal MDv64-local with that LayerNorm set to identity (bit-exact); L-nogate's out_proj
+    input times SiLU(z) equals MDv64-local's (bit-exact); L-dense with the depthwise kernel on the diagonal equals
+    MDv64-local (max 2.4e-07); each variant differs from MDv64-local with its own weights. L-noexp cannot share
+    weights (shapes): it equals `SS2DVMambaLocal(32, expand=1)` at the same seed (weights and output bit-exact).
+- Full suite: **205 passed, 6 skipped** (172 + 33); `test_existing_variants_unchanged` passes; `sha256sum splits/*`
+  identical to before the change.
+
+**Open questions.** None for the implementation; pre-registration in the next commit, before any run.

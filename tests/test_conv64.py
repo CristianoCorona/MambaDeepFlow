@@ -124,4 +124,4 @@ def test_config_handling():
             models.normalize_cfg(bad)
     run_cfg = {**expect, "levels": None}  # as train.py writes config.json
     assert models.model_cfg_from_run_config(run_cfg) == expect
-    assert models.VARIANTS[-1] == "Conv" and "Conv" not in models.MAMBA_VARIANTS
+    assert models.VARIANTS[10] == "Conv" and "Conv" not in models.MAMBA_VARIANTS

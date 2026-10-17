@@ -83,6 +83,10 @@ VARIANTS = VARIANTS + ABLATION_VARIANTS
 MAMBA_VARIANTS = ("MD", "MDv") + ABLATION_VARIANTS
 CONV_VARIANTS = ("Conv",)  # plain residual conv block at 64x64 (night 8b, mdf/ablation.py; notebook 2026-10-17)
 VARIANTS = VARIANTS + CONV_VARIANTS
+# one-ingredient ablations of MDv-local at 64x64 (night 9, mdf/ablation.py; notebook 2026-10-17)
+LADDER_VARIANTS = ("L-nogate", "L-nonorm", "L-noprenorm", "L-noexp", "L-dense")
+VARIANTS = VARIANTS + LADDER_VARIANTS
+MAMBA_VARIANTS = MAMBA_VARIANTS + LADDER_VARIANTS  # mamba_impl recorded as for MDv-local (the scan is not called)
 TEST_VARIANTS = ("identity",)  # unit tests only
 LEVELS = (64, 32, 16, 8)
 # level (feature-map size) -> encoder layer after which the block sits, and its channel multiplier
@@ -247,6 +251,12 @@ def normalize_cfg(cfg):
     if variant == "MDv-dec" and cfg.get("level") is None:
         cfg = {**cfg, "level": 64}
     if variant in CONV_VARIANTS:
+        if levels is not None:
+            raise ValueError(f"variant {variant} has a single level, levels not allowed")
+        if cfg.get("level") not in (None, 64):
+            raise ValueError(f"variant {variant} is defined at level 64 (after layer1), got {cfg.get('level')}")
+        cfg = {**cfg, "level": 64}
+    if variant in LADDER_VARIANTS:
         if levels is not None:
             raise ValueError(f"variant {variant} has a single level, levels not allowed")
         if cfg.get("level") not in (None, 64):
