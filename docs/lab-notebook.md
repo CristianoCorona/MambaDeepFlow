@@ -3292,3 +3292,62 @@ launcher, and an analysis that includes Conv64. All of this is committed before 
 - `launch_night8b.sh` refuses on a dirty tree (checked before this commit).
 
 **Open questions.** None before the launch.
+
+## 2026-10-17 Night 8b run check (5/5) and Conv64 reading (exploratory, validation only)
+
+**Context / why.** Night 8b (`queues/night8b.txt`, commit `02a058c`, pre-registration `31a57ae`) ran Conv64, seeds 0-4.
+The analysis was rerun with `scripts/analyze_night8.sh` (unchanged since `02a058c`). Validation only; the test split
+was not read. SA64 (night 9) is still missing, so the ablation section stays interim. The Conv64 reading is
+complete.
+
+**Action.**
+- Run check of `~/runs/night8b`.
+- Commit of the regenerated `docs/results/val-ablation64{,-8seed}/` (including `train_fit/`) and
+  `docs/figures/val-ablation64{,-8seed}/`.
+
+**Evidence.**
+- Queue 03:26-04:37 (71 min; estimate 68.5 nominal / 80 worst case). 5/5 runs trained and evaluated.
+  - Each run: `model.pt`, 133 rows in `metrics.csv`, no NaN / Inf, its seed, commit `02a058c`.
+  - Train time 845-847 s each.
+- Earlier results unchanged. Every row of t1 / t2 / t2b / t3 / t4 / runs.csv already in `f99f3d8` is identical, in
+  both readings. The new rows are only Conv64's.
+  - In `train_fit_runs.csv`, apart from the `train_seconds` timing column, one cell changed in its last digit:
+    MDv64-dec s3 train_rel_vy, relative difference 2.5e-8. This is GPU float rounding of the training-set inference.
+    The 4-decimal tables are identical.
+  - The "dirty" flag in the `train_fit` header refers to the result files rewritten by the first two steps of the
+    same script.
+- rel_vy (%), mean (std) over seeds 0-4: Conv64 5.951 (0.092); B 6.127 (0.237); MDv64-local 5.408 (0.179);
+  MDv64 5.325 (0.044).
+- Paired differences, rel_vy in points, 95% two-level interval, seeds 0-4:
+
+  | comparison | diff | interval | reading under the pre-registered rules |
+  |---|---|---|---|
+  | Conv64 − B | −0.18 | [−0.42, +0.04] | not determined (interval includes 0) |
+  | Conv64 − MDv64-local | +0.54 | [+0.24, +0.89] | worse than MDv64-local |
+  | Conv64 − MDv64 | +0.63 | [+0.40, +0.89] | worse than MDv64 |
+
+  Aggregate / median rel_vy:
+  - Conv64 − B: −0.05 [−0.22, +0.15] / −0.24 [−0.54, +0.07];
+  - Conv64 − MDv64-local: +0.20 [−0.06, +0.41] / +0.45 [+0.10, +0.71].
+- 8-seed reading (B and MDv64 with s0-7): Conv64 − B −0.12 [−0.32, +0.07]; Conv64 − MDv64 +0.63 [+0.40, +0.90].
+- Descriptive:
+  - wall-band vy MAE x1e-3: Conv64 − MDv64-local +0.70 [+0.41, +0.99] (+7.0 %); Conv64 − B −0.19 [−0.49, +0.13];
+  - wall-band divergence error x1e-3: Conv64 − MDv64-local +0.77 [+0.30, +1.24]; Conv64 − B −0.43 [−0.85, +0.01];
+  - rel_all Conv64 − B +0.02 [−0.03, +0.10]; rel_p +0.23 [−0.15, +0.60].
+- 5a: train L1 − B −0.068 x1e-3 (−0.70 SE); val L1 − B +0.053 (+1.40 SE). Conv64 does not fit the training set
+  measurably better than B, unlike MDv64-local (train −4.41 SE).
+- Reading, under the rules of `docs/preregistration-night8b.md`:
+  - The first reading ("any extra local processing at 64x64 is enough": Conv64 − B similar to MDv64-local − B) is
+    not supported. Conv64 is demonstrably worse than MDv64-local.
+  - The second reading ("gating and normalisation matter": Conv64 close to B and worse than MDv64-local) is half
+    met. "Worse than MDv64-local" holds, but "close to B" is not determined: the Conv64 − B interval includes 0 and
+    leans slightly negative.
+  - In short, a plain residual conv block at 64x64 with a similar number of parameters does not reproduce the gain of
+    MDv64-local, despite its larger receptive field (5x5 vs 3x3, the declared confound, which favours Conv64).
+  - Caveat: Conv64 differs from MDv64-local in more than gating and normalisation: channel expansion (in_proj 32 ->
+    64), depthwise vs dense convolution, SiLU vs LeakyReLU, and the out_proj. The result points to the design of the
+    MDv block as a whole. It does not isolate gating and normalisation.
+
+**Open questions.**
+- SA64 (night 9, tonight, launch by 19:25), then the final rerun of `scripts/analyze_night8.sh`.
+- Isolating gating vs normalisation vs expansion would need new variants and a new pre-registration. Not planned.

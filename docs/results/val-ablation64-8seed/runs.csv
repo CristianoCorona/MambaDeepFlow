@@ -41,3 +41,8 @@ MDv64-dec,1,~/runs/night8a/MDv64-dec_s1,635b69c,6.2078981e-08
 MDv64-dec,2,~/runs/night8a/MDv64-dec_s2,635b69c,6.4525813e-08
 MDv64-dec,3,~/runs/night8a/MDv64-dec_s3,635b69c,8.9994938e-08
 MDv64-dec,4,~/runs/night8a/MDv64-dec_s4,635b69c,1.0832679e-07
+Conv64,0,~/runs/night8b/Conv64_s0,02a058c,8.9571808e-08
+Conv64,1,~/runs/night8b/Conv64_s1,02a058c,5.7559276e-08
+Conv64,2,~/runs/night8b/Conv64_s2,02a058c,1.1059412e-07
+Conv64,3,~/runs/night8b/Conv64_s3,02a058c,6.3701113e-08
+Conv64,4,~/runs/night8b/Conv64_s4,02a058c,7.0123063e-08
