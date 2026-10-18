@@ -3821,3 +3821,38 @@ validation-only analysis with 8 seeds, before the single test session. Descripti
 
 **Open questions.** Next and last step: `scripts/test_session_final.sh --go` once on the clean tree (all 8 seeds, no
 `--declare-missing`), results committed at once.
+
+## 2026-10-18 FINAL TEST PASS (pre-registration 45dc422): MDv64-local vs B on rel_vy — CONFIRMED
+
+**Context / why.** Step 5 of `docs/preregistration-final.md`: the single confirmatory test session of the final
+architecture B + MDv64-local, the fifth and last test pass of the project. After this entry the test set is closed.
+
+**Action.** `scripts/test_session_final.sh --go` once, at commit `9f05c4f` (clean tree, descends from `45dc422`),
+2026-10-18 19:45:42-19:46:08 local time; all 8 MDv64-local seeds present, none declared missing. `evaluate.py --split
+test` on MDv64-local s0-7 (night 8a s0-4, night 10 s5-7), then `final_analysis.py --split test --allow-test
+--confirm-final` -> `docs/results/test-final/`, `docs/figures/test-final/`; log in `~/runs/test-session-final/`.
+B s0-7 and MDv64 s0-7 read from the explore cache (tested in passes 1 and 4). Results committed at once, no re-run.
+
+**Evidence.**
+- **Primary (the only decision): MDv64-local − B rel_vy −0.866 points, two-level 95 % CI [−1.602, −0.347]
+  (10 000 repetitions, seed 0, 8 vs 8 seeds, 90 samples / 30 profiles). Upper bound < 0: CONFIRMED.**
+- Test rel_vy per MDv64-local seed (%): 6.084 / 5.582 / 6.094 / 5.495 / 5.728 / 5.424 / 5.613 / 6.199; means over
+  seeds: B 6.644 (0.197), MDv64 5.471 (0.308), MDv64-local 5.777 (0.304). Recomputed vs eval CSV max 2.2e-7.
+- Descriptive MDv64-local − B: median rel_vy −0.601 [−1.229, −0.107]; agg rel_vy −0.436 [−0.956, +0.128]; rel_all
+  −0.118 [−0.350, +0.150]; rel_p −1.367 [−3.379, −0.119]; wall-band vy MAE −1.163e-3 [−1.589, −0.750] (−9.8 %);
+  divergence error wall −1.351e-3 [−1.854, −0.771], other −0.121e-3 [−0.148, −0.094]; 90 % of profiles better on
+  rel_vy.
+- Descriptive MDv64-local − MDv64: rel_vy +0.307 [−0.153, +1.113]; median rel_vy −0.105 [−0.564, +0.418]; wall-band
+  vy MAE +0.144e-3 [−0.151, +0.498]. Interval includes 0: no demonstrated difference (not equality); the point
+  estimate favours MDv64 by 0.3 points, more than on validation (+0.08).
+- Reference unchanged: MDv64 − B rel_vy −1.1729 [−2.4696, −0.4314], as in pass 4 (`817c558`).
+- Validation (8 seeds, previous entry) vs test: MDv64-local − B −0.667 vs −0.866; the test interval is wider (30
+  profiles vs 85).
+
+**Reading.** On the test set the local block (no SSM, no propagation along the scans) lowers rel_vy relative to B,
+as MDv64 did. Caveats stated in the pre-registration: hypothesis generated on validation, test set opened four times
+before, not independent of pass 4 (same block, same initial weights per seed). The SSM's contribution over the local
+block is not demonstrated in either direction. No further test pass of any model.
+
+**Open questions.** None for the test set (closed). Other models (SA64, ladder, Conv64, MDv64-dec, MDv16) stay
+validation-only.
