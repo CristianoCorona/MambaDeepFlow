@@ -3676,3 +3676,32 @@ MDv64) and one pre-registered test pass, the fifth and last of the project.
 
 **Open questions.** The hypothesis is validation-generated and not independent of the MDv64 confirmation (shared
 block and, per seed, initial weights); stated in the pre-registration.
+
+## 2026-10-18 Final pass: night-10 queue and launcher (not launched); cost.py extended (set "final")
+
+**Context / why.** Phases 2-3 of the final pass (pre-registration `45dc422`, `docs/preregistration-final.md`).
+
+**Action.**
+- `queues/night10.txt`: MDv64-local s5, s6, s7, `--seed k --epochs 133 --variant MDv-local --level 64` (as
+  `queues/night8a.txt`). `scripts/launch_night10.sh`: copy of `launch_night8a.sh` (tmux session `night10`, out root
+  `~/runs/night10`, sleep / idle / lid inhibited), cutoff as the absolute date-time `2026-10-19T08:00`, also refuses
+  when HEAD does not descend from `45dc422`.
+- `scripts/cost.py --set final` (additive; without `--set` the 13/10 configurations and outputs are unchanged): B,
+  MDv64, MDv64-local, SA64 with the same measurements (FLOP counter at batch 1, peak training VRAM at batch 10,
+  latency median of 100 after 20 warm-up at batch 1 and 10). New: analytic count of the MDv / MDv-local block (formula
+  in the docstring, as for MD on 13/10), parameters used by the forward, training it/s as mean (min-max) over the
+  existing 133-epoch runs, markdown table (`--md`).
+- Alternatives considered: a new cost script — rejected, the measurement code must be the 13/10 one.
+
+**Evidence.**
+- Each queue line parsed by `run_queue.parse_queue` and `train.parse_args`: the only differences from
+  `~/runs/night8a/MDv64-local_s0/config.json` args are `seed` and `out_dir`. `bash -n` ok; dirty tree -> refused
+  (exit 1, no tmux session). End-time block run alone at 14:24: 3 runs, nominal 0.9 h, worst case 1.1 h, cutoff
+  Mon 19/10 08:00. Night-8a real durations 1121-1127 s train + 3 s eval per run.
+- Analytic count checked against the counter: for MDv64 the counter gives 0.1305 GFLOPs, exactly in_proj (33.55 M) +
+  depthwise conv (4.72 M) + 4 x_proj (71.30 M) + 4 dt_proj (4.19 M) + out_proj (16.78 M); the analytic block adds the
+  scan (117.4 M) and the elementwise D / merge / gating terms (3.1 M): 0.2511. MDv64-local: counter 0.0551 = in_proj +
+  conv + out_proj; analytic 0.0582. Used parameters MDv64-local: block 7 232 of 20 800 (as `4f1d86a`).
+- Trial run (10 repetitions, dirty tree, scratch output, not kept): 9 s in total.
+
+**Open questions.** None.

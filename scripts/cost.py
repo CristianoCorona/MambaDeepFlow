@@ -18,11 +18,29 @@ Configurations: B, B-large, CBAM8, SA8, MD8, SA32, MD32. Never run in parallel w
   synchronize -> forward -> synchronize.
 - training it/s: read from the control runs (--control-root), the official training-cost measure.
 
+Set "final" (--set final; added 2026-10-18 for docs/preregistration-final.md): B, MDv64, MDv64-local, SA64, same
+measurements and conditions. Additions:
+- MDv / MDv-local (SS2DVMamba, mdf/blocks.py; SS2DVMambaLocal, mdf/ablation.py): the counter sees the linear layers,
+  the depthwise conv and the x_proj / dt_proj einsums but not the selective scan, so the block is counted analytically
+  (the counter's own number is also reported), per image with L = H W, C, E = 2C, N = 16, R = ceil(C / 16), 3x3
+  depthwise conv, 4 scan directions:
+      in_proj 2 L C 2E + conv2d 2 L E 9
+      + per direction: x_proj 2 L E (R + 2N) + dt_proj 2 L R E + selective scan 7 L E N + D-skip 2 L E
+      + sum of the 4 directions 3 L E + gating L E + out_proj 2 L E C
+  MDv-local: the same without x_proj, dt_proj and the scan (its forward_core is sum_k D_k x: the D-skip terms remain).
+  LayerNorms / exp / softplus / SiLU are not counted (as elsewhere).
+- params_used: parameters the forward uses (MDv-local: total minus x_proj / dt_proj / A_logs, mdf.ablation).
+- training it/s: mean (min-max) of it_per_s_train over the existing 133-epoch runs of each configuration (FINAL_RUNS),
+  instead of the control runs.
+- also writes a markdown table (--md).
+
 Usage: python scripts/cost.py [--control-root ~/runs/control-2026-10-12] [--csv docs/results/cost.csv]
+       python scripts/cost.py --set final --csv docs/results/cost-final/cost.csv --md docs/results/cost-final/cost.md
 """
 
 import argparse
 import csv
+import glob
 import json
 import math
 import statistics
@@ -47,6 +65,19 @@ CONFIGS = {
     "SA32": {"variant": "SA", "level": 32},
     "MD32": {"variant": "MD", "level": 32},
 }
+# final architecture and its references (docs/preregistration-final.md, 2026-10-18; --set final)
+FINAL_CONFIGS = {
+    "B": {"variant": "B"},
+    "MDv64": {"variant": "MDv", "level": 64},
+    "MDv64-local": {"variant": "MDv-local", "level": 64},
+    "SA64": {"variant": "SA", "level": 64},
+}
+FINAL_RUNS = {  # existing 133-epoch runs (under ~/runs), for the training it/s
+    "B": ("night1/ep133_s*", "night3/B_s*"),
+    "MDv64": ("night5/MDv64_s*", "night7/MDv64_s*"),
+    "MDv64-local": ("night8a/MDv64-local_s*",),
+    "SA64": ("night9/SA64_s*",),
+}
 
 
 def md_block_flops(c, size, batch=1, d_state=16, d_conv=4, expand=2):
@@ -55,6 +86,13 @@ def md_block_flops(c, size, batch=1, d_state=16, d_conv=4, expand=2):
     per_seq = (2 * L * c * 2 * E + 2 * L * E * K + 2 * L * E * (R + 2 * N) + 2 * L * R * E + 2 * L * E * c
                + 7 * L * E * N + 3 * L * E)
     return 4 * batch * per_seq
+
+
+def mdv_block_flops(c, size, batch=1, d_state=16, d_conv=3, expand=2, local=False):
+    L, E, N, K = size * size, expand * c, d_state, 4
+    R = math.ceil(c / 16)
+    per_dir = 2 * L * E if local else 2 * L * E * (R + 2 * N) + 2 * L * R * E + 7 * L * E * N + 2 * L * E
+    return batch * (2 * L * c * 2 * E + 2 * L * E * d_conv ** 2 + K * per_dir + 3 * L * E + L * E + 2 * L * E * c)
 
 
 def flops(net, cfg):
@@ -69,6 +107,10 @@ def flops(net, cfg):
     if cfg["variant"] == "MD":
         c = 32 * models.LEVEL_LAYER[cfg["level"]][1]
         analytic = md_block_flops(c, cfg["level"])
+        return total - block_counted + analytic, block_counted, analytic
+    if cfg["variant"] in ("MDv", "MDv-local"):
+        c = 32 * models.LEVEL_LAYER[cfg["level"]][1]
+        analytic = mdv_block_flops(c, cfg["level"], local=cfg["variant"] == "MDv-local")
         return total - block_counted + analytic, block_counted, analytic
     return total, block_counted, None
 
@@ -112,6 +154,40 @@ def control_its(root, name):
     return json.loads(cfg.read_text()).get("it_per_s_train")
 
 
+def used_params(net):
+    from mdf import ablation
+    mixer = getattr(net, "mixer", None)
+    if mixer is None:
+        return models.count_params(net)
+    return models.count_params(net) - models.count_params(mixer) + ablation.used_param_count(mixer)
+
+
+def runs_its(label):
+    vals = []
+    for pat in FINAL_RUNS[label]:
+        for cfg in sorted(glob.glob(str(Path.home() / "runs" / pat / "config.json"))):
+            c = json.loads(Path(cfg).read_text())
+            if c.get("status") == "finished" and c.get("args", {}).get("epochs") == 133:
+                vals.append(c["it_per_s_train"])
+    return vals
+
+
+def write_md(path, rows):
+    head = ("| Config | Params total | Params used | Added vs B (used) | GFLOPs fwd (b=1) | Block GFLOPs (counter / "
+            "analytic) | Peak train VRAM b10 (MiB) | Latency b1 / b10 (ms) | Train it/s, runs: mean (min-max, n) |")
+    out = [head, "|" + "---|" * 9]
+    for r in rows:
+        an = r["block_gflops_analytic"]
+        th = lambda n, sign="": f"{n:{sign},}".replace(",", " ")
+        out.append(f"| {r['config']} | {th(r['params'])} | {th(r['params_used'])} | "
+                   f"{th(r['params_used'] - models.B_PARAMS, '+')} | "
+                   f"{r['gflops_fwd_b1']:.4f} | {r['block_gflops_counter']:.4f} / "
+                   f"{'-' if an is None else f'{an:.4f}'} | {r['peak_train_vram_mib_b10']:.1f} | "
+                   f"{r['latency_ms_b1']:.2f} / {r['latency_ms_b10']:.2f} | {r['train_it_per_s_runs']:.1f} "
+                   f"({r['train_it_per_s_runs_min']:.1f}-{r['train_it_per_s_runs_max']:.1f}, {r['train_runs']}) |")
+    path.write_text("\n".join(out) + "\n")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--control-root", type=Path, default=Path.home() / "runs" / "control-2026-10-12")
@@ -119,12 +195,16 @@ def main():
     ap.add_argument("--warmup", type=int, default=20)
     ap.add_argument("--reps", type=int, default=100)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--set", choices=["main", "final"], default="main",
+                    help="main: the 13/10 configurations (default); final: B, MDv64, MDv64-local, SA64")
+    ap.add_argument("--md", type=Path, default=None, help="also write a markdown table (--set final)")
     args = ap.parse_args()
+    final = args.set == "final"
     git = runinfo.git_info()
     print(f"commit {git['commit']} dirty {git['dirty']}; {torch.cuda.get_device_name(0)}")
 
     rows = []
-    for name, cfg in CONFIGS.items():
+    for name, cfg in (FINAL_CONFIGS if final else CONFIGS).items():
         runinfo.seed_everything(args.seed)
         net = models.build_from_cfg(cfg).cuda()
         n = models.count_params(net)
@@ -139,6 +219,13 @@ def main():
                "block_gflops_analytic": None if f_block_analytic is None else f_block_analytic / 1e9,
                "peak_train_vram_mib_b10": vram, "latency_ms_b1": lat1, "latency_ms_b10": lat10,
                "train_it_per_s_control": its, "commit": git["commit"]}
+        if final:
+            vals = runs_its(name)
+            row = {"config": name, "params": n, "params_used": used_params(net), **{k: v for k, v in row.items()
+                   if k not in ("config", "params", "train_it_per_s_control", "commit")},
+                   "train_it_per_s_runs": statistics.mean(vals), "train_it_per_s_runs_min": min(vals),
+                   "train_it_per_s_runs_max": max(vals), "train_runs": len(vals), "commit": git["commit"]}
+            its = f"{row['train_it_per_s_runs']:.1f} (runs, n={len(vals)}); params used {row['params_used']}"
         rows.append(row)
         print(f"{name:8s} params {n:9d} ({n - models.B_PARAMS:+8d})  {f_total / 1e9:7.4f} GFLOPs  "
               f"VRAM {vram:7.1f} MiB  lat b1 {lat1:6.2f} ms  b10 {lat10:6.2f} ms  it/s {its}", flush=True)
@@ -150,6 +237,9 @@ def main():
         w.writeheader()
         w.writerows(rows)
     print(f"Wrote {args.csv}")
+    if args.md is not None:
+        write_md(args.md, rows)
+        print(f"Wrote {args.md}")
 
 
 if __name__ == "__main__":
