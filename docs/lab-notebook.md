@@ -3638,3 +3638,41 @@ test split was not read. This completes both experiments: no run is missing and 
 - Both exploratory experiments are complete on validation; no test pass is planned for these models.
 - Testing what the ladder variants share and Conv64 lacks (for example Conv64 with pointwise projections and SiLU)
   would need new variants and a new pre-registration. Not planned.
+
+## 2026-10-18 PRE-REGISTRATION: final architecture B + MDv64-local, single confirmatory test pass (the last of the project)
+
+**Context / why.** Decision of the experimenter on 2026-10-18 at 13:49, after all the phase-2 validation results
+(nights 8a, 8b, 9; `f99f3d8`, `1188c12`, `71bf4f6`): the final architecture is B + MDv64-local, the MDv block at
+64x64 without propagation along the scan, i.e. a simplified Mamba block without the SSM (in line with MambaOut). It
+keeps the validation gain of MDv64 on rel_vy (MDv64-local − B −0.72 [−1.13, −0.34]; − MDv64 +0.08 [−0.13, +0.31],
+seeds 0-4) at 2.4x the training speed (73.5 vs 30.6 it/s). **Change of plan:** the night-9 entry said that no test pass
+is planned for the night-8 ablation models; this decision adds one, for MDv64-local only. It needs 8 seeds (as B and
+MDv64) and one pre-registered test pass, the fifth and last of the project.
+
+**Decision.** `docs/preregistration-final.md`, committed on its own before any run:
+- Runs: MDv64-local seeds 0-4 (night 8a) + 5-7 (night 10, same arguments and training code). Reference B s0-7
+  (already on test); descriptive reference MDv64 s0-7 (already on test).
+- **Primary hypothesis (only decision):** on test, rel_vy (original definition) of MDv64-local < B. Difference of
+  means, two-level bootstrap (seeds + profiles), 10 000 repetitions, seed 0. **CONFIRMED only if the upper bound of
+  the 95 % interval is < 0**, else NOT CONFIRMED with estimate and interval.
+- Descriptive: MDv64-local − MDv64 rel_vy (does the SSM add anything on test?); MDv64-local − B rel_all, rel_p,
+  aggregate / median rel_vy, wall-band vy MAE, divergence.
+- SA64, L-*, Conv64, MDv64-dec, MDv16 stay validation-only.
+- A failed night-10 run is repeated identically once; otherwise the test uses the available seeds, declared.
+- Alternatives considered: keep MDv64 (already confirmed on test) as the final architecture — rejected by the
+  experimenter: MDv64-local is simpler and faster with no demonstrable loss on validation; testing MDv64-local with
+  the 5 existing seeds only — rejected: 8 seeds as for B and MDv64.
+
+**Evidence.**
+- Previous test passes (4): `ca067a4` (14/10, 51 runs, main analysis), `98cbb84` (15/10, MDv8), `ae394ec` (16/10,
+  night 6b DRv11 / TR / calibration), `817c558` (16/10, MDv64 confirmatory, CONFIRMED).
+- MDv64-local never on test: no `eval_test.json` under `~/runs/night8a/MDv64-local_s*`; explore cache has only
+  `__val__` entries for it.
+- Training code unchanged for MDv-local since `635b69c` (night 8a): `git diff 635b69c HEAD -- mdf scripts/train.py
+  scripts/run_queue.py` only adds the Conv64 / ladder variants (classes after `SS2DVMambaLocal`, branches taken only by
+  the new variants), the `train.py` usage string and the absolute-date cutoff of `run_queue.py`. Initial state dicts
+  of the MDv-local network for seeds 0-7 built at `635b69c` (temporary worktree) and at HEAD: identical sha256; forward
+  of a fixed input differs by ~1e-10 relative between commits, the same as between two runs of the same commit.
+
+**Open questions.** The hypothesis is validation-generated and not independent of the MDv64 confirmation (shared
+block and, per seed, initial weights); stated in the pre-registration.
