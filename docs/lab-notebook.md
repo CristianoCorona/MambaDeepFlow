@@ -3786,3 +3786,38 @@ without reading the test set.
 
 **Open questions.** None before the launch. Plan for 2026-10-19 morning: night-10 run check (notebook), then
 `scripts/analyze_final_val.sh` (commit), then `scripts/test_session_final.sh --go` once, results committed at once.
+
+## 2026-10-18 Night 10 run check (3/3) and MDv64-local vs B on validation with 8 seeds (descriptive, before the test pass)
+
+**Context / why.** Step 4 of `docs/preregistration-final.md` (`45dc422`): run check of night 10 and the
+validation-only analysis with 8 seeds, before the single test session. Descriptive: it does not change the plan.
+
+**Action.**
+- Night 10 (`queues/night10.txt`, `scripts/launch_night10.sh`, commit `8892991`, clean tree): queue start
+  18:28, end 19:25 local time (57 min, the nominal estimate), well before the 2026-10-19T08:00 cutoff.
+- `scripts/analyze_final_val.sh` -> `docs/results/val-final-mdv64local/`, `docs/figures/val-final-mdv64local/`.
+
+**Evidence.**
+- Run check: MDv64-local s5 / s6 / s7 all `"status": "finished"`, 133 epochs (iteration_end 79667), training
+  1132 / 1127 / 1126 s (73.3 it/s, as night 8a), no NaN / Inf in `metrics.csv`, no error in `queue.log`. Config vs
+  night-8a s0: only seed, dataloader generator seed, git commit, timings and losses differ; same split
+  (`val_files_sha256` 3b26466a…). No failed run, nothing repeated, no seed declared missing.
+- Val rel_vy per seed (%): s5 5.472, s6 5.231, s7 5.460 (night 8a s0-4: 5.677 / 5.416 / 5.410 / 5.358 / 5.179).
+  Means over 8 seeds: B 6.067 (0.204), MDv64 5.320 (0.075), MDv64-local 5.400 (0.154).
+- Consistency of recomputed vs eval CSV: max 1.5e-7; s5-7 freshly inferred into the explore cache (`__val__` only).
+- MDv64-local − B (val, 8 vs 8, two-level 95 % CI): rel_vy −0.667 [−0.977, −0.373]; median rel_vy −0.631
+  [−0.889, −0.324]; agg rel_vy −0.261 [−0.481, +0.022]; rel_all −0.033 [−0.119, +0.089]; rel_p −0.405
+  [−0.973, +0.110]; wall-band vy MAE −0.886e-3 [−1.152, −0.615] (−8.1 %); divergence error wall −1.065e-3
+  [−1.470, −0.606], other −0.116e-3 [−0.138, −0.094].
+- MDv64-local − MDv64 (val, 8 vs 8): rel_vy +0.080 [−0.072, +0.248]; median rel_vy +0.005 [−0.216, +0.234]; wall-band
+  vy MAE +0.070e-3 [−0.076, +0.227]. The interval includes 0: no demonstrated difference, not a demonstration of
+  equality.
+- With 5 seeds (dry run, previous entry) the same comparisons were −0.659 [−1.020, −0.322] and +0.088
+  [−0.116, +0.310]: seeds 5-7 do not move the estimates, the intervals narrow.
+- The banner of `final_analysis.py` prints the rule outcome label ("CONFIRMED") on validation too, followed by "NOT
+  THE TEST SET: functional check only, no decision"; it is not a decision. The "pre-registered plan, commit 26b6e7f"
+  in the summary title is the generic header of the script (unchanged).
+- No test file touched: no `eval_test.json` in any MDv64-local run, no `__test__` cache entry for night 8a / 10.
+
+**Open questions.** Next and last step: `scripts/test_session_final.sh --go` once on the clean tree (all 8 seeds, no
+`--declare-missing`), results committed at once.
