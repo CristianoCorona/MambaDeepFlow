@@ -3762,3 +3762,27 @@ B, MDv64 and SA64; the confirmatory analysis and the single test session written
   (`ab76e4a`).
 
 **Open questions.** Dry runs of both scripts on the clean tree: next entry.
+
+## 2026-10-18 Final pass: dry runs of the validation analysis and of the test session (test set not read)
+
+**Context / why.** Phase 4 of the final pass: both scripts tried end to end on the committed code before night 10,
+without reading the test set.
+
+**Action.** At commit `7061171` (clean tree), night 10 not yet run (MDv64-local s5-7 absent):
+- `scripts/test_session_final.sh --dry-run --declare-missing 5,6,7` (validation instead of test; outputs in
+  `~/runs/test-session-final-dryrun/`);
+- `RESULTS=<scratch> FIGURES=<scratch> scripts/analyze_final_val.sh` (outputs not kept).
+
+**Evidence.**
+- Both exit 0. The dry run passed all checks (clean tree, HEAD descends from `45dc422`, no `eval_test.json` and no
+  test cache entry for MDv64-local, 16 B / MDv64 references with `eval_test.json`, missing seeds = declared 5,6,7),
+  evaluated MDv64-local s0-4 on val into scratch (val rel_vy 5.677 / 5.416 / 5.410 / 5.358 / 5.179, the night-8a
+  values; per-sample max |diff| vs the run's own `eval_val_samples.csv` 6e-8), run directories untouched, then ran the
+  analysis (consistency vs eval CSV 1.5e-7). Banner and summary.md section in place, with "NOT THE TEST SET".
+- Functional numbers (validation, 5 vs 8 seeds, no decision): MDv64-local − B rel_vy −0.659 [−1.020, −0.322];
+  MDv64-local − MDv64 +0.088 [−0.116, +0.310]. The appended groups do not change the existing pairs: MDv64 − B rel_vy
+  −0.7474 [−1.0267, −0.4955], as in `docs/results/val-confirm-mdv64`.
+- `analyze_final_val.sh` gives the same section and numbers (same arguments apart from the output directory).
+
+**Open questions.** None before the launch. Plan for 2026-10-19 morning: night-10 run check (notebook), then
+`scripts/analyze_final_val.sh` (commit), then `scripts/test_session_final.sh --go` once, results committed at once.
