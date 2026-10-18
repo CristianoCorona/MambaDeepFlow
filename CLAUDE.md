@@ -49,6 +49,8 @@ Full details (versions, checksums, measured numbers): docs/setup-log.md.
   from source: system nvcc 12.6 needs GCC <= 13 but the system has GCC 16; no wheels exist for Python 3.14
   or torch >= 2.11 (hence Python 3.12 + torch 2.10). `pip install --dry-run` first to make sure torch/triton are not replaced.
 - Large downloads can fail mid-way: use `pip install --resume-retries 20`.
+- `conda run` does not forward stdin: `conda run -n mdf python - <<EOF` runs nothing and prints nothing (silence is
+  not a pass). Write the script to a file, or call the env's python directly (`$(conda run -n mdf which python)`).
 
 ## Lab notebook (standing rule)
 - Keep docs/lab-notebook.md as a chronological log (newest entry last). Add an entry for every decision, experiment, change of plan or notable finding, BEFORE committing the related code, and commit it together with the code.

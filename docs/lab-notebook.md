@@ -3509,3 +3509,132 @@ includes the ladder. All committed before the launch.
 - Full suite: **207 passed, 6 skipped** (205 + 2); `sha256sum splits/*` unchanged. Launcher: dirty tree -> refused.
 
 **Open questions.** None before the launch.
+
+## 2026-10-18 Correction to the entry "Night 9: control runs (pass), ... analysis extended" (2026-10-17)
+
+**Context / why.** That entry states, for the re-run with the ladder absent, that "in `train_fit_runs.csv` only the
+`train_seconds` column differs". The script that compared that file was passed to `conda run -n mdf python -` on
+stdin. `conda run` does not forward stdin, so the script never ran and printed nothing. The silence was read as "no
+difference".
+
+**Correction.** Repeated with `python3` on the same scratch output: 38 rows, and besides `train_seconds` **one cell
+differs**, MDv64-dec s3 `train_rel_vy` 0.03964822 -> 0.039648219 (relative 2.5e-8). This is the GPU float rounding of
+the training-set inference already reported in the night-8b run check; the 4-decimal tables are identical. All the
+other checks of that entry used `cmp`, `diff` or `comm` in bash and stand. The conclusion (earlier results unchanged)
+is unaffected.
+
+**Evidence.** Re-check on 2026-10-18; lesson added to CLAUDE.md (no stdin scripts through `conda run`).
+
+## 2026-10-18 Night 9 run check (30/30): ladder of one-ingredient ablations (final) and SA64 (night-8 final reading)
+
+**Context / why.** Night 9 (`queues/night9.txt`, commit `5410b39`) ran the ladder (pre-registration `4f1d86a`) and
+SA64 (pre-registration `d65894c`, amendments `635b69c` and `b60cdb0`), seeds 0-4 each. The analysis was rerun by the
+experimenter with `scripts/analyze_night8.sh`, unchanged since `5410b39`, after the queue ended. Validation only; the
+test split was not read. This completes both experiments: no run is missing and no seed was added.
+
+**Action.**
+- Run check of `~/runs/night9`.
+- Check that the earlier results are unchanged.
+- Commit of the regenerated `docs/results/val-ablation64{,-8seed}/` (including `train_fit/`) and
+  `docs/figures/val-ablation64{,-8seed}/`.
+
+**Evidence.**
+- Queue 2026-10-17 10:02 -> 2026-10-18 10:03 (1441 min; estimate 1417.5 nominal / 1565 worst case; cutoff Sunday
+  13:00 not reached).
+  - Ladder 10:02-17:30 (448 min; estimate 439.5 / 510).
+  - SA64 17:30-10:03 (993 min; estimate 978 / 1055).
+- 30/30 runs trained and evaluated. Each has `model.pt`, 133 rows in `metrics.csv`, no NaN / Inf, its seed in
+  `config.json`, commit `5410b39` and a clean tree.
+- Train times: L-nogate 1087-1089 s, L-nonorm 1087-1089 s, L-noprenorm 1078-1079 s, L-noexp 932-934 s, L-dense
+  1175-1178 s, SA64 11909-11914 s.
+- Analysis: 5 seeds for every configuration of the main reading; consistency with the eval CSVs max 2.2e-07.
+- Earlier results unchanged. Every row of t1 / t2 / t2b / t3 / t4 / runs.csv in `1188c12` is still present, in both
+  readings. The new rows are only those of SA64 and the ladder. SA64 rows sit inside the ablation64 group, in the
+  pre-registered pair order, so the old files are no longer a prefix of the new ones.
+  - `train_fit_summary.csv` is identical.
+  - In `train_fit_runs.csv`, besides `train_seconds`, two cells of MDv64-dec change in the last digit (s0
+    train_rel_vx, s3 train_rel_vy; relative 1.3e-8 and 2.5e-8): GPU rounding, as above.
+- rel_vy (%), mean (std) over seeds 0-4: B 6.127 (0.237); MDv64 5.325 (0.044); MDv64-local 5.408 (0.179); SA64
+  5.453 (0.124); Conv64 5.951 (0.092); L-nogate 5.321 (0.114); L-nonorm 5.380 (0.111); L-noprenorm 5.472 (0.043);
+  L-noexp 5.477 (0.103); L-dense 5.355 (0.175).
+
+**Ladder (docs/preregistration-night9.md).** Paired rel_vy differences, points, 95% two-level interval, seeds 0-4:
+
+| removed ingredient | variant − MDv64-local | reading (pre-registered rule) | variant − B |
+|---|---|---|---|
+| gating (L-nogate) | −0.09 [−0.30, +0.12] | not demonstrated | −0.81 [−1.18, −0.47] better than B |
+| output LayerNorm (L-nonorm) | −0.03 [−0.27, +0.20] | not demonstrated | −0.75 [−1.09, −0.44] better than B |
+| input LayerNorm (L-noprenorm) | +0.06 [−0.19, +0.31] | not demonstrated | −0.66 [−0.94, −0.40] better than B |
+| expansion (L-noexp; fewer parameters) | +0.07 [−0.14, +0.30] | not demonstrated | −0.65 [−0.99, −0.35] better than B |
+| depthwise -> dense conv (L-dense; ~6x more parameters) | −0.05 [−0.29, +0.18] | not demonstrated | −0.77 [−1.16, −0.42] better than B |
+
+- Aggregate and median rel_vy: every variant − MDv64-local interval includes 0. Against B, the median intervals all
+  lie below 0. The aggregate intervals lie below 0 for L-nonorm and L-noprenorm and touch 0 for L-nogate, L-noexp and
+  L-dense (upper ends +0.02 to +0.08).
+- 8-seed reading (B with s0-7): variant − B from −0.59 [−0.88, −0.34] (L-noexp) to −0.75 [−1.06, −0.45] (L-nogate);
+  all below 0.
+- Descriptive, wall-band vy MAE x1e-3, variant − MDv64-local:
+
+  | variant | difference |
+  |---|---|
+  | L-nogate | −0.01 [−0.18, +0.18] |
+  | L-nonorm | +0.26 [−0.01, +0.52] (+2.6 %) |
+  | L-noprenorm | **+0.40 [+0.12, +0.67] (+4.0 %)** |
+  | L-noexp | **+0.38 [+0.24, +0.54] (+3.8 %)** |
+  | L-dense | +0.04 [−0.19, +0.24] |
+
+  Wall-band divergence error: L-noexp **+0.61 [+0.24, +0.94]**; the others include 0. rel_all and rel_p: every
+  interval against MDv64-local includes 0.
+- 5a: train L1 − B (diff/SE) L-nogate −4.77, L-nonorm −4.08, L-noprenorm −4.68, L-noexp −2.97, L-dense −5.27. Val
+  L1 − B: −1.14, −1.00, −1.08, +0.33, −0.24. Like MDv64-local (−4.41), all fit the training set better than B; none
+  separates from B on validation L1 by more than 2 SE.
+
+**Reading of the ladder, under the rules fixed in `4f1d86a`.**
+- **No single ingredient is demonstrated to matter.** For each of the five, the interval of variant − MDv64-local
+  includes 0. By the pre-registered rule this is "not demonstrated", **not** "does not matter".
+- **Every one-ingredient ablation stays better than B** (all five variant − B intervals below 0, in both readings).
+  No single removal loses the gain of MDv64-local.
+- The intervals bound the possible loss. The upper ends against MDv64-local (+0.12 to +0.31) are below the
+  MDv64-local − B gain (−0.72 [−1.13, −0.34]). This is a statement about the intervals, not a demonstration of
+  equality.
+- L-noexp (fewer parameters) and L-dense (~6x more block parameters) show no demonstrable effect of the parameter
+  change on rel_vy either. For L-dense, the extra capacity of the dense conv brings no demonstrable gain.
+- Descriptive only, no conclusion: removing the input LayerNorm or the expansion raises the wall-band vy error
+  (+4.0 %, +3.8 %, intervals above 0), and L-noexp also raises the wall-band divergence error. Noted for the
+  discussion.
+- Together with night 8b: Conv64 lacks all these ingredients at once (and differs further), and loses the gain
+  (Conv64 − MDv64-local +0.54 [+0.24, +0.89]). The ladder removes them one at a time and loses nothing demonstrable.
+  Two explanations are compatible with this, and the data do not separate them:
+  - the ingredients are partly redundant;
+  - the gain comes from something every ladder variant keeps and Conv64 lacks, for example the pointwise in_proj ->
+    3x3 conv + SiLU -> out_proj structure, the SiLU activation, or the per-channel D scaling.
+
+**SA64: night-8 final reading (docs/preregistration-night8.md).**
+
+| comparison | rel_vy diff | interval | reading (pre-registered rule) |
+|---|---|---|---|
+| SA64 − MDv64 | +0.13 | [−0.07, +0.36] | not determined (interval includes 0) |
+| SA64 − B | −0.67 | [−0.97, −0.41] | better than B |
+
+- 8-seed reading: SA64 − MDv64 +0.13 [−0.07, +0.35]; SA64 − B −0.61 [−0.86, −0.39].
+- Aggregate / median rel_vy:
+  - SA64 − MDv64: −0.00 [−0.24, +0.22] / −0.04 [−0.29, +0.27];
+  - SA64 − B: −0.28 [−0.51, −0.03] / −0.69 [−1.01, −0.35].
+- Descriptive, wall-band vy MAE:
+  - SA64 − MDv64: +0.47 [+0.22, +0.70] x1e-3 (+4.7 %);
+  - SA64 − B: −0.48 [−0.71, −0.23] (−4.4 %);
+  - wall-band divergence error SA64 − MDv64: +0.54 [+0.33, +0.79].
+- 5a: train L1 − B −2.72 SE; val L1 − B −1.07 SE.
+- Reading under the night-8 rules:
+  - "SA64 close to B, so the gain is specific to Mamba" is **not supported**: SA64 is demonstrably better than B.
+  - "SA64 close to MDv64, so the gain comes from global mixing at high resolution" is **not determined**: the interval
+    includes 0, and "close" is never stated from such an interval.
+  - With MDv64-local (no propagation) also better than B and not distinguishable from MDv64, the night-8 ablations do
+    not show that global mixing is needed for the gain. The block at 64x64 in the encoder matters: MDv64-dec and MDv16
+    are worse than MDv64.
+  - Descriptive: SA64 has a higher wall-band error than MDv64. Noted, no conclusion.
+
+**Open questions.**
+- Both exploratory experiments are complete on validation; no test pass is planned for these models.
+- Testing what the ladder variants share and Conv64 lacks (for example Conv64 with pointwise projections and SiLU)
+  would need new variants and a new pre-registration. Not planned.
