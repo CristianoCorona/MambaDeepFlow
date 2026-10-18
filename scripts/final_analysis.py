@@ -32,6 +32,12 @@ Contents
       L-nogate / L-nonorm / L-noprenorm / L-noexp / L-dense - MDv64-local and - B; section "Ladder" after the Conv64
       section, with the reading of each comparison under the pre-registered rule; the ladder is added to panel (a) of
       ablation64_rel_vy. Appended after all other groups: earlier results unchanged.
+      confirm-final (only with --confirm-final; docs/preregistration-final.md, commit 45dc422): MDv64-local - B,
+      decision on rel_vy only: "CONFIRMED" if the upper bound of the two-level 95 % interval (10 000 repetitions,
+      seed 0) is < 0, else "NOT CONFIRMED"; final-desc: MDv64-local - MDv64 (descriptive). Section printed first in
+      summary.md (and the decision on stdout) with the descriptive rows. Needs the labels MDv64-local, B and MDv64;
+      allowed on test. With this flag the validation-only groups ablation64 / conv64 / ladder64 and their figure are
+      not computed (the final pass loads MDv64-local but is not the night-8 analysis). Appended after all other groups.
   T3  regions (descriptive): MAE per region and channel, differences with the two-level CI
   T4  divergence (descriptive; mdf/explore.py DIV_MAPPING): mean |div pred|, mean |div target|,
       mean |div pred - div target| in the wall band and in the other fluid cells; differences of the last one
@@ -42,6 +48,7 @@ run's eval_<split>_samples.csv is printed when that file exists.
 Usage:
     python scripts/final_analysis.py --config B=GLOB [--config ...] [--seeds 0-7] [--split val]
                                      [--out-dir DIR] [--fig-dir DIR] [--confirm-mdv64] [--confirm-dr]
+                                     [--confirm-final]
 All runs must share one split mode: grouped (all analyses up to night 6) or grouped-holdout (night 6b).
 """
 
@@ -89,6 +96,10 @@ LADDER64_LABELS = ("L-nogate", "L-nonorm", "L-noprenorm", "L-noexp", "L-dense")
 LADDER64 = [(v, ref) for v in LADDER64_LABELS for ref in ("MDv64-local", "B")]
 LADDER64_PARAMS = {"L-noexp": "fewer parameters (block used 3 648 vs 7 232)",
                    "L-dense": "many more parameters (block used 43 520 vs 7 232)"}
+# final architecture B + MDv64-local (docs/preregistration-final.md, commit 45dc422; only with --confirm-final)
+CONFIRM_FINAL = [("MDv64-local", "B")]
+FINAL_DESC = [("MDv64-local", "MDv64")]
+CONFIRM_FINAL_PREREG = "45dc422"
 LEVEL_CURVE = (("MDv8", 8), ("MDv16", 16), ("MDv32", 32), ("MDv64", 64))
 ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8", "MDv16", "MDv32", "MDv64", "MDv8-16-32",
          "B-GH", "TR", "DRv11", "MDv64-local", "SA64", "MDv64-dec", "Conv64", *LADDER64_LABELS]
@@ -116,11 +127,16 @@ def parse_args():
                     help="add the pre-registered confirmatory comparison MDv64 - B (decision on rel_vy)")
     ap.add_argument("--confirm-dr", action="store_true",
                     help="add the pre-registered confirmatory comparison DRv11 - B-GH (night 6b, decision on rel_all)")
+    ap.add_argument("--confirm-final", action="store_true",
+                    help="add the pre-registered final comparison MDv64-local - B (decision on rel_vy) and "
+                         "MDv64-local - MDv64 (descriptive); docs/preregistration-final.md")
     args = ap.parse_args()
     if args.confirm_dr and (args.n_boot, args.boot_seed) != (CONFIRM_N_BOOT, CONFIRM_BOOT_SEED):
         ap.error(f"--confirm-dr is pre-registered with --n-boot {CONFIRM_N_BOOT} --boot-seed {CONFIRM_BOOT_SEED}")
     if args.confirm_mdv64 and (args.n_boot, args.boot_seed) != (CONFIRM_N_BOOT, CONFIRM_BOOT_SEED):
         ap.error(f"--confirm-mdv64 is pre-registered with --n-boot {CONFIRM_N_BOOT} --boot-seed {CONFIRM_BOOT_SEED}")
+    if args.confirm_final and (args.n_boot, args.boot_seed) != (CONFIRM_N_BOOT, CONFIRM_BOOT_SEED):
+        ap.error(f"--confirm-final is pre-registered with --n-boot {CONFIRM_N_BOOT} --boot-seed {CONFIRM_BOOT_SEED}")
     return args
 
 
@@ -150,27 +166,32 @@ def main():
         sys.exit("--confirm-mdv64 needs the labels MDv64 and B")
     if args.confirm_dr and not {"DRv11", "B-GH"} <= set(runs):
         sys.exit("--confirm-dr needs the labels DRv11 and B-GH")
+    if args.confirm_final and not {"MDv64-local", "B", "MDv64"} <= set(runs):
+        sys.exit("--confirm-final needs the labels MDv64-local, B and MDv64")
     groups = [("main", MAIN), ("exploratory", EXPLORATORY), ("second pass", SECOND_PASS), ("position", POSITION)]
     if args.confirm_mdv64:
         groups.append(("confirm-mdv64", CONFIRM_MDV64))
     groups.append(("deep-replace", DEEP_REPLACE))  # appended last: a fresh RNG per pair, earlier pairs unchanged
     if args.confirm_dr:
         groups.append(("confirm-dr", CONFIRM_DR))
-    ablation = bool(set(ABLATION64_LABELS) & set(runs))
+    ablation = bool(set(ABLATION64_LABELS) & set(runs)) and not args.confirm_final
     if ablation:
         if args.split != "val":
             sys.exit("ablation64 (night 8) is pre-registered on validation only")
         groups.append(("ablation64", ABLATION64))  # appended last: a fresh RNG per pair, earlier pairs unchanged
-    conv64 = bool(set(CONV64_LABELS) & set(runs))
+    conv64 = bool(set(CONV64_LABELS) & set(runs)) and not args.confirm_final
     if conv64:
         if args.split != "val":
             sys.exit("conv64 (night 8b) is pre-registered on validation only")
         groups.append(("conv64", CONV64))  # appended last: a fresh RNG per pair, earlier pairs unchanged
-    ladder = bool(set(LADDER64_LABELS) & set(runs))
+    ladder = bool(set(LADDER64_LABELS) & set(runs)) and not args.confirm_final
     if ladder:
         if args.split != "val":
             sys.exit("ladder64 (night 9) is pre-registered on validation only")
         groups.append(("ladder64", LADDER64))  # appended last: a fresh RNG per pair, earlier pairs unchanged
+    if args.confirm_final:
+        groups.append(("confirm-final", CONFIRM_FINAL))  # appended last: a fresh RNG per pair
+        groups.append(("final-desc", FINAL_DESC))
     t1_channels = AGG_MEDIAN_CHANNELS + (("vx",) if DR_LABELS & set(runs) else ())
     all_pairs = list(dict.fromkeys(pair for _, pairs in groups for pair in pairs))
     split_modes = {cfg.get("split", {}).get("split_mode", "random") for lst in runs.values() for _, _, cfg in lst}
@@ -384,6 +405,10 @@ def main():
         first = next(i for i, x in enumerate(md) if x.startswith("## CONFIRMATORY TEST") or
                      x == "## T1 Mean (std over seeds) per configuration")
         md[first:first] = confirm_dr_section(args, t2, rows_md, rows_b, t3d, t4d)
+    if args.confirm_final:
+        first = next(i for i, x in enumerate(md) if x.startswith("## CONFIRMATORY TEST") or
+                     x == "## T1 Mean (std over seeds) per configuration")
+        md[first:first] = confirm_final_section(args, t1, t2, rows_md, rows_b, t3d, t4d)
     (args.out_dir / "summary.md").write_text("\n".join(md) + "\n")
     print(f"Wrote {args.out_dir}/summary.md")
 
@@ -414,6 +439,44 @@ def confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d):
            "Wall band, vy MAE x1e-3:", "", av.md_table(desc_t3, list(desc_t3[0].keys())), "",
            "Divergence error:", "", av.md_table(desc_t4, list(desc_t4[0].keys())), ""]
     return out
+
+
+def confirm_final_section(args, t1, t2, rows_md, rows_b, t3d, t4d):
+    """Pre-registered decision of the final pass (docs/preregistration-final.md) on rel_vy of MDv64-local - B, then
+    the descriptive rows (MDv64-local - B and MDv64-local - MDv64); the decision is also printed to stdout."""
+    comp, comp_d = "MDv64-local - B", "MDv64-local - MDv64"
+    (r,) = [x for x in t2 if x["group"] == "confirm-final" and x["metric"] == CONFIRM_METRIC]
+    verdict = "CONFIRMED" if r["ci2_hi"] < 0 else "NOT CONFIRMED"
+    seeds = args._seeds
+    line = (f"{comp} {CONFIRM_METRIC}: {100 * r['mean_diff']:+.4f} points, two-level 95 % CI "
+            f"[{100 * r['ci2_lo']:+.4f}, {100 * r['ci2_hi']:+.4f}] ({CONFIRM_N_BOOT} repetitions, seed "
+            f"{CONFIRM_BOOT_SEED}); seeds MDv64-local {seeds['MDv64-local']}, B {seeds['B']}; split {args.split}")
+    (rd,) = [x for x in t2 if x["group"] == "final-desc" and x["metric"] == CONFIRM_METRIC]
+    line_d = (f"{comp_d} {CONFIRM_METRIC}: {100 * rd['mean_diff']:+.4f} points, two-level 95 % CI "
+              f"[{100 * rd['ci2_lo']:+.4f}, {100 * rd['ci2_hi']:+.4f}]; seeds MDv64 {seeds['MDv64']}")
+    not_test = "" if args.split == "test" else "\nNOT THE TEST SET: functional check only, no decision."
+    banner = "=" * 100
+    print(f"\n{banner}\nFINAL CONFIRMATORY TEST MDv64-local vs B (pre-registered, commit {CONFIRM_FINAL_PREREG}): "
+          f"**{verdict}**\n{line}\nRule: CONFIRMED only if the upper bound of the interval is < 0.{not_test}\n"
+          f"Descriptive (no decision): {line_d}\n{banner}\n")
+    t1v = [{k: x[k] for k in ("config", "seeds", "rel_vy", "agg_rel_vy", "median_rel_vy", "rel_all", "rel_p")}
+           for x in t1 if x["config"] in ("B", "MDv64", "MDv64-local")]
+    desc_t2 = [x for x in rows_md if x["group"] == "confirm-final"]
+    desc_t2b = [x for x in rows_b if x["group"] == "confirm-final"]
+    d_t2 = [x for x in rows_md if x["group"] == "final-desc"]
+    d_t2b = [x for x in rows_b if x["group"] == "final-desc"]
+    desc_t3 = [x for x in t3d if x["comparison"] in (comp, comp_d) and x["region"] == "wall" and x["channel"] == "vy"]
+    desc_t4 = [x for x in t4d if x["comparison"] in (comp, comp_d)]
+    tbl = lambda rows: av.md_table(rows, list(rows[0].keys()))
+    return [f"## CONFIRMATORY TEST (final pass): MDv64-local vs B on rel_vy (pre-registered, commit "
+            f"{CONFIRM_FINAL_PREREG}, docs/preregistration-final.md) — **{verdict}**", "",
+            f"**{line}.** Rule: CONFIRMED only if the upper bound of the two-level 95 % interval is < 0; no other metric "
+            "decides." + ("" if args.split == "test" else " **Not the test set: functional check only, no decision.**"),
+            "", "Per configuration (mean (std) over seeds, %):", "", tbl(t1v), "",
+            "Descriptive only (no decision), MDv64-local - B:", "", tbl(desc_t2), "", tbl(desc_t2b), "",
+            f"Descriptive only (no decision), {comp_d} (does the SSM add anything?): **{line_d}**. An interval "
+            "including 0 does not demonstrate equality.", "", tbl(d_t2), "", tbl(d_t2b), "",
+            "Wall band, vy MAE x1e-3:", "", tbl(desc_t3), "", "Divergence error:", "", tbl(desc_t4), ""]
 
 
 def ablation64_section(args, t1, rows_md, rows_b, t3d, t4d, group="ablation64", pairs=ABLATION64,
