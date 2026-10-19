@@ -16,7 +16,8 @@ MODE="${MODE:-gcloud}"
 DEST="${DEST:-$HOME/runs/bigdata-vm}"
 REMOTE_CMD='cd ~ && tar czf bigdata-results.tgz --ignore-failed-read runs/bigdata runs/bigdata-smoke setup_vm.log \
 pip-freeze-vm.txt pip-freeze-diff.txt data/dfp_full/data_full.tar.gz.sha256 data/dfp_full/archive_listing.txt \
-data/dfp_full/archive_test_names.txt && ls -l bigdata-results.tgz && sha256sum bigdata-results.tgz'
+data/dfp_full/archive_test_names.txt fingerprint-vm.txt fingerprint-vm.npz \
+fingerprint-compare.txt && ls -l bigdata-results.tgz && sha256sum bigdata-results.tgz'
 mkdir -p "$DEST"
 
 case "$MODE" in

@@ -1,0 +1,41 @@
+# Cloud VM (2026-10-19): header, model and sweep lines of `scripts/cloud/fingerprint_report.py --all --sweep --npz
+# ~/fingerprint-vm.npz` at e79d271, and the output of `--compare docs/results/fingerprint-laptop.txt
+# ~/fingerprint-vm.txt --npz-a docs/results/fingerprint-laptop.npz --npz-b ~/fingerprint-vm.npz`, as sent back from the
+# VM (home path replaced by ~). The full per-tensor file and the npz stay on the VM and come back with sync_results.sh.
+H cpu_model Intel(R) Xeon(R) CPU @ 2.20GHz
+H cpu_flags sse4_2 avx avx2 fma avx512f avx512dq avx512bw avx512vl
+H nproc 8 torch_threads 4
+H python 3.12.15 torch 2.10.0+cu128 aten_cpu_capability AVX512 ATEN_CPU_CAPABILITY_env ''
+H mamba_ssm 2.3.2.post1 path ~/miniforge3/envs/mdf/lib/python3.12/site-packages/mamba_ssm sources_sha256 6413ed6ed08993e8
+H repo_commit e79d271
+M MD8 fingerprint e6d9a28f8ef594f2 expected 8af23666a0e08dad DIFFERS
+M MDv8 fingerprint 5c1121f8f8410e47 expected 757cec5dc1e9167e DIFFERS
+M MDv64 fingerprint da6c96525e36812b expected f8ec7c0afa06678a DIFFERS
+M MD32 fingerprint dbd6c892a92ceb1d expected 3b708347e0852f60 DIFFERS
+M MDv32 fingerprint 71864d787ed0dd4b expected c6b2eb19bf154401 DIFFERS
+M MD64 fingerprint 897fcd93806c3d85 expected b4c347cf5ae590b7 DIFFERS
+H npz ~/fingerprint-vm.npz (72 block tensors)
+S requested default: DEFAULT MD8:6b55a9832d9cf1f7 MDv8:e3f079992b920b32 MDv64:456f5900ca621788 MD32:539ff4e52a01baae MDv32:f3a59f3a6f66e013 MD64:19596cc5aa1147d4
+S requested avx2: AVX2 MD8:e6d9a28f8ef594f2 MDv8:5c1121f8f8410e47 MDv64:da6c96525e36812b MD32:dbd6c892a92ceb1d MDv32:71864d787ed0dd4b MD64:897fcd93806c3d85
+S requested avx512: AVX512 MD8:e6d9a28f8ef594f2 MDv8:5c1121f8f8410e47 MDv64:da6c96525e36812b MD32:dbd6c892a92ceb1d MDv32:71864d787ed0dd4b MD64:897fcd93806c3d85
+
+# --compare (A = laptop, B = VM)
+mamba_ssm Python sources identical: True (6413ed6ed08993e8 vs 6413ed6ed08993e8)
+15 of 570 tensors differ (hash):
+  MD8    mixer.mamba.A_log                                   256x16  sum rel diff 3.89e-09  max|x| 2.77259 / 2.77259  elements differing 256/4096  max|a-b| 1.19e-07 (4.30e-08 of max|x|)  max ULP 1 (large near 0)
+  MD8    mixer.mamba.dt_proj.bias                               256  sum rel diff 0.00e+00  max|x| 6.86774 / 6.86774  elements differing 4/256  max|a-b| 4.77e-07 (6.94e-08 of max|x|)  max ULP 1 (large near 0)
+  MDv8   mixer.dt_projs_bias                                  4x256  sum rel diff 5.04e-11  max|x| 6.88607 / 6.88607  elements differing 21/1024  max|a-b| 4.77e-07 (6.92e-08 of max|x|)  max ULP 1 (large near 0)
+  MDv8   mixer.A_logs                                       1024x16  sum rel diff 3.89e-09  max|x| 2.77259 / 2.77259  elements differing 1024/16384  max|a-b| 1.19e-07 (4.30e-08 of max|x|)  max ULP 1 (large near 0)
+  MDv8   mixer.in_proj.weight                               512x128  sum rel diff 1.85e-07  max|x| 0.0814044 / 0.0814044  elements differing 473/65536  max|a-b| 3.73e-09 (4.58e-08 of max|x|)  max ULP 2 (large near 0)
+  MDv64  mixer.dt_projs_bias                                   4x64  sum rel diff 4.08e-10  max|x| 6.89988 / 6.89988  elements differing 3/256  max|a-b| 4.77e-07 (6.91e-08 of max|x|)  max ULP 1 (large near 0)
+  MDv64  mixer.A_logs                                        256x16  sum rel diff 3.89e-09  max|x| 2.77259 / 2.77259  elements differing 256/4096  max|a-b| 1.19e-07 (4.30e-08 of max|x|)  max ULP 1 (large near 0)
+  MDv64  mixer.in_proj.weight                                128x32  sum rel diff 6.74e-09  max|x| 0.0737119 / 0.0737119  elements differing 22/4096  max|a-b| 3.73e-09 (5.05e-08 of max|x|)  max ULP 1 (large near 0)
+  MD32   mixer.mamba.A_log                                   128x16  sum rel diff 3.89e-09  max|x| 2.77259 / 2.77259  elements differing 128/2048  max|a-b| 1.19e-07 (4.30e-08 of max|x|)  max ULP 1 (large near 0)
+  MD32   mixer.mamba.dt_proj.bias                               128  sum rel diff 1.63e-09  max|x| 6.90286 / 6.90286  elements differing 3/128  max|a-b| 4.77e-07 (6.91e-08 of max|x|)  max ULP 1 (large near 0)
+  MDv32  mixer.dt_projs_bias                                  4x128  sum rel diff 3.07e-10  max|x| 6.90586 / 6.90586  elements differing 16/512  max|a-b| 4.77e-07 (6.90e-08 of max|x|)  max ULP 1 (large near 0)
+  MDv32  mixer.A_logs                                        512x16  sum rel diff 3.89e-09  max|x| 2.77259 / 2.77259  elements differing 512/8192  max|a-b| 1.19e-07 (4.30e-08 of max|x|)  max ULP 1 (large near 0)
+  MDv32  mixer.in_proj.weight                                256x64  sum rel diff 4.97e-09  max|x| 0.0783023 / 0.0783023  elements differing 118/16384  max|a-b| 3.73e-09 (4.76e-08 of max|x|)  max ULP 2 (large near 0)
+  MD64   mixer.mamba.A_log                                    64x16  sum rel diff 3.89e-09  max|x| 2.77259 / 2.77259  elements differing 64/1024  max|a-b| 1.19e-07 (4.30e-08 of max|x|)  max ULP 1 (large near 0)
+  MD64   mixer.mamba.dt_proj.bias                                64  sum rel diff 2.46e-09  max|x| 6.6549 / 6.6549  elements differing 2/64  max|a-b| 4.77e-07 (7.17e-08 of max|x|)  max ULP 1 (large near 0)
+
+Summary: 15 differing tensors, 15 in the block (mixer.*), 0 in the B skeleton: ['mixer.A_logs', 'mixer.dt_projs_bias', 'mixer.in_proj.weight', 'mixer.mamba.A_log', 'mixer.mamba.dt_proj.bias']

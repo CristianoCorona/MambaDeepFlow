@@ -4023,3 +4023,42 @@ docs/results/fingerprint-laptop.txt` at `74a1ba6` (laptop, CPU only for the init
 **Open questions.** VM output. A setup_vm.sh change that deselects only the six MD / MDv fingerprint cases is
 prepared outside the repo and not applied; it is applied (with a notebook entry) only if the comparison confirms the
 hypothesis.
+
+## 2026-10-19 Fingerprint diagnosis: VM output, hypothesis confirmed; the six MD / MDv fingerprint cases deselected on the VM
+
+**Context / why.** VM output of `scripts/cloud/fingerprint_report.py` (previous two entries) and its comparison with the
+laptop. Pre-agreed rule: deselect the test on the VM only if (1) the mamba_ssm sources are identical, (2) only block
+tensors initialised with transcendental functions differ, (3) by about the last bit.
+
+**Evidence** (`docs/results/fingerprint-vm-summary.txt`: header, fingerprints, sweep and the full `--compare` output).
+- VM: Intel Xeon @ 2.20GHz (avx2, avx512f/dq/bw/vl), ATen CPU capability AVX512, 4 torch threads, mamba_ssm
+  2.3.2.post1, **sources hash 6413ed6ed08993e8 = laptop** (1).
+- 15 of 570 tensors differ, **0 in the B skeleton** (B, B-large, CBAM8, SA8, SA32 fingerprints already matched), all in
+  the blocks and all from transcendental functions (2): `A_log` / `A_logs` (log(1..16)), `dt_proj.bias` /
+  `dt_projs_bias` (exp, log, expm1: inverse softplus), MDv `in_proj.weight` (trunc_normal_, i.e. erfinv). Not
+  differing: `x_proj`, `dt_proj.weight`, `conv1d`, `conv2d`, `D`, norms (uniform_ or constants).
+- Size (3): max 1-2 ULP; max |a - b| 1.2e-7 (A_log), 4.8e-7 (dt bias, values ~6.9), 3.7e-9 (in_proj); 4e-8 to 7e-8 of
+  max |x|; 2-21 elements per dt-bias tensor, 22-473 per in_proj. In A_log only log(7) differs (every row): the laptop
+  float32 value 1.9459102 is 1 ULP above the correctly rounded 1.9459101 (float64 log rounded to float32), so the VM
+  most likely has the correctly rounded value.
+- Sweep: on the VM avx2 and avx512 give the same (VM) fingerprints, `default` other values; on the laptop avx2 and
+  avx512 give the laptop ones. So the difference is not the choice of instruction set inside torch but the CPU
+  (AMD laptop vs Intel VM), e.g. a vendor-dependent code path of the vectorised math library; not established further.
+- `pip freeze` on the VM vs `environment/pip-freeze.txt`: only `packaging` (conda build path instead of the version
+  pin; the documented edit of the file) and the file's header lines.
+
+**Decision.** Hypothesis confirmed on all three conditions: the prepared change (`~/runs/setup_vm-fingerprint-deselect
+.patch`, unchanged) is applied to `scripts/cloud/setup_vm.sh`: on the VM step 8 deselects
+`tests/test_multilevel.py::test_existing_variants_unchanged[key4, key5, key7, key8, key9, key10]` (MD8, MDv8, MD32,
+MDv32, MDv64, MD64) and prints a NOTE line that declares it; B, B-large, CBAM8, SA8, SA32 stay checked. The test itself
+and the expected values are unchanged; on the laptop the full suite still runs it. `sync_results.sh` also brings back
+`~/fingerprint-vm.{txt,npz}` and `~/fingerprint-compare.txt`.
+Alternatives considered: a tolerance in the test - rejected, it would weaken the laptop check that guards the earlier
+runs; regenerating the expected values on the VM - rejected, the reference is the laptop where all runs so far were made.
+
+**Consequence for the experiment.** Seeded initial weights on the VM differ from the laptop's in the last bit of a few
+block parameters; all big-dataset runs are made on the VM with the same seeds for all models, and the reduced-set
+reference runs were never meant to be bit-identical (GPU training is not deterministic). No effect on the
+pre-registered comparisons; stated for completeness.
+
+**Open questions.** None; next on the VM: `git pull`, `scripts/cloud/setup_vm.sh` (repeats only the checks and tests).
