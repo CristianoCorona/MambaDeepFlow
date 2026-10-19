@@ -108,6 +108,7 @@ venv.bak/
 # Local data (symlinks to ~/data/dfp), never committed
 data/train
 data/test
+data/train_full
 
 # Outputs of train/runTrain.py and train/runTest.py
 train/modelG*

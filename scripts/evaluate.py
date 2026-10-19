@@ -130,6 +130,13 @@ def main():
         print(f"Seen-shape validation of split {split_mode} ({len(ds)} samples)")
         if cfg["split"].get("val_seen_files_sha256") != mdata.file_list_sha256(ds.files):
             sys.exit("Seen-shape validation differs from the one recorded in config.json")
+    elif cfg.get("split", {}).get("split_mode") == mdata.GROUPED_FULL:
+        # full 53.8k set (docs/preregistration-bigdata.md): same subdirectories as in training
+        split_mode, fold = mdata.GROUPED_FULL, None
+        ds = mdata.load_val_full(subdirs=cfg["split"]["full_subdirs"])
+        print(f"Validation split: {split_mode}, subdirs {cfg['split']['full_subdirs']} ({len(ds)} samples)")
+        if cfg["split"]["val_files_sha256"] != mdata.file_list_sha256(ds.files):
+            sys.exit("Validation split differs from the one recorded in config.json")
     else:
         # split of the run (config.json); runs from before the grouped split have no split_mode: random
         split_mode = cfg.get("split", {}).get("split_mode", "random") if cfg else "grouped"

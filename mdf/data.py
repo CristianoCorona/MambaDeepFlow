@@ -10,6 +10,7 @@ Deviations from the original are declared in docs/lab-notebook.md (D1, D2, D8).
 
 import hashlib
 import math
+import os
 import random
 from pathlib import Path
 
@@ -356,3 +357,146 @@ def load_val_seen(train_dir=TRAIN_DIR, split_seed=SPLIT_SEED, split_file=None):
 
 def load_test(test_dir=TEST_DIR):
     return FlowDataset(test_dir, list_files(test_dir))
+
+
+# --- Full dataset, split mode "grouped-full" (docs/lab-notebook.md, 2026-10-19; docs/preregistration-bigdata.md) ---
+# data_full.tar.gz (README of thunil/Deep-Flow-Prediction) unpacks to data/test/ (the same 90 files as the 6.4k set)
+# and data/train/<subdir>/<name>.npz with subdirs reg/ (regular airfoils, dataGen.py naming), shear/ (sheared airfoils:
+# shearAirfoils.py appends "_<int(shear*1000)>" to the airfoil name) and sup/ (superimposed; naming unknown, not used).
+# data/train_full is a symlink to the unpacked data/train/ (only on the cloud VM); the test set is never unpacked there.
+FULL_DIR = REPO_ROOT / "data" / "train_full"
+GROUPED_FULL = "grouped-full"
+FULL_SUBDIRS_DEFAULT = ("reg", "shear")
+FULL_SUBDIRS_KNOWN = ("reg", "shear", "sup")
+TEST_PROFILES_FILE = SPLITS_DIR / "test_profiles.txt"
+
+
+def full_subdirs(value=None):
+    """Subdirectories of the full set used for training / validation: value, else $MDF_FULL_SUBDIRS, else reg,shear.
+
+    The environment variable is the declared fallback of the pre-registration (e.g. "reg" if the shear names do not
+    parse); the value used is stored in config.json and reused by evaluate.py."""
+    text = value if value is not None else os.environ.get("MDF_FULL_SUBDIRS", ",".join(FULL_SUBDIRS_DEFAULT))
+    subs = tuple(s for s in text.split(",") if s)
+    if not subs or any(s not in FULL_SUBDIRS_KNOWN for s in subs) or len(set(subs)) != len(subs):
+        raise ValueError(f"bad full-set subdirs {text!r}; known: {FULL_SUBDIRS_KNOWN}")
+    return subs
+
+
+def list_files_full(directory, subdirs):
+    """Sorted relative paths "<subdir>/<name>.npz" of the given subdirectories (a missing subdirectory counts as
+    empty). Other entries of the directory are ignored here; scripts/cloud/inspect_full.py reports them."""
+    out = []
+    for sub in subdirs:
+        d = Path(directory) / sub
+        if d.is_dir():
+            out += [f"{sub}/{n}" for n in list_files(d)]
+    return sorted(out)
+
+
+def profile_full(relpath):
+    """Base airfoil profile of a full-set file "<subdir>/<name>.npz".
+
+    reg:   "<airfoil>_<fsX>_<fsY>.npz"          -> <airfoil>  (as profile(); the airfoil may contain underscores)
+    shear: "<airfoil>_<shear>_<fsX>_<fsY>.npz"  -> <airfoil>  (the sheared shape of <airfoil>, same group)
+    The subdirectory decides the rule, so a regular airfoil whose own name ends in "_<int>" (e.g. "hybrid_1") is not
+    mistaken for a sheared one. Any other subdirectory or a name that does not parse raises ValueError."""
+    sub, _, name = relpath.partition("/")
+    if not name.endswith(".npz") or "/" in name:
+        raise ValueError(f"unexpected full-set path {relpath!r}")
+    if sub == "reg":
+        try:
+            return profile(name)
+        except ValueError:
+            raise ValueError(f"reg name does not parse: {relpath!r}") from None
+    if sub == "shear":
+        parts = name[:-len(".npz")].rsplit("_", 3)
+        try:
+            if len(parts) != 4 or not parts[0]:
+                raise ValueError
+            int(parts[1]), int(parts[2]), int(parts[3])
+        except ValueError:
+            raise ValueError(f"shear name does not parse: {relpath!r}") from None
+        return parts[0]
+    raise ValueError(f"no profile rule for subdirectory {sub!r} ({relpath!r})")
+
+
+def grouped_val_profiles(split_seed=SPLIT_SEED):
+    """Profiles of the committed grouped validation (splits/val_grouped_seed0.txt): 85 profiles."""
+    return sorted({profile(f) for f in read_split_file(split_file_path("grouped", split_seed))})
+
+
+def profiles_of_test():
+    """Profiles of the 30 test airfoils (splits/test_profiles.txt, from the test file names only)."""
+    return read_split_file(TEST_PROFILES_FILE)
+
+
+def split_files_grouped_full(files, val_profiles, test_profiles_):
+    """(train, val, excluded) of the full set, all sorted. val = every file whose profile is a validation profile;
+    excluded = every file whose profile is a test profile (never used); train = all others."""
+    val_p, test_p = set(val_profiles), set(test_profiles_)
+    if val_p & test_p:
+        raise ValueError(f"validation and test profiles overlap: {sorted(val_p & test_p)}")
+    train, val, excluded = [], [], []
+    for f in sorted(files):
+        p = profile_full(f)
+        (val if p in val_p else excluded if p in test_p else train).append(f)
+    return train, val, excluded
+
+
+def load_train_val_full(full_dir=FULL_DIR, subdirs=None, split_seed=SPLIT_SEED, train_fraction=None,
+                        subset_seed=None):
+    """(train_ds, val_ds, split_info) of split mode grouped-full. train_fraction / subset_seed as load_train_val (per
+    base profile; only for the short cloud check, scripts/cloud/smoke_test.sh)."""
+    subs = full_subdirs(None if subdirs is None else ",".join(subdirs))
+    all_files = list_files_full(full_dir, subs)
+    if not all_files:
+        raise FileNotFoundError(f"no .npz files under {full_dir}/{{{','.join(subs)}}}")
+    val_p, test_p = grouped_val_profiles(split_seed), profiles_of_test()
+    train_files, val_files, excluded = split_files_grouped_full(all_files, val_p, test_p)
+    n_train_full = len(train_files)
+    if train_fraction is not None:
+        if subset_seed is None:
+            raise ValueError("train_fraction needs subset_seed")
+        by_profile = {}
+        for f in train_files:
+            by_profile.setdefault(profile_full(f), []).append(f)
+        keep = []
+        for p, fs in sorted(by_profile.items()):
+            perm = list(fs)
+            random.Random(f"{subset_seed}:{p}").shuffle(perm)
+            keep += perm[:max(1, math.floor(train_fraction * len(fs) + 0.5))]
+        train_files = sorted(keep)
+    found_val_p = {profile_full(f) for f in val_files}
+    info = {
+        "split_mode": GROUPED_FULL,
+        "split_seed": split_seed,
+        "full_dir": str(full_dir),
+        "full_subdirs": list(subs),
+        "n_files": len(all_files),
+        "n_files_per_subdir": {s: sum(f.startswith(s + "/") for f in all_files) for s in subs},
+        "n_train": len(train_files),
+        "n_val": len(val_files),
+        "n_excluded_test_profiles": len(excluded),
+        "val_files_sha256": file_list_sha256(val_files),
+        "train_files_sha256": file_list_sha256(train_files),
+        "split_file": None,
+        "val_profiles_source": str(split_file_path("grouped", split_seed).relative_to(REPO_ROOT)),
+        "test_profiles_source": str(TEST_PROFILES_FILE.relative_to(REPO_ROOT)),
+        "n_train_profiles": len({profile_full(f) for f in train_files}),
+        "n_val_profiles": len(found_val_p),
+        "val_profiles_missing": sorted(set(val_p) - found_val_p),
+    }
+    if train_fraction is not None:
+        info.update({"train_fraction": train_fraction, "subset_seed": subset_seed, "n_train_full": n_train_full,
+                     "subset_rule": "per base profile k = max(1, floor(f*n + 0.5)), first k of random.Random("
+                                    "f'{seed}:{profile}') permutation of the sorted files"})
+    return FlowDataset(full_dir, train_files), FlowDataset(full_dir, val_files), info
+
+
+def load_val_full(full_dir=FULL_DIR, subdirs=None, split_seed=SPLIT_SEED):
+    """Validation set of grouped-full (all files of the 85 grouped validation profiles in the used subdirs)."""
+    subs = full_subdirs(None if subdirs is None else ",".join(subdirs))
+    _, val_files, _ = split_files_grouped_full(list_files_full(full_dir, subs), grouped_val_profiles(split_seed),
+                                               profiles_of_test())
+    return FlowDataset(full_dir, val_files)

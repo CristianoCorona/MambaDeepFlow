@@ -3856,3 +3856,78 @@ block is not demonstrated in either direction. No further test pass of any model
 
 **Open questions.** None for the test set (closed). Other models (SA64, ladder, Conv64, MDv64-dec, MDv16) stay
 validation-only.
+
+## 2026-10-19 Branch big-dataset: full data set, split grouped-full and cloud package (no long run)
+
+**Context / why.** The main experiments and the test set are closed (final test pass, `4859a04`). One last
+exploratory experiment, for the report (26/10), validation only: does the rel_vy gain of the block at 64x64
+(MDv64-local, and MDv64) over B remain with the full data set (53.8k samples instead of 6.4k)? The full set does not fit
+the laptop RAM with the in-memory loader, so training runs on a Google Cloud VM with one NVIDIA L4 (50 USD of credits).
+This session only prepares files; nothing contacted Google Cloud and the full set was not downloaded.
+
+**Decision / action.**
+- Tag `final-results-2026-10-18` (annotated, on `4859a04`: state of the report results) and branch `big-dataset` from
+  it, both pushed. All further work happens on `big-dataset`, so the report state stays untouched on
+  `train-infrastruct`. Alternative considered: continue on `train-infrastruct` - rejected, the tag alone would not
+  keep later commits apart from the report state.
+- Full data set (README of thunil/Deep-Flow-Prediction): "Full data set with 53.8k samples plus test data (10GB)",
+  `https://dataserv.ub.tum.de/s/m1459172/download?path=%2F&files=data_full.tar.gz` (mediaTUM share m1459172).
+  Checked without downloading it: the server answers range requests (`Content-Range: bytes 0-1048575/10961766491`,
+  so 10 961 766 491 bytes); only the first 40 MiB were fetched (scratch, deleted) and listed.
+  Layout seen there: `data/test/` (90 `.npz`, **the same 90 names** as the local `data/test`, compared by name only),
+  then `data/train/sup/` (directory entry, no file follows it), then `data/train/reg/*.npz` (116 names in the first
+  40 MiB, 27 of them in the 6.4k set: the 6.4k set looks like a subset of `reg/`). The rest (e.g. `data/train/shear/`,
+  counts per subdirectory) is checked on the VM (`get_full_data.sh` lists the whole archive). No checksum is
+  published; the sha256 is computed on the VM.
+- Naming (repo code): `data/dataGen.py` saves `<airfoil>_<int(100 fsX)>_<int(100 fsY)>.npz`; `data/shearAirfoils.py`
+  writes the sheared airfoil as `<airfoil>_<int(1000 shear)>`, so a sheared sample is
+  `<airfoil>_<shear>_<fsX>_<fsY>.npz`. `train/dataset.py` (dataProp) reads the subdirectories `reg/`, `sup/`, `shear/`.
+  The 6.4k set has a regular airfoil whose own name ends in `_<int>` (`hybrid_1`), so the rule must come from the
+  subdirectory, not from the number of underscores: `mdf.data.profile_full` = `profile()` in `reg/`, `rsplit("_", 3)[0]`
+  in `shear/` (the sheared shape is grouped with its base airfoil, so it follows that airfoil into validation or out of
+  training); any other subdirectory or unparsable name raises. `sup/` (superimposed airfoils, naming unknown, no
+  generator in the repo) is not used; the declared fallback if `shear/` names do not parse is `MDF_FULL_SUBDIRS=reg`.
+- Split mode **grouped-full** (`mdf/data.py`, additive; `scripts/train.py` / `scripts/evaluate.py` get one branch each,
+  taken only for this mode): data in `data/train_full` (symlink, VM only, gitignored); validation = every file of the 85
+  profiles of `splits/val_grouped_seed0.txt` (both subdirectories); every file of the 30 test profiles
+  (`splits/test_profiles.txt`, new, from the local test file names only) is excluded; training = all the rest. No
+  committed validation list is possible before the download: the val / train sha256 are stored in each config.json and
+  every later step checks them. `ALL_SPLIT_MODES` and the existing split files are unchanged.
+- RAM: the loader keeps 393 216 bytes per sample (float32 inputs + targets, measured with `load_raw` on a real file);
+  the 6.4k runs peaked at 3 817 MiB RSS (`night1/ep133_s0`; 2 400 MiB of arrays, so ~1.4 GiB overhead). For at most
+  53 800 samples: 19.7 GiB + 1.4 GiB = ~21 GiB per training process. Recommended VM: g2-standard-8 (1 L4, 32 GB RAM,
+  ~8 GiB margin); fallback g2-standard-12 (48 GB) if the RAM check on the VM exceeds ~26 GiB.
+- Cloud package `scripts/cloud/`: `setup_vm.sh` (same env as `docs/setup-log.md`: Python 3.12 conda-forge,
+  `environment/pip-freeze.txt` with torch 2.10.0+cu128 and the sha256-pinned mamba-ssm / causal-conv1d wheels,
+  version checks, `check_env.py`, unit tests without data), `get_full_data.sh` (resumable download, size check, full
+  listing, path checks, sha256, unpacks `data/train` only), `inspect_full.py` (names, profiles, validation / test
+  profiles, split sizes, optional RAM measurement), `smoke_test.sh` + `estimate_budget.py` (short runs of B,
+  MDv64-local and MDv64; MDv64 added to the session plan's B + MDv64-local because the budget rule needs its it/s),
+  `queues/bigdata.txt`, `launch_bigdata.sh` (tmux, absolute cutoff, STOP file, est= from the smoke test in an effective
+  queue copy, then `post_bigdata.py` and automatic power-off), `post_bigdata.py` (wall band, divergence, verification 5a
+  on the VM, so the laptop needs no data), `sync_results.sh`; guide `docs/cloud-guide.md`. Analysis
+  `scripts/bigdata_analysis.py` (validation; from eval CSVs and the post-processing files).
+
+**Evidence.**
+- `git show final-results-2026-10-18`: tag on `4859a04`; `origin/big-dataset` created.
+- Test profiles: 30 (90 test files); 85 grouped validation profiles; no overlap.
+- `tests/test_grouped_full.py` (11 tests, synthetic lists + synthetic `.npz`): parts disjoint by profile and covering,
+  validation profiles = the 85 grouped ones (from `reg/` and `shear/`), no test profile in train / validation,
+  `hybrid_1` / `davis_corrected` parsed correctly, committed split files byte-identical (sha256 of all 8 files), the
+  existing split modes give the same train / val hashes as `tests/test_holdout.py`. `tests/test_bigdata_analysis.py`
+  (4 tests): a planted effect is recovered with the right sign, missing runs declared, mismatched file order and wrong
+  split mode refused. Full suite: **222 passed, 6 skipped** (was 207 + 6 on 18/10).
+- Existing paths unchanged: `evaluate.py --split val` on `night8a/MDv64-local_s0` into scratch: 402 samples, same order,
+  max |rel_vy - committed eval CSV| 3.0e-8 (GPU rounding).
+- Local end-to-end check on a fake full set (scratch: `reg/` = symlinks to the 6 400 files, `shear/` = 1 600 of them
+  renamed with a random shear suffix, empty `sup/`; `data/train_full` pointed there): `inspect_full.py` OK (val 498
+  files / 85 profiles, 0 test files, loader peak RSS 3.4 GiB for 8 000 samples without CUDA); `smoke_test.sh`
+  (RTX 4060, 600 steps): B 98.7 it/s, MDv64-local 68.2, MDv64 24.5 (lower than the 133-epoch means 115 / 73.5 / 30.7:
+  warm-up in a short run, so the estimates are conservative); evaluation, `estimate_budget.py`, `post_bigdata.py`
+  (incl. 5a; skips processed runs; refuses runs whose training files differ) and `bigdata_analysis.py` ran.
+  `get_full_data.sh` on a small fake archive (`file://` URL): size check, listing, sha256, `data/train` only unpacked,
+  counts per subdirectory equal, refusals on wrong size and on too little disk. None of these numbers is a result.
+
+**Open questions.** On the VM: number of files in `reg/`, `shear/`, `sup/`; whether all `shear/` names parse; whether
+any test profile occurs in the full training data (it is excluded either way); the real RAM peak and it/s on the L4.
+Pre-registration next, before any long run.
