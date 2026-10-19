@@ -3956,3 +3956,25 @@ rel_vy gain of MDv64-local (and MDv64) over B on the reduced set remain with the
 descends from the commit that added the pre-registration file and the file is unchanged since.
 
 **Open questions.** File counts per subdirectory, RAM and it/s on the VM (smoke test). The hourly price (console).
+
+## 2026-10-19 Big-dataset: launcher and sync checked locally after the pre-registration; executable bit of sync_results.sh
+
+**Context / why.** `launch_bigdata.sh` needs the committed pre-registration (`b78e4ec`), so it could only be tried
+after it. No change to training, evaluation, split or analysis code.
+
+**Action.** `scripts/cloud/sync_results.sh` was committed without the executable bit (`100644`, `8bbefbb`); set to
+`100755` like the other scripts. Launcher and sync tried on the laptop with the fake full set of the preparation entry.
+
+**Evidence.**
+- `launch_bigdata.sh` refusals: no `CUTOFF`; dirty tree; `MDF_FULL_SUBDIRS=reg` while the smoke test used `reg,shear`
+  (all exit 1, no tmux session). Launch at `b78e4ec` with a two-line scratch queue (B and MDv64-local, 50 steps,
+  `AUTO_SHUTDOWN=0`): pre-registration commit found (`b78e4ec`), effective queue written with est= from the smoke
+  `est.json` (22 / 31 min) and arguments checked equal, both runs trained and evaluated (498 validation samples, split
+  grouped-full), then `post_bigdata.py` ran and refused the 5a step because these subset runs do not use the full
+  training files (expected: the check compares the training-file hash), then the shutdown step was skipped as asked.
+- `sync_results.sh` in `MODE=ssh` with `ssh` / `rsync` replaced by local stand-ins and a fake VM home: tarball made
+  (missing optional files only warned), copied, sha256 equal on both sides, unpacked; 3 finished runs found;
+  `VM` missing in gcloud mode -> refused.
+- Local `data/train_full` symlink to the fake set removed.
+
+**Open questions.** None before the VM session.
