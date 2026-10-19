@@ -94,3 +94,27 @@ s0, s1, s2.**
 - The full set has ~8x more samples, and with 133 epochs ~8x more optimiser steps: data and compute grow together.
 - Throughput and therefore the run time on the L4 are only known after the short check; the number of MDv64 runs
   depends on the budget, not on any result.
+
+## Amendment 1 (2026-10-19): main validation = the `reg/` files of the 85 profiles
+
+Decided by the experimenter on **2026-10-19**, **before the queue was launched** and before any long run or any result
+on the full set exists; only the go / no-go checks of the short cloud check are known (`~/runs/bigdata-smoke/
+inspect.json` on the VM): `reg/` 26 722 files, `shear/` 27 108, `sup/` empty; grouped-full validation 3 056 files of the
+85 profiles (1 596 in `reg/`, 1 460 in `shear/`), validation sha256 `34b1f5f8...`; all 402 validation files of the
+reduced set are in `reg/` (402 of 402); training 50 774 files (26 722 + 27 108 − 3 056: no file of a test profile in
+the used subdirectories).
+
+Changes (everything not listed here is unchanged: split, training, configurations, seeds, queue order, budget rule,
+metrics, comparisons, bootstrap, qualitative reading):
+- **Main validation set: the 1 596 `reg/` files of the 85 validation profiles.** The reduced set's validation came
+  entirely from `reg/` (regular airfoils), so this subset is the comparable one. The main metric (rel_vy) and all
+  pre-registered comparisons (MDv64-local − B, MDv64 − B, MDv64-local − MDv64; two-level bootstrap over seeds and
+  profiles, 10 000 repetitions, seed 0) are read on it; the figure (reduced vs full) uses it.
+- **The 1 460 `shear/` files of the same profiles** (sheared shapes) are evaluated and reported separately, as
+  **descriptive** results only; the same comparisons on the whole 3 056-file validation are also reported as descriptive.
+- **Training unchanged: `reg/` + `shear/` (50 774 files)**, declared: compared with the reduced set it adds both flow
+  conditions (more `reg/` samples per airfoil) and deformed (sheared) shapes, so the two effects are not separated.
+- Implementation: no change to the training, the split or the evaluation runs; `evaluate.py` already records each
+  file as `<subdir>/<name>.npz`, so the subsets are taken from the per-sample files. The per-epoch validation loss in
+  `metrics.csv` stays on the whole 3 056-file validation (monitoring only; the final-epoch checkpoint is evaluated, no
+  selection). `post_bigdata.py` reports wall band, divergence and verification 5a for `reg/` and `shear/` separately.

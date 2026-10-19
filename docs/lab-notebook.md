@@ -4062,3 +4062,25 @@ reference runs were never meant to be bit-identical (GPU training is not determi
 pre-registered comparisons; stated for completeness.
 
 **Open questions.** None; next on the VM: `git pull`, `scripts/cloud/setup_vm.sh` (repeats only the checks and tests).
+
+## 2026-10-19 AMENDMENT 1 to the big-dataset pre-registration: main validation = reg/ files only
+
+**Context / why.** The short cloud check passed on the VM (`inspect.json`): `reg/` 26 722 files, `shear/` 27 108,
+`sup/` empty; grouped-full validation 3 056 files of the 85 profiles (1 596 `reg/` + 1 460 `shear/`), sha256
+`34b1f5f8...`; all 402 reduced-set validation files are in `reg/`; training 50 774 files. The reduced-set validation
+consisted only of regular airfoils, while 48 % of the full-set validation are sheared shapes. Decision of the
+experimenter, before the queue was launched and before any run or result on the full set.
+
+**Decision.** Amendment appended (dated) to `docs/preregistration-bigdata.md`: main validation = the 1 596 `reg/`
+files of the 85 profiles (rel_vy and all pre-registered comparisons; figure); the 1 460 `shear/` files and the whole
+3 056-file validation reported separately as descriptive; training unchanged (`reg/` + `shear/`, 50 774 files;
+declared: adds flow conditions and deformed shapes together); everything else unchanged.
+Alternatives considered: keep the whole validation as main - rejected, not comparable with the reduced set (no sheared
+shapes there); train on `reg/` only (`MDF_FULL_SUBDIRS=reg`) - rejected by the experimenter, the training set stays as
+pre-registered and the run cost is unchanged.
+
+**Evidence.** Numbers above from the VM `inspect.json` (as reported by the experimenter; the file comes back with
+`sync_results.sh`). No long run exists (`~/runs/bigdata` not created on the VM).
+
+**Open questions.** Implementation in the next commit (analysis and post-processing per subset; launcher accepts an
+appended amendment).
