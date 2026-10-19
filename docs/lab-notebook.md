@@ -3999,3 +3999,27 @@ tensors (sum difference, element-wise max difference, ULPs) and whether the mamb
 Alternatives considered: relax the test to a tolerance - rejected for now, the cause must be known first.
 
 **Evidence / open questions.** Next entry (laptop output). The VM output and the comparison are pending.
+
+## 2026-10-19 Fingerprint diagnosis: laptop output
+
+**Action.** `scripts/cloud/fingerprint_report.py --all --sweep --npz docs/results/fingerprint-laptop.npz >
+docs/results/fingerprint-laptop.txt` at `74a1ba6` (laptop, CPU only for the init).
+
+**Evidence.**
+- Header: AMD Ryzen 7 8845HS (avx2, fma, avx512f/dq/bw/vl/bf16), ATen CPU capability AVX512, 8 torch threads,
+  mamba_ssm 2.3.2.post1, sources hash 6413ed6ed08993e8. All six MD / MDv fingerprints MATCH the expected values.
+- Sweep: `ATEN_CPU_CAPABILITY=avx2` and `avx512` give the expected fingerprints; `default` (scalar kernels) gives six
+  other values (MD8 035e64151ae47976, ...), none equal to the VM values.
+- `--compare` of the laptop AVX512 report against the laptop `default` report (scratch, not committed): 212 of 570
+  tensors differ, **198 of them in the B skeleton** (kaiming-uniform conv weights: `uniform_` itself differs between
+  scalar and vectorised kernels, relative sum differences 1e-10 to 3e-5) and 14 in the blocks (in_proj, x_proj,
+  dt_proj weights, conv2d); max element difference 3e-8 to 6e-8 (~1e-7 of max |x|). So the scalar path is not a model
+  of the VM, where B, B-large, CBAM8, SA8, SA32 match: on the VM only Mamba-block tensors can differ.
+- What decides the hypothesis is the VM report: `--compare` must show differences only in block tensors initialised
+  with transcendental functions (MD: `mamba.dt_proj.bias`, possibly `mamba.A_log`; MDv: `dt_projs_bias`, `A_logs`,
+  `in_proj.weight` via trunc_normal_/erfinv), element differences of the order of the last bit (~1e-7 relative), and
+  identical mamba_ssm sources.
+
+**Open questions.** VM output. A setup_vm.sh change that deselects only the six MD / MDv fingerprint cases is
+prepared outside the repo and not applied; it is applied (with a notebook entry) only if the comparison confirms the
+hypothesis.
