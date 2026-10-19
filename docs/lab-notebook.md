@@ -3978,3 +3978,24 @@ after it. No change to training, evaluation, split or analysis code.
 - Local `data/train_full` symlink to the fake set removed.
 
 **Open questions.** None before the VM session.
+
+## 2026-10-19 VM: 6 fingerprint tests fail for the Mamba variants only; diagnostic script
+
+**Context / why.** On the cloud VM (NVIDIA L4, a different CPU from the laptop) `scripts/cloud/setup_vm.sh` built the
+environment correctly (torch 2.10.0+cu128, mamba_ssm 2.3.2.post1, causal_conv1d 1.7.0, CUDA kernels used), but
+`tests/test_multilevel.py::test_existing_variants_unchanged` fails for MD and MDv at 8, 32, 64 (the initial state
+dict, seed 0, CPU, hashed bit for bit). VM vs expected: MD8 e6d9a28f8ef594f2 (8af23666a0e08dad), MDv8 5c1121f8f8410e47
+(757cec5dc1e9167e), MD32 dbd6c892a92ceb1d (3b708347e0852f60), MDv32 71864d787ed0dd4b (c6b2eb19bf154401), MDv64
+da6c96525e36812b (f8ec7c0afa06678a), MD64 897fcd93806c3d85 (b4c347cf5ae590b7). Variants without Mamba pass.
+Hypothesis: the block initialisation uses transcendental functions (exp / log / expm1 for the dt bias and A_log,
+erfinv in trunc_normal_) whose vectorised CPU kernels can differ in the last bit between CPUs.
+
+**Action.** `scripts/cloud/fingerprint_report.py` (new; diagnosis only, no change to models or tests): for MD8, MDv8,
+MDv64 (`--all`: also MD32, MDv32, MD64), built as in the test, one line per tensor (short sha256, float64 sum, max |x|),
+the whole-model fingerprint vs the expected one, a header with CPU model and flags, torch, ATen CPU capability, threads,
+mamba_ssm version, path and a hash of its Python sources; `--npz` saves the block tensors; `--sweep` repeats the
+fingerprints with `ATEN_CPU_CAPABILITY` default / avx2 / avx512; `--compare A B [--npz-a --npz-b]` lists the differing
+tensors (sum difference, element-wise max difference, ULPs) and whether the mamba_ssm sources are identical.
+Alternatives considered: relax the test to a tolerance - rejected for now, the cause must be known first.
+
+**Evidence / open questions.** Next entry (laptop output). The VM output and the comparison are pending.
