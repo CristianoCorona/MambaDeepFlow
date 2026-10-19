@@ -6,8 +6,12 @@ grouped-full, eval_val.json present):
   post_val.npz         explore.run_inference on the grouped-full validation (batch 1, as evaluate.py): per-sample
                        rel / abs sums, region sums (wall band, wake, rest, interior), divergence errors (DIV_MAPPING),
                        plus files and base profiles (mdata.profile_full)
-  post_trainfit.json   verification 5a: train L1 and rel_* in eval() mode on the training part (train_fit.train_metrics,
-                       batch 10), val L1 from post_val.npz; skipped with --no-trainfit
+  post_trainfit.json   verification 5a: train L1 and rel_* in eval() mode on the training part (per-sample sums as
+                       train_fit.train_metrics, batch 10), val L1 from post_val.npz; each also for the reg/ and shear/
+                       files separately (keys *_reg, *_shear; Amendment 1, 2026-10-19: main validation = reg/);
+                       skipped with --no-trainfit
+post_val.npz keeps the file names ("<subdir>/<name>.npz"), so wall band and divergence are split by subdirectory in
+scripts/bigdata_analysis.py; post_val_subsets.json gives their means per subset (reg, shear, all) for a quick look.
 A run whose outputs exist with the same model.pt sha256 is skipped. The test set is not on the VM and never read.
 
 Usage:
@@ -27,8 +31,43 @@ import numpy as np
 import torch
 
 from mdf import data as mdata
-from mdf import explore, runinfo
-from train_fit import NPIX, train_metrics
+from mdf import explore, models, runinfo
+from train_fit import CH, NPIX
+
+FIT_VERSION = 2  # 2: per-subdirectory keys (Amendment 1)
+SUBSETS = {"all": "", "reg": "reg/", "shear": "shear/"}
+
+
+def train_sums(run_dir, inputs, targets, batch_size):
+    """Per-sample sum|o - t| and sum|t| per channel (n, 3), eval() mode, float64 (as train_fit.train_metrics)."""
+    cfg = json.loads((run_dir / "config.json").read_text())
+    net = models.build_from_cfg(models.model_cfg_from_run_config(cfg))
+    net.load_state_dict(torch.load(run_dir / "model.pt", map_location="cpu", weights_only=True))
+    net.cuda().eval()
+    n = inputs.shape[0]
+    err = torch.zeros(n, 3, dtype=torch.float64)
+    tot = torch.zeros(n, 3, dtype=torch.float64)
+    with torch.no_grad():
+        for s in range(0, n, batch_size):
+            t = targets[s:s + batch_size].cuda().double()
+            o = net(inputs[s:s + batch_size].cuda()).double()
+            err[s:s + batch_size] = (o - t).abs().sum(dim=(2, 3)).cpu()
+            tot[s:s + batch_size] = t.abs().sum(dim=(2, 3)).cpu()
+    return err.numpy(), tot.numpy()
+
+
+def fit_means(err, tot, mask, suffix):
+    """L1 and rel_* means over the samples in mask (train_fit.train_metrics definitions)."""
+    e, t = err[mask], tot[mask]
+    out = {f"L1{suffix}": float(np.mean(e.sum(1) / NPIX)), f"rel_all{suffix}": float(np.mean(e.sum(1) / t.sum(1))),
+           f"n{suffix}": int(mask.sum())}
+    for i, c in enumerate(CH):
+        out[f"rel_{c}{suffix}"] = float(np.mean(e[:, i] / t[:, i]))
+    return out
+
+
+def masks(files):
+    return {k: np.array([f.startswith(pre) for f in files]) for k, pre in SUBSETS.items()}
 
 
 def finished_runs(out_root):
@@ -58,10 +97,10 @@ def main():
     todo = []
     for d, cfg in runs:
         sha = explore.file_sha256(d / "model.pt")
-        done_val = (d / "post_val.npz").exists() and json.loads(str(np.load(d / "post_val.npz")["meta"]))[
-            "model_sha256"] == sha
-        done_fit = args.no_trainfit or ((d / "post_trainfit.json").exists() and json.loads(
-            (d / "post_trainfit.json").read_text())["model_sha256"] == sha)
+        done_val = (d / "post_val.npz").exists() and (d / "post_val_subsets.json").exists() and json.loads(
+            str(np.load(d / "post_val.npz")["meta"]))["model_sha256"] == sha
+        fit = json.loads((d / "post_trainfit.json").read_text()) if (d / "post_trainfit.json").exists() else {}
+        done_fit = args.no_trainfit or (fit.get("model_sha256") == sha and fit.get("version") == FIT_VERSION)
         if not (done_val and done_fit):
             todo.append((d, cfg, sha, done_val, done_fit))
     print(f"{len(runs)} finished runs, {len(todo)} to process")
@@ -84,19 +123,29 @@ def main():
                     "wake_half_width": explore.WAKE_HALF_WIDTH, "git": runinfo.git_info(), "utc": runinfo.utc_now()}
             np.savez_compressed(d / "post_val.npz", meta=json.dumps(meta), files=np.array(val_ds.files),
                                 profiles=np.array(profiles), **{k: v for k, v in r.items() if k != "keep_pred"})
+            summ = {}
+            for k, m in masks(val_ds.files).items():
+                wall = r["reg_err_wall"][m, 2] / np.maximum(r["reg_n_wall"][m], 1)
+                summ[k] = {"n": int(m.sum()), "rel_vy": float(r["rel_vy"][m].mean()),
+                           "wall_vy_mae": float(wall.mean()),
+                           **{f"div_err_{g}": float(r[f"div_err_{g}"][m].mean()) for g in explore.DIV_REGIONS}}
+            (d / "post_val_subsets.json").write_text(json.dumps(summ, indent=2) + "\n")
         if not done_fit:
             if train_ds is None:
                 t2 = time.perf_counter()
                 train_ds, _, info = mdata.load_train_val_full(subdirs=next(iter(subdirs)))
                 assert info["train_files_sha256"] in train_shas, "training files differ from the runs"
                 print(f"training part {len(train_ds)} samples loaded in {time.perf_counter() - t2:.0f} s")
-            tr = train_metrics(d, train_ds.inputs, train_ds.targets, 10)
+            err, tot = train_sums(d, train_ds.inputs, train_ds.targets, 10)
+            out = {"model_sha256": sha, "version": FIT_VERSION, "n_train": len(train_ds), "batch_size": 10}
+            for k, m in masks(train_ds.files).items():
+                out.update({f"train_{q}": v for q, v in fit_means(err, tot, m, "" if k == "all" else f"_{k}").items()})
             with np.load(d / "post_val.npz") as z:
-                val_l1 = float(np.mean(z["abs_err_all"] / NPIX))
-            (d / "post_trainfit.json").write_text(json.dumps(
-                {"model_sha256": sha, "n_train": len(train_ds), "batch_size": 10,
-                 **{f"train_{k}": v for k, v in tr.items()}, "val_L1": val_l1, "utc": runinfo.utc_now()}, indent=2)
-                + "\n")
+                vfiles = [str(f) for f in z["files"]]
+                for k, m in masks(vfiles).items():
+                    out[f"val_L1{'' if k == 'all' else '_' + k}"] = float(np.mean(z["abs_err_all"][m] / NPIX))
+            out["utc"] = runinfo.utc_now()
+            (d / "post_trainfit.json").write_text(json.dumps(out, indent=2) + "\n")
         torch.cuda.empty_cache()
         print(f"{d.name}: done in {time.perf_counter() - t1:.0f} s", flush=True)
 

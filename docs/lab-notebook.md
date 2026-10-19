@@ -4084,3 +4084,35 @@ pre-registered and the run cost is unchanged.
 
 **Open questions.** Implementation in the next commit (analysis and post-processing per subset; launcher accepts an
 appended amendment).
+
+## 2026-10-19 Amendment 1 implemented: reg / shear validation subsets in the analysis and the post-processing; launcher accepts appended amendments
+
+**Context / why.** Implementation of Amendment 1 (`e41de8c`): main validation = `reg/` files; `shear/` and the whole
+validation descriptive. No change to training, split or evaluation runs.
+
+**Action.**
+- `evaluate.py` unchanged: it already writes each file as `<subdir>/<name>.npz` (`FlowDataset.files` are the relative
+  paths of `list_files_full`), so the subsets come from the per-sample CSV.
+- `scripts/bigdata_analysis.py`: the full-set comparisons are made on three subsets of the same runs (file-name
+  prefix): `full-reg` (MAIN), `full-shear`, `full-all` (descriptive); same metrics, pairs, bootstrap; the figure shows
+  the reduced set vs `full-reg`; 5a rows per subset when present.
+- `scripts/cloud/post_bigdata.py`: `post_val_subsets.json` (rel_vy, wall-band vy MAE, divergence per subset: all, reg,
+  shear); `post_trainfit.json` version 2 with train / val L1 and rel_* also for `reg/` and `shear/` (`*_reg`,
+  `*_shear`); per-sample training sums computed as `train_fit.train_metrics` does.
+- `scripts/cloud/launch_bigdata.sh`: the pre-registered text must stay unchanged, but dated amendments appended at the
+  end are allowed (the file at the pre-registration commit must be an exact prefix of the current file); the launch line
+  prints the number of amendments. The smoke-test outputs on the VM stay valid (inspect.json / est.json depend on the
+  split and the subdirectories, both unchanged): no new smoke test is needed.
+
+**Evidence.**
+- `tests/test_bigdata_analysis.py` (5 tests): planted effects of opposite sign in `reg/` (MDv64-local 0.90 x B) and
+  `shear/` (1.08 x B) are recovered separately (full-reg upper bound < 0, full-shear lower bound > 0, full-all in
+  between); subset sizes add up; `post_bigdata` subset helpers. Full suite: **223 passed, 6 skipped**.
+- End to end on a small fake full set (402 grouped validation files + 1 999 other 6.4k files in `reg/`, 600 renamed
+  copies in `shear/`): `train.py --epochs 1 --split-mode grouped-full`, `evaluate.py` (CSV: 402 `reg/` + 101 `shear/`
+  file names), `post_bigdata.py` (subset JSON, 5a version 2 with `train_n_reg` 1 999 / `train_n_shear` 499; second
+  call: 0 to process), `bigdata_analysis.py` (full-reg 402 / 85 profiles, full-shear 101 / 72). Not results.
+- `mdf/data.py`, `scripts/train.py`, `scripts/evaluate.py`, `splits/` unchanged in this commit: grouped-full split and
+  its validation sha256 (`34b1f5f8...` on the VM) unchanged.
+
+**Open questions.** None; on the VM: `git pull`, then the launch.

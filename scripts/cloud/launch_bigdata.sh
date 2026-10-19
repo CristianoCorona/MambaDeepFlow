@@ -6,7 +6,8 @@
 # it), and the VM powers itself off (AUTO_SHUTDOWN=1, default; `sudo shutdown -c` within 3 minutes cancels it).
 #
 # Refuses to start if: CUTOFF is not given; the working tree is dirty; docs/preregistration-bigdata.md is not
-# committed, or HEAD does not descend from the commit that added it, or the file changed since; the tmux session exists;
+# committed, or HEAD does not descend from the commit that added it, or its pre-registered text changed since (dated
+# amendments appended at the end are allowed, 2026-10-19); the tmux session exists;
 # data/train_full is missing; the smoke test outputs are missing ($SMOKE/inspect.json without problems, $SMOKE/est.json).
 # est= of each run: from $SMOKE/est.json (seconds with margin, estimate_budget.py), written into an effective copy of
 # the queue ($OUT_ROOT/queue-effective.txt) whose run names and train.py arguments are checked equal to queues/bigdata.txt.
@@ -41,10 +42,15 @@ if [ -z "$PREREG" ]; then
     echo "ERROR: $PREREG_FILE is not committed (pre-registration before any long run)" >&2
     exit 1
 fi
-if ! git merge-base --is-ancestor "$PREREG" HEAD || [ -n "$(git diff "$PREREG" HEAD -- "$PREREG_FILE")" ]; then
-    echo "ERROR: HEAD does not descend from the pre-registration commit $PREREG, or $PREREG_FILE changed since" >&2
+# the pre-registered text must be unchanged: later commits may only append dated amendments at the end of the file
+ORIG_LEN=$(git show "$PREREG:$PREREG_FILE" | wc -c)
+if ! git merge-base --is-ancestor "$PREREG" HEAD \
+        || ! cmp -s <(git show "$PREREG:$PREREG_FILE") <(head -c "$ORIG_LEN" "$PREREG_FILE"); then
+    echo "ERROR: HEAD does not descend from the pre-registration commit $PREREG, or the pre-registered text of" >&2
+    echo "       $PREREG_FILE was changed (only appended amendments are allowed)" >&2
     exit 1
 fi
+AMENDMENTS="$(grep -c '^## Amendment' "$PREREG_FILE" || true)"
 if tmux has-session -t "$SESSION" 2>/dev/null; then
     echo "ERROR: tmux session '$SESSION' already exists (queue already running?). Check: tmux attach -t $SESSION" >&2
     exit 1
@@ -107,6 +113,6 @@ SHUT_CMD="echo 'AUTO_SHUTDOWN=0: the VM stays on. Power it off when done (docs/c
 tmux new -d -s "$SESSION" "export TMPDIR='$TMPDIR' MDF_FULL_SUBDIRS='$MDF_FULL_SUBDIRS'; '$PY' scripts/run_queue.py '$OUT_ROOT/queue-effective.txt' \
 --out-root '$OUT_ROOT' --cutoff $CUTOFF; $POST_CMD; $SHUT_CMD; sleep 600"
 sleep 5
-echo "Launched: tmux session '$SESSION', commit $(git rev-parse --short HEAD), pre-registration ${PREREG:0:7}, queue $QUEUE, out root $OUT_ROOT, cutoff $CUTOFF, subdirs $MDF_FULL_SUBDIRS, post $POST, auto shutdown $AUTO_SHUTDOWN"
+echo "Launched: tmux session '$SESSION', commit $(git rev-parse --short HEAD), pre-registration ${PREREG:0:7} (+$AMENDMENTS amendment(s)), queue $QUEUE, out root $OUT_ROOT, cutoff $CUTOFF, subdirs $MDF_FULL_SUBDIRS, post $POST, auto shutdown $AUTO_SHUTDOWN"
 echo "--- last lines of $OUT_ROOT/queue.log:"
 tail -n 3 "$OUT_ROOT/queue.log" 2>/dev/null || echo "(no queue.log yet)"

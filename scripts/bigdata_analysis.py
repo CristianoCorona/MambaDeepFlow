@@ -9,7 +9,10 @@ Sets
            grouped validation profiles in the used subdirectories; profiles from mdata.profile_full
   reduced  the existing 6.4k runs with the same seeds (default: B night1/ep133_s*, MDv64-local night8a, MDv64 night5),
            split mode grouped (402 files, the same 85 profiles); profiles from mdata.profile
-Comparisons (both sets, the seeds common to the two labels of a pair; missing runs declared):
+Validation subsets of the full set (Amendment 1 of the pre-registration, 2026-10-19): full-reg = the reg/ files of the
+85 profiles, the MAIN set (the reduced-set validation was all reg/); full-shear = the shear/ files and full-all = all
+files, both descriptive. The subdirectory is taken from each file name in eval_val_samples.csv ("<subdir>/<name>.npz").
+Comparisons (reduced and each full subset, the seeds common to the two labels of a pair; missing runs declared):
   MDv64-local - B, MDv64 - B, MDv64-local - MDv64
   main: rel_vy (mean of per-sample ratios, original definition); descriptive: aggregate and median rel_vy, rel_all,
   rel_p; full set only: wall-band vy MAE (x1e-3), divergence error wall / other (x1e-3), verification 5a (train and
@@ -18,7 +21,7 @@ Comparisons (both sets, the seeds common to the two labels of a pair; missing ru
   + profiles; explore.paired_bootstrap / paired_bootstrap_agg_median), 10 000 repetitions, seed 0, as all earlier
   analyses. Reading: qualitative comparison of the full-set effect with the reduced-set one; no confirmatory decision.
 Outputs: <out-dir>/summary.md, comparisons.csv, runs.csv; <fig-dir>/bigdata_rel_vy.{pdf,png} (IEEE one column: rel_vy
-of B and MDv64-local per seed and mean, reduced vs full set side by side).
+of B and MDv64-local per seed and mean, reduced set vs the full-reg validation side by side).
 
 Usage:
     python scripts/bigdata_analysis.py --full-root ~/runs/bigdata-vm/runs/bigdata [--seeds 0-2]
@@ -52,7 +55,10 @@ FULL_DIRS = {"B": "B_s*", "MDv64-local": "MDv64-local_s*", "MDv64": "MDv64_s*"}
 REDUCED_DEFAULT = ["B=~/runs/night1/ep133_s*", "MDv64-local=~/runs/night8a/MDv64-local_s*",
                    "MDv64=~/runs/night5/MDv64_s*"]
 N_BOOT, BOOT_SEED = 10000, 0
-SET_NAMES = {"reduced": "reduced (6.4k)", "full": "full (53.8k)"}
+SET_NAMES = {"reduced": "reduced (6.4k), validation 402 reg", "full-reg": "full (53.8k), validation reg/ (MAIN)",
+             "full-shear": "full (53.8k), validation shear/ (descriptive)",
+             "full-all": "full (53.8k), whole validation (descriptive)"}
+FULL_SUBSETS = {"full-reg": "reg/", "full-shear": "shear/", "full-all": ""}  # file-name prefix
 
 
 def parse_args():
@@ -177,13 +183,31 @@ def load_post(runs, files):
     return post, max_diff
 
 
+def subset(runs, post, prefix):
+    """Runs and post-processing arrays restricted to the validation files whose name starts with prefix."""
+    files = runs[next(iter(runs))][0][3]["file"]
+    mask = np.array([f.startswith(prefix) for f in files])
+    n = mask.size
+    out = {}
+    for label, lst in runs.items():
+        out[label] = []
+        for seed, d, cfg, s in lst:
+            s2 = {k: ([f for f, m in zip(v, mask) if m] if k == "file" else v[mask]) for k, v in s.items()}
+            out[label].append((seed, d, cfg, s2))
+    post2 = None
+    if post is not None:
+        post2 = {key: {k: (v[mask] if getattr(v, "ndim", 0) >= 1 and v.shape[0] == n else v) for k, v in arr.items()}
+                 for key, arr in post.items()}
+    return out, post2, int(mask.sum())
+
+
 def figure(path_base, rel_vy_means):
     """IEEE one column: rel_vy per seed (small markers) and mean (large) of B and MDv64-local, reduced vs full."""
     plt.rcParams.update({"font.size": 7, "axes.titlesize": 7, "axes.labelsize": 7, "xtick.labelsize": 6.5,
                          "ytick.labelsize": 6.5, "legend.fontsize": 6.5, "pdf.fonttype": 42})
     fig, ax = plt.subplots(figsize=(3.5, 2.4), constrained_layout=True)
     style = {"B": ("o", "0.55", -0.13), "MDv64-local": ("s", "0.0", 0.13)}
-    for j, set_name in enumerate(("reduced", "full")):
+    for j, set_name in enumerate(("reduced", "full-reg")):
         for label, (mk, col, off) in style.items():
             vals = rel_vy_means.get((set_name, label))
             if vals is None:
@@ -196,8 +220,10 @@ def figure(path_base, rel_vy_means):
                         va="center", fontsize=6, color="0.25")
     for label, (mk, col, _) in style.items():
         ax.scatter([], [], marker=mk, facecolors="none", edgecolors=col, s=14, label=f"{label}: seeds, bar = mean")
-    n = {s: next((v.size for (ss, _), v in rel_vy_means.items() if ss == s), 0) for s in ("reduced", "full")}
-    ax.set_xticks([0, 1], [f"reduced set (6.4k)\n{n['reduced']} seeds", f"full set (53.8k)\n{n['full']} seeds"])
+    n = {s: next((v.size for (ss, _), v in rel_vy_means.items() if ss == s), 0) for s in ("reduced", "full-reg")}
+    ax.set_xticks([0, 1], [f"trained on 6.4k\n{n['reduced']} seeds",
+                           f"trained on 53.8k\n{n['full-reg']} seeds"])
+    ax.set_title("validation: regular airfoils of the 85 validation profiles", fontsize=6.5, loc="center")
     ax.set_xlim(-0.5, 1.5)
     ax.set_ylabel("validation rel. error $v_y$ (%)")
     ax.grid(axis="y", color="0.92", lw=0.5)
@@ -222,7 +248,12 @@ def main():
     if set(profiles["full"]) != set(profiles["reduced"]):
         print("WARNING: the full and reduced validation sets do not have the same profiles")
     post, post_diff = load_post(full, files["full"])
-    sets = {"reduced": reduced, "full": full}
+    sets, posts, profs, n_sub = {"reduced": reduced}, {"reduced": None}, {"reduced": profiles["reduced"]}, {}
+    for sname, prefix in FULL_SUBSETS.items():
+        sets[sname], posts[sname], n_sub[sname] = subset(full, post, prefix)
+        if n_sub[sname] == 0:
+            sys.exit(f"validation subset {sname} is empty (file names without '{prefix}'?)")
+        profs[sname] = [mdata.profile_full(f) for f in sets[sname][next(iter(full))][0][3]["file"]]
     args.out_dir.mkdir(parents=True, exist_ok=True)
     args.fig_dir.mkdir(parents=True, exist_ok=True)
 
@@ -239,8 +270,7 @@ def main():
                 rel_vy_means[(sname, label)] = np.array([100 * t[3]["rel_vy"].mean() for t in runs[label]])
     av.write_csv(args.out_dir / "runs.csv", run_rows)
 
-    rows = compare("reduced", reduced, profiles["reduced"], None, args) + \
-        compare("full", full, profiles["full"], post, args)
+    rows = [r for sname in sets for r in compare(sname, sets[sname], profs[sname], posts[sname], args)]
     av.write_csv(args.out_dir / "comparisons.csv", rows)
 
     fit_rows = []
@@ -248,7 +278,9 @@ def main():
         fit = {lab: [json.loads((t[1] / "post_trainfit.json").read_text()) for t in full[lab]] for lab in full}
         for v in ("MDv64-local", "MDv64"):
             if v in fit and "B" in fit:
-                for k in ("train_L1", "val_L1"):
+                for k in ("train_L1", "train_L1_reg", "train_L1_shear", "val_L1", "val_L1_reg", "val_L1_shear"):
+                    if not all(k in f for f in fit[v] + fit["B"]):
+                        continue
                     d, se, z = welch([f[k] for f in fit[v]], [f[k] for f in fit["B"]])
                     fit_rows.append({"comparison": f"{v} - B", "quantity": k, "diff": d, "se_welch": se,
                                      "diff_over_se": z})
@@ -261,8 +293,10 @@ def main():
           f"Generated by `scripts/bigdata_analysis.py`, git {runinfo.git_info()}, {runinfo.utc_now()}. "
           f"Validation only (the test set is never read). Bootstrap two-level, {args.n_boot} repetitions, seed "
           f"{args.boot_seed}. Differences in percentage points unless stated. No confirmatory decision.", "",
-          f"- Full set: {len(files['full'])} validation samples, {len(set(profiles['full']))} profiles; reduced set: "
-          f"{len(files['reduced'])} samples, {len(set(profiles['reduced']))} profiles.",
+          f"- Full set: {len(files['full'])} validation samples, {len(set(profiles['full']))} profiles: "
+          + ", ".join(f"{s} {n_sub[s]} samples / {len(set(profs[s]))} profiles" for s in FULL_SUBSETS)
+          + f"; reduced set: {len(files['reduced'])} samples, {len(set(profiles['reduced']))} profiles.",
+          "- MAIN validation of the full set: full-reg (Amendment 1); full-shear and full-all are descriptive.",
           f"- Seeds requested {sorted(seeds)}; missing (declared): " + "; ".join(
               f"{s}: " + ", ".join(f"{lab} {m}" for lab, m in mm.items() if m) for s, mm in missing.items()
               if any(mm.values())) if any(any(mm.values()) for mm in missing.values()) else
@@ -283,11 +317,14 @@ def main():
                av.md_table([{k: (f"{v:.4g}" if isinstance(v, float) else v) for k, v in r.items()} for r in fit_rows],
                            list(fit_rows[0])), ""]
     main_rows = {(r["set"], r["comparison"]): r for r in rows if r["metric"] == "rel_vy"}
-    md += ["## Reading (pre-registered: qualitative)", ""]
+    md += ["## Reading (pre-registered: qualitative; main = full-reg)", ""]
     for v, ref in PAIRS:
-        a, b = main_rows.get(("reduced", f"{v} - {ref}")), main_rows.get(("full", f"{v} - {ref}"))
+        a, b = main_rows.get(("reduced", f"{v} - {ref}")), main_rows.get(("full-reg", f"{v} - {ref}"))
         if a and b and a["diff"] != "" and b["diff"] != "":
-            md.append(f"- {v} - {ref}, rel_vy: reduced {a['estimate [95% CI]']}, full {b['estimate [95% CI]']}.")
+            extra = "; ".join(f"{s} {main_rows[(s, f'{v} - {ref}')]['estimate [95% CI]']}"
+                              for s in ("full-shear", "full-all") if (s, f"{v} - {ref}") in main_rows)
+            md.append(f"- {v} - {ref}, rel_vy: reduced {a['estimate [95% CI]']}, full-reg (main) "
+                      f"{b['estimate [95% CI]']} (descriptive: {extra}).")
     md += ["", "Figure: `" + str(args.fig_dir / "bigdata_rel_vy.pdf") + "`.", ""]
     (args.out_dir / "summary.md").write_text("\n".join(md) + "\n")
     print("\n".join(md))

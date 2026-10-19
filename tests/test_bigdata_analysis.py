@@ -1,7 +1,9 @@
 """Tests of scripts/bigdata_analysis.py on synthetic runs (fake eval CSVs, post_val.npz, post_trainfit.json).
 
-A known effect is planted (MDv64-local rel_vy = 0.9 x B on the full set, 0.95 x B on the reduced set) and must be
-recovered with the right sign; missing runs are declared; mismatched file lists are refused. No data set is read.
+A known effect is planted (MDv64-local rel_vy = 0.9 x B on the reg/ files of the full set, 1.08 x B on its shear/ files,
+0.95 x B on the reduced set) and must be recovered with the right sign in each validation subset (Amendment 1:
+full-reg main, full-shear and full-all descriptive); missing runs are declared; mismatched file lists are refused.
+post_bigdata.py helpers split the 5a quantities by subdirectory. No data set is read.
 
 Run: conda run -n mdf python -m pytest -q tests/test_bigdata_analysis.py
 """
@@ -21,6 +23,7 @@ from mdf import data as mdata
 
 REPO = Path(__file__).resolve().parent.parent
 FACTOR = {"full": {"B": 1.0, "MDv64-local": 0.90, "MDv64": 0.88},
+          "shear": {"B": 1.0, "MDv64-local": 1.08, "MDv64": 1.0},
           "reduced": {"B": 1.0, "MDv64-local": 0.95, "MDv64": 0.94}}
 CSV_FIELDS = ["index", "file", "rel_p", "rel_vy", "rel_all", "L1", "abs_err_vy", "abs_tgt_vy"]
 
@@ -44,7 +47,8 @@ def make_run(root, name, set_name, label, seed, files, rng, post=True):
         "split": {"split_mode": mode, "val_files_sha256": mdata.file_list_sha256(files), "n_train": 1000}}))
     n = len(files)
     base = 0.06 + 0.01 * np.sin(np.arange(n))
-    rel_vy = base * FACTOR[set_name][label] * (1 + 0.01 * rng.standard_normal(n))
+    fac = np.array([FACTOR["shear" if f.startswith("shear/") else set_name][label] for f in files])
+    rel_vy = base * fac * (1 + 0.01 * rng.standard_normal(n))
     tgt = 100.0 + np.arange(n)
     with open(d / "eval_val_samples.csv", "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=CSV_FIELDS)
@@ -90,20 +94,29 @@ def test_planted_effect_recovered(tmp_path):
     p, out = run(tmp_path, *build(tmp_path))
     assert p.returncode == 0, p.stderr
     c = comparisons(out)
-    for s in ("full", "reduced"):
+    for s in ("full-reg", "reduced"):
         r = c[(s, "MDv64-local - B", "rel_vy")]
         assert float(r["hi"]) < 0 and r["seeds"] == "0,1,2"
-    # full-set effect (10 %) larger than the reduced one (5 %)
-    assert float(c[("full", "MDv64-local - B", "rel_vy")]["diff"]) < float(c[("reduced", "MDv64-local - B",
-                                                                                 "rel_vy")]["diff"])
-    assert float(c[("full", "MDv64-local - B", "wall_vy_mae_x1e-3")]["hi"]) < 0
+    # the shear/ files carry the opposite planted effect: separated, not mixed into the main (reg/) set
+    assert float(c[("full-shear", "MDv64-local - B", "rel_vy")]["lo"]) > 0
+    assert float(c[("full-shear", "MDv64-local - B", "wall_vy_mae_x1e-3")]["lo"]) > 0
+    d = {s: float(c[(s, "MDv64-local - B", "rel_vy")]["diff"]) for s in ("full-reg", "full-shear", "full-all")}
+    assert d["full-reg"] < d["full-all"] < d["full-shear"]
+    # full-reg effect (10 %) larger than the reduced one (5 %)
+    assert d["full-reg"] < float(c[("reduced", "MDv64-local - B", "rel_vy")]["diff"])
+    assert float(c[("full-reg", "MDv64-local - B", "wall_vy_mae_x1e-3")]["hi"]) < 0
     assert ("reduced", "MDv64-local - B", "wall_vy_mae_x1e-3") not in c  # full set only
-    for metric in ("agg_rel_vy", "median_rel_vy", "rel_all", "rel_p", "div_err_wall_x1e-3", "div_err_other_x1e-3"):
-        assert ("full", "MDv64 - B", metric) in c
+    for s in ("full-reg", "full-shear", "full-all"):
+        for metric in ("agg_rel_vy", "median_rel_vy", "rel_all", "rel_p", "div_err_wall_x1e-3", "div_err_other_x1e-3"):
+            assert (s, "MDv64 - B", metric) in c
+    with open(out / "runs.csv") as fh:
+        n_val = {(r["set"], r["label"], r["seed"]): int(r["n_val"]) for r in csv.DictReader(fh)}
+    n_files = len(files_for("full"))
+    assert n_val[("full-reg", "B", "0")] + n_val[("full-shear", "B", "0")] == n_val[("full-all", "B", "0")] == n_files
     assert (out / "bigdata_rel_vy.pdf").exists() and (out / "bigdata_rel_vy.png").exists()
     assert (out / "trainfit_5a.csv").exists()
     text = (out / "summary.md").read_text()
-    assert "none missing" in text and "No confirmatory decision" in text
+    assert "none missing" in text and "No confirmatory decision" in text and "full-reg (main)" in text
 
 
 def test_missing_runs_declared(tmp_path):
@@ -111,8 +124,8 @@ def test_missing_runs_declared(tmp_path):
                                                    ("full", "B", 2)}))
     assert p.returncode == 0, p.stderr
     c = comparisons(out)
-    assert c[("full", "MDv64 - B", "all")]["estimate [95% CI]"] == "not computed: runs missing"
-    assert c[("full", "MDv64-local - B", "rel_vy")]["seeds"] == "0,1"  # common seeds only
+    assert c[("full-reg", "MDv64 - B", "all")]["estimate [95% CI]"] == "not computed: runs missing"
+    assert c[("full-reg", "MDv64-local - B", "rel_vy")]["seeds"] == "0,1"  # common seeds only
     text = (out / "summary.md").read_text()
     assert "MDv64 [0, 1, 2]" in text and "B [2]" in text
 
@@ -133,3 +146,20 @@ def test_wrong_split_mode_refused(tmp_path):
     (full_root / "B_s0" / "config.json").write_text(json.dumps(cfg))
     p, _ = run(tmp_path, full_root, red_root)
     assert p.returncode != 0 and "expected grouped-full" in (p.stdout + p.stderr)
+
+
+def test_post_bigdata_subset_helpers():
+    """5a quantities split by subdirectory (post_bigdata.fit_means / masks), on synthetic per-sample sums."""
+    sys.path.insert(0, str(REPO / "scripts" / "cloud"))
+    import post_bigdata as pb
+    files = ["reg/a_1_2.npz", "shear/a_3_1_2.npz", "reg/b_1_2.npz", "shear/b_4_1_2.npz"]
+    m = pb.masks(files)
+    assert m["reg"].tolist() == [True, False, True, False] and m["shear"].tolist() == [False, True, False, True]
+    assert m["all"].all()
+    err = np.array([[1.0, 1, 1], [3, 3, 3], [1, 1, 1], [3, 3, 3]])
+    tot = np.full((4, 3), 10.0)
+    reg, shear, every = (pb.fit_means(err, tot, m[k], s) for k, s in (("reg", "_reg"), ("shear", "_shear"),
+                                                                       ("all", "")))
+    assert reg["rel_vy_reg"] == pytest.approx(0.1) and shear["rel_vy_shear"] == pytest.approx(0.3)
+    assert every["rel_vy"] == pytest.approx(0.2) and reg["n_reg"] == 2
+    assert reg["L1_reg"] == pytest.approx(3 / pb.NPIX)
