@@ -3931,3 +3931,28 @@ This session only prepares files; nothing contacted Google Cloud and the full se
 **Open questions.** On the VM: number of files in `reg/`, `shear/`, `sup/`; whether all `shear/` names parse; whether
 any test profile occurs in the full training data (it is excluded either way); the real RAM peak and it/s on the L4.
 Pre-registration next, before any long run.
+
+## 2026-10-19 PRE-REGISTRATION: big-dataset experiment (exploratory, validation only)
+
+**Context / why.** Decided after the test set was closed (`4859a04`) and before any run on the full set: does the
+rel_vy gain of MDv64-local (and MDv64) over B on the reduced set remain with the full 53.8k set? Needed for the report
+(26/10). Preparation (split, cloud package, analysis script, all tried on fake data only): previous entry, `8bbefbb`.
+
+**Decision.** `docs/preregistration-bigdata.md`, committed on its own, before the VM exists:
+- Exploratory; validation only (split grouped-full: the 85 grouped validation profiles, test profiles excluded); the
+  test set is never read and not unpacked on the VM.
+- B, MDv64-local, MDv64; seeds 0-2; 133 epochs; protocol unchanged. Queue priority: B / MDv64-local alternating by
+  seed, MDv64 last.
+- Budget rule: MDv64 runs only if the smoke-test estimates fit the remaining budget (50 USD - spent - 5 USD reserve);
+  STOP if the spent credit approaches the limit; runs not done declared. A failed run may be repeated once.
+- Main metric rel_vy; descriptive aggregate / median rel_vy, rel_all, rel_p, wall-band vy MAE, divergence, 5a.
+  Comparisons MDv64-local - B, MDv64 - B, MDv64-local - MDv64, two-level bootstrap (10 000, seed 0), next to the
+  reduced set with the same seeds. Qualitative reading, no confirmatory conclusion. All runs reported.
+- Alternatives considered: more seeds of fewer configurations (e.g. B and MDv64-local only, 5 seeds) - rejected by the
+  session plan, which asks for the MDv64 comparison too, at lowest priority; a subset of the full set to save money -
+  rejected, the question is about the full set; testing on the test set - excluded, the test set is closed.
+
+**Evidence.** Preparation commit `8bbefbb` (222 passed, 6 skipped). `launch_bigdata.sh` refuses to start unless HEAD
+descends from the commit that added the pre-registration file and the file is unchanged since.
+
+**Open questions.** File counts per subdirectory, RAM and it/s on the VM (smoke test). The hourly price (console).
