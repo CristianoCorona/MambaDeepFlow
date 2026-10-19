@@ -4116,3 +4116,10 @@ validation descriptive. No change to training, split or evaluation runs.
   its validation sha256 (`34b1f5f8...` on the VM) unchanged.
 
 **Open questions.** None; on the VM: `git pull`, then the launch.
+
+## 2026-10-19 Launcher check of the amended pre-registration (evidence)
+
+`launch_bigdata.sh` at `9e989e2` (clean tree, `CUTOFF` given): passes the pre-registration check (Amendment 1 appended)
+and stops only at the next check, `data/train_full` missing (it exists only on the VM). In a temporary worktree with one
+word of the pre-registered text changed and committed: refused ("the pre-registered text ... was changed (only appended
+amendments are allowed)", exit 1). Worktree removed.
