@@ -4232,3 +4232,16 @@ set closed, no new inference.
 - No cache miss, no file under `~/runs` written. PDFs regenerated from the clean commit in the next commit.
 
 **Open questions.** The tail figure decision (previous entry) is unchanged.
+
+## 2026-10-20 Poster figures regenerated from the clean commit fc3324b
+
+**Context / why.** The PDFs committed in `fc3324b` were drawn from the uncommitted tree; regenerated from the commit.
+
+**Action.** At `fc3324b` (clean tree): `python scripts/poster_figures.py` (default: level, ablation, wallmap check)
+and `tectonic fig_block.tex` in `docs/figures/poster/`.
+
+**Evidence.** fig_level / fig_ablation creator line `scripts/poster_figures.py @ fc3324b`; sizes unchanged (22.40 x
+6.50, 22.40 x 8.50, 16.20 x 6.28 cm); `poster_numbers.csv` byte-identical to the one in `fc3324b`; fig_tail_val.pdf
+not regenerated (md5 unchanged); wallmap check printed the same refusal; no file under `~/runs` written.
+
+**Open questions.** None.
