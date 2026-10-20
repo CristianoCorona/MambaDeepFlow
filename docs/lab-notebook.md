@@ -4286,3 +4286,17 @@ set closed: no test inference, no test targets.
 - No test file read; no new file under `~/runs` (the two inferences are not cached).
 
 **Open questions.** None.
+
+## 2026-10-20 Poster figures regenerated from the clean commit ff6b9ce
+
+**Context / why.** The PDFs committed in `ff6b9ce` were drawn from the uncommitted tree; regenerated from the commit.
+
+**Action.** At `ff6b9ce` (clean tree): `python scripts/poster_figures.py` (default: level, ablation, wallmap check,
+sample, tail) and `tectonic fig_block.tex` in `docs/figures/poster/`.
+
+**Evidence.** Matplotlib PDFs carry the creator line `scripts/poster_figures.py @ ff6b9ce`; sizes unchanged (22.40 x
+6.00, 22.40 x 8.00, 16.20 x 4.20, 22.40 x 4.50, 16.20 x 5.99 cm); `poster_numbers.csv` byte-identical. Second fresh
+inference on `pfcm_6703_-2724`: B s0 rel_p 182.4288 %, M64 s0 181.2781 % (|diff| vs cache 2.6e-08 and 6.7e-08 in
+percent: GPU rounding, same values to 4 decimals). Wallmap refusal unchanged; no file under `~/runs` written.
+
+**Open questions.** None.
