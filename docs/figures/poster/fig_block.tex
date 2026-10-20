@@ -1,5 +1,5 @@
 % Poster figure (left column): DfpNet as a U with the block insertion points (top) and the residual SS2D block
-% (bottom). Standalone TikZ, Helvetica + sansmath, drawn at its poster size (16.2 x 6.3 cm, text 12 pt): include with
+% (bottom). Standalone TikZ, Helvetica + sansmath, drawn at its poster size (16.2 x 6.0 cm, text 12 pt): include with
 % \includegraphics[width=\linewidth]{fig_block.pdf} in the 16.2 cm column (no scaling).
 % Caption should say: boxes = feature-map size s (s x s), in = mask and free-stream velocity, out = p, v_x, v_y;
 % in M64-loc the scan is replaced by its skip term D * u.
@@ -25,8 +25,8 @@
 \fontsize{12}{14}\selectfont\sansmath
 \begin{tikzpicture}[
     >={Stealth[length=4.5pt]}, line width=0.7pt, draw=ink, text=ink,
-    lvl/.style={draw=ink, fill=boxfill, rounded corners=1.5pt, minimum height=0.46cm, minimum width=0.95cm,
-                inner sep=1pt},
+    lvl/.style={draw=ink, fill=boxfill, rounded corners=1.5pt, minimum height=0.36cm, minimum width=0.95cm,
+                inner sep=0.5pt},
     op/.style={draw=ink, fill=boxfill, rounded corners=2pt, minimum height=0.62cm, inner sep=2.5pt, align=center},
     ins/.style={circle, fill=mblue, draw=white, line width=1pt, minimum size=0.34cm, inner sep=0pt},
     skip/.style={densely dotted, muted, line width=0.7pt, ->},
@@ -34,7 +34,7 @@
 
   % ---------------- U-Net (DfpNet, expo 5): encoder left, decoder right; boxes = map size ----------------
   \def\dx{0.75}
-  \def\dy{-0.43}
+  \def\dy{-0.40}
   \def\xd{12.6}
   \foreach \i/\s in {0/128, 1/64, 2/32, 3/16, 4/8, 5/4, 6/2} {
     \node[lvl] (e\i) at ({\dx*\i}, {\dy*\i}) {\s};
@@ -64,7 +64,7 @@
   \node[mblue, anchor=west, fill=white, inner sep=1pt] at ($(i8.east)+(0.05,0)$) {M8};
 
   % ---------------- residual block x + Mixer(LN(x)) with SS2D ----------------
-  \begin{scope}[yshift=-4.69cm]
+  \begin{scope}[yshift=-4.40cm]
     \node (x) at (-0.65, 0) {$x$};
     \node[op, right=0.385cm of x] (ln) {LN};
     \node[op, right=0.385cm of ln] (inp) {in\_proj};

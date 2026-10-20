@@ -1,28 +1,32 @@
 """Poster figures (DML poster, A2 portrait; docs/lab-notebook.md, 2026-10-20). Vector PDFs in docs/figures/poster/.
 
-Validation only. No test inference and no evaluate.py: test numbers are read from docs/results/test-* only. Per-seed
-validation values come from the explore cache (~/runs/explore-cache, cache hits only: a miss stops the script).
+Validation only. No test inference, no test targets and no evaluate.py: test numbers are read from docs/results/test-*
+only. Per-seed validation values come from the explore cache (~/runs/explore-cache, cache hits only: a miss stops the
+script); the only fresh inference is B s0 and MDv64 s0 on ONE validation sample for fig_tail_val.
 
-  fig_level.pdf       22.4 x 6.5 cm (right column). rel_vy vs encoder block level 8 / 16 / 32 / 64 (MDv), seeds + mean;
+  fig_level.pdf       22.4 x 6.0 cm (right column). rel_vy vs encoder block level 8 / 16 / 32 / 64 (MDv), seeds + mean;
                       B mean +- sd band; M64-dec (same data as val-ablation64-8seed/ablation64_rel_vy panel (b))
-  fig_ablation.pdf    22.4 x 8.5 cm (right column). Forest plot of rel_vy - B with the two-level 95 % CI already
+  fig_ablation.pdf    22.4 x 8.0 cm (right column). Forest plot of rel_vy - B with the two-level 95 % CI already
                       computed (ci2_lo / ci2_hi), validation open markers, test filled markers (M64, M64-loc); band =
                       M64 - B validation interval
   poster_numbers.csv  every value shown on fig_level and fig_ablation (written when both are drawn)
   fig_wallmap         NOT written unless the validation airfoil masks are identical across samples (they are not:
                       the cached mean |error| maps average different airfoils; the check is printed)
-  fig_tail_val.pdf    25 x 8.2 cm, only with --only tail (kept as first produced on 2026-10-20). p of one separated-flow
-                      validation sample: target, B, MD8 (cached predictions; no test sample and no M64 prediction is
-                      cached, see the notebook entry)
+  fig_sample.pdf      16.2 x 4.2 cm (left column). Data only: mask + free-stream arrow, target p, v_x, v_y of one
+                      validation sample (SAMPLE_FILE), own colour scale each, common crop
+  fig_tail_val.pdf    22.4 x 4.5 cm. p of the separated-flow validation sample TAIL_FILE: target, B and M64 (same
+                      seed, fresh inference on this one sample, checked against the cached per-sample rel_p), one
+                      colour scale; rel_p printed (for the notebook), not drawn
 
-Sans-serif Liberation Sans (Helvetica metrics). The TikZ block diagram is docs/figures/poster/fig_block.tex (16.2 x
-6.3 cm, left column; hand-written, not generated here).
+Sans-serif Liberation Sans (Helvetica metrics), text >= 13 pt. The TikZ block diagram is
+docs/figures/poster/fig_block.tex (16.2 x 6.0 cm, left column; hand-written, not generated here).
 
 Usage: python scripts/poster_figures.py [--out-dir docs/figures/poster] [--only level,ablation,wallmap,tail]
 """
 
 import argparse
 import csv
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -33,9 +37,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 from matplotlib.colors import LinearSegmentedColormap
 
-from mdf import explore
+from mdf import explore, models
 
 ROOT = Path(__file__).resolve().parent.parent
 RES = ROOT / "docs" / "results"
@@ -44,11 +49,18 @@ RUNS_CSV = RES / "val-ablation64-8seed" / "runs.csv"
 CM = 1 / 2.54
 
 # sizes measured on the poster layout (body 16 pt, captions 9.4 pt; columns 16.2 / 22.4 cm)
-SIZE_LEVEL, SIZE_ABLATION, SIZE_TAIL = (22.4 * CM, 6.5 * CM), (22.4 * CM, 8.5 * CM), (25 * CM, 8.2 * CM)
+SIZE_LEVEL, SIZE_ABLATION = (22.4 * CM, 6.0 * CM), (22.4 * CM, 8.0 * CM)
+SIZE_SAMPLE, SIZE_TAIL = (16.2 * CM, 4.2 * CM), (22.4 * CM, 4.5 * CM)
 RC_LEVEL = {"font.size": 14, "axes.labelsize": 15, "xtick.labelsize": 14, "ytick.labelsize": 14, "legend.fontsize": 14}
 RC_ABLATION = {"font.size": 13, "axes.labelsize": 15, "xtick.labelsize": 13, "ytick.labelsize": 13,
                "legend.fontsize": 13}
-RC_TAIL = {"font.size": 18, "axes.labelsize": 20, "xtick.labelsize": 18, "ytick.labelsize": 18, "legend.fontsize": 18}
+RC_SAMPLE = RC_TAIL = {"font.size": 13, "axes.labelsize": 13, "xtick.labelsize": 13, "ytick.labelsize": 13}
+
+# field figures: common crop (data rows x0:x1 = x, columns y0:y1 = y; airfoil rows 32-96, columns 59-81)
+CROP = (22, 122, 28, 100)
+SAMPLE_FILE = "naca643418_6676_702.npz"  # NACA 64(3)-418, alpha 6.0 deg (validation)
+TAIL_FILE, TAIL_SEED = "pfcm_6703_-2724.npz", 0  # separated flow (validation); seed fixed before inference
+TAIL_RUNS = {"B": "~/runs/night1/ep133_s0", "MDv64": "~/runs/night5/MDv64_s0"}
 
 # one palette for every figure (dataviz reference palette, validated: blue / orange / aqua, light mode)
 C_M64, C_LOC, C_DEC = "#2a78d6", "#eb6834", "#1baf7a"
@@ -263,59 +275,120 @@ def fig_wallmap(ds, out_dir):
     raise NotImplementedError("aligned masks: not expected for this data set")
 
 
-def fig_tail(ds, out_dir):
-    """p of one separated-flow validation sample: target, B and MD8 (median seed on that sample), shared scale."""
-    keep = [338, 349, 51, 221, 216, 192]  # samples kept in the cache by analyze_val.py (a7 figures)
-    tgt = ds.targets.numpy()
-    m_all = ds.inputs[:, 2].numpy() > 0.5
-    rev = []
-    for i in keep:
-        te = np.nonzero(m_all[i].any(1))[0][-1]
-        rev.append(int(((tgt[i, 1] < 0) & ~m_all[i])[te + 1:].sum()))
-    print("fig_tail: reverse-flow cells downstream of the trailing edge (target vx < 0) per kept sample:")
-    for i, r in zip(keep, rev):
-        print(f"  {i:4d} {ds.files[i]:28s} {r}")
-    i = keep[int(np.argmax(rev))]
-    k = keep.index(i)
-    R = Path.home() / "runs"
-    configs = {"B": [R / "night1" / f"ep133_s{s}" for s in range(3)] + [R / "night3" / f"B_s{s}" for s in range(3, 8)],
-               "MD8": [R / "night2" / f"MD8_s{s}" for s in range(3)] + [R / "night3" / f"MD8_s{s}" for s in range(3, 8)]}
-    panels = [("target", tgt[i, 0])]
-    for label, dirs in configs.items():
-        res = [cached(d, ds, keep) for d in dirs]
-        e = np.array([r["rel_p"][i] for r in res])
-        s = int(np.argsort(e)[(len(e) - 1) // 2])  # lower median seed on this sample
-        print(f"  {label}: rel_p on sample {i} per seed {np.round(100 * e, 2).tolist()}; shown s{s}")
-        panels.append((f"{label} (s{s})", res[s]["keep_pred"][k, 0].astype(np.float64)))
-    mask = m_all[i]
-    x0, x1, y0, y1 = 22, 122, 28, 100  # rows = x (flow direction), columns = y (DIV_MAPPING axis 0)
-    lim = max(np.abs(p[~mask]).max() for _, p in panels)
-    plt.rcParams.update(RC_TAIL)  # sizes of the version kept on the poster (2026-10-20)
-    fig, axes = plt.subplots(1, 3, figsize=SIZE_TAIL, constrained_layout=True)
-    for ax, (name, p) in zip(axes, panels):
-        img = np.ma.masked_where(mask, p)[x0:x1, y0:y1].T  # transpose: flow left -> right, y up
-        ax.set_facecolor(C_MASK)
-        im = ax.imshow(img, origin="lower", cmap=DIVERGING, vmin=-lim, vmax=lim, interpolation="nearest")
-        ax.set_xticks([]), ax.set_yticks([])
+def crop(field, mask):
+    """Masked field on the common crop, transposed so the flow goes left -> right and y points up (imshow origin
+    lower). Rows of the data are x (flow direction), columns y (explore.DIV_MAPPING axis 0)."""
+    x0, x1, y0, y1 = CROP
+    return np.ma.masked_where(mask, field)[x0:x1, y0:y1].T
+
+
+def field_axes(ax):
+    ax.set_facecolor(C_MASK)
+    ax.set_xticks([]), ax.set_yticks([])
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+
+
+def sym_ticks(lim):
+    t = float(f"{0.8 * lim:.1g}")
+    return [-t, 0, t]
+
+
+def fig_sample(ds, out_dir):
+    """Data only: mask with the free stream, target p, v_x, v_y of one validation sample, each with its own scale."""
+    i = ds.files.index(SAMPLE_FILE)
+    props = explore.sample_properties(ds)[i]
+    mask = ds.inputs[i, 2].numpy() > 0.5
+    t = ds.targets[i].numpy().astype(np.float64)
+    print(f"fig_sample: {SAMPLE_FILE} (index {i}), profile {props['profile']}, alpha {props['alpha_deg']:.2f} deg, "
+          f"thickness {props['thickness']:.3f}, chord {props['chord_px']} px")
+    with plt.rc_context(RC_SAMPLE):
+        fig, axes = plt.subplots(1, 4, figsize=SIZE_SAMPLE, constrained_layout=True)
+        fig.get_layout_engine().set(w_pad=0.02, h_pad=0.01, wspace=0.02)
+        ax = axes[0]
+        x0, x1, y0, y1 = CROP
+        im = ax.imshow(crop(np.zeros(mask.shape), mask), origin="lower", cmap=LinearSegmentedColormap.from_list(
+            "w", ["white", "white"]), interpolation="nearest")
+        field_axes(ax)
+        # hidden colorbar: the same space as the field panels, so all four panels share one scale
+        fig.colorbar(im, ax=ax, orientation="horizontal", fraction=0.07, pad=0.03, aspect=14).ax.set_visible(False)
         for sp in ax.spines.values():
-            sp.set_visible(False)
-        ax.text(0.03, 0.97, name, transform=ax.transAxes, ha="left", va="top", fontsize=18)
-    cb = fig.colorbar(im, ax=axes, fraction=0.025, pad=0.01)
-    cb.set_label("p (normalised)")
-    cb.outline.set_visible(False)
-    print(f"  sample {i} {ds.files[i]}; colour range ±{lim:.3f}")
-    save(fig, out_dir, "fig_tail_val.pdf")
+            sp.set_visible(True), sp.set_color(C_GRID)
+        a = np.radians(props["alpha_deg"])
+        u = np.array([np.cos(a), np.sin(a)])
+        start = np.array([3.0, 12.0])
+        ax.annotate("", xy=start + 24 * u, xytext=start, arrowprops={"arrowstyle": "-|>", "color": C_INK, "lw": 1.4})
+        ax.text(start[0] + 24 * u[0] + 1.5, start[1] + 24 * u[1], "$v_\\infty$", va="center")
+        ax.text(0.97, 0.03, f"α = {props['alpha_deg']:.0f}°", transform=ax.transAxes, ha="right", va="bottom")
+        ax.text(0.03, 0.97, "mask", transform=ax.transAxes, ha="left", va="top")
+        for ax, (ci, name) in zip(axes[1:], enumerate(["$p$", "$v_x$", "$v_y$"])):
+            f = t[ci]
+            lim = np.abs(f[~mask]).max()
+            im = ax.imshow(crop(f, mask), origin="lower", cmap=DIVERGING, vmin=-lim, vmax=lim, interpolation="nearest")
+            field_axes(ax)
+            ax.text(0.03, 0.97, name, transform=ax.transAxes, ha="left", va="top")
+            cb = fig.colorbar(im, ax=ax, orientation="horizontal", fraction=0.07, pad=0.03, aspect=14,
+                              ticks=sym_ticks(lim))
+            cb.outline.set_visible(False)
+            cb.ax.tick_params(length=2, pad=1)
+            print(f"  {name}: colour range +-{lim:.3f}; fluid min {f[~mask].min():.3f} max {f[~mask].max():.3f}")
+        save(fig, out_dir, "fig_sample.pdf")
+
+
+def predict_one(run_dir, ds, i, device="cuda"):
+    """Fresh inference of one run on ONE validation sample (batch 1, as evaluate.py / explore.run_inference)."""
+    run_dir = Path(run_dir).expanduser()
+    cfg = json.loads((run_dir / "config.json").read_text())
+    net = models.build_from_cfg(models.model_cfg_from_run_config(cfg))
+    net.load_state_dict(torch.load(run_dir / "model.pt", map_location="cpu", weights_only=True))
+    net.to(device).eval()
+    with torch.no_grad():
+        return net(ds.inputs[i:i + 1].to(device)).cpu().numpy()[0].astype(np.float64)
+
+
+def rel_p(o, t):
+    return float(np.abs(o[0] - t[0]).sum() / np.abs(t[0]).sum())
+
+
+def fig_tail(ds, out_dir):
+    """p of the separated-flow validation sample: target, B and M64 (same seed), one colour scale."""
+    i = ds.files.index(TAIL_FILE)
+    t = ds.targets[i].numpy().astype(np.float64)
+    mask = ds.inputs[i, 2].numpy() > 0.5
+    panels = [("target", t[0])]
+    print(f"fig_tail: {TAIL_FILE} (index {i}), seed {TAIL_SEED} for both models (fixed before inference)")
+    for label, run in TAIL_RUNS.items():
+        o = predict_one(run, ds, i)
+        r = rel_p(o, t)
+        ref = cached(run, ds)["rel_p"][i]  # per-sample value of the earlier evaluation (cache)
+        print(f"  {POSTER_NAME[label]} ({run}): rel_p {100 * r:.4f} % (cache {100 * ref:.4f} %, |diff| "
+              f"{100 * abs(r - ref):.2e})")
+        panels.append((POSTER_NAME[label], o[0]))
+    lim = max(np.abs(f[~mask]).max() for _, f in panels)
+    with plt.rc_context(RC_TAIL):
+        fig, axes = plt.subplots(1, 3, figsize=SIZE_TAIL, constrained_layout=True)
+        fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, wspace=0.02)
+        for ax, (name, f) in zip(axes, panels):
+            im = ax.imshow(crop(f, mask), origin="lower", cmap=DIVERGING, vmin=-lim, vmax=lim, interpolation="nearest")
+            field_axes(ax)
+            ax.text(0.03, 0.97, name, transform=ax.transAxes, ha="left", va="top")
+        cb = fig.colorbar(im, ax=axes, fraction=0.03, pad=0.01, ticks=sym_ticks(lim))
+        cb.set_label("$p$")
+        cb.outline.set_visible(False)
+        print(f"  colour range +-{lim:.3f}")
+        save(fig, out_dir, "fig_tail_val.pdf")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out-dir", type=Path, default=ROOT / "docs" / "figures" / "poster")
-    ap.add_argument("--only", default="level,ablation,wallmap", help="comma list of level, ablation, wallmap, tail")
+    ap.add_argument("--only", default="level,ablation,wallmap,sample,tail",
+                    help="comma list of level, ablation, wallmap, sample, tail")
     args = ap.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
     style()
     only = set(args.only.split(","))
-    ds = explore.load_split("val", "grouped") if only & {"level", "wallmap", "tail"} else None
+    ds = explore.load_split("val", "grouped") if only & {"level", "wallmap", "sample", "tail"} else None
     if "level" in only:
         fig_level(ds, args.out_dir)
     if "ablation" in only:
@@ -326,6 +399,8 @@ def main():
         print("poster_numbers.csv not written (needs both level and ablation)")
     if "wallmap" in only:
         fig_wallmap(ds, args.out_dir)
+    if "sample" in only:
+        fig_sample(ds, args.out_dir)
     if "tail" in only:
         fig_tail(ds, args.out_dir)
 

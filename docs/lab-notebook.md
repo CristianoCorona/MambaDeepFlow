@@ -4245,3 +4245,44 @@ and `tectonic fig_block.tex` in `docs/figures/poster/`.
 not regenerated (md5 unchanged); wallmap check printed the same refusal; no file under `~/runs` written.
 
 **Open questions.** None.
+
+## 2026-10-20 Poster figures, revised sizes; new fig_sample; fig_tail_val with B and M64 (fresh inference on one validation sample)
+
+**Context / why.** Revised poster sizes (included at `\linewidth`, no scaling; body text 16 pt, so figure text
+>= 13 pt, >= 12 pt on fig_block). New data-only figure to introduce the task. The tail figure should compare B and M64,
+not MD8 (previous entries): the experimenter allowed fresh inference of B and M64 on that ONE validation sample. Test
+set closed: no test inference, no test targets.
+
+**Decision / action** (`scripts/poster_figures.py`, `docs/figures/poster/`):
+- `fig_level.pdf` 22.4 x 6.0 cm, `fig_ablation.pdf` 22.4 x 8.0 cm (same data, palette and font sizes as the previous
+  entry: 14 / 15 pt and 13 / 15 pt; all 12 rows kept). `poster_numbers.csv` regenerated (58 rows, byte-identical).
+- **`fig_sample.pdf`** (new, 16.2 x 4.2 cm, data only, 13 pt): validation sample **`naca643418_6676_702.npz`**
+  (profile NACA 64(3)-418, alpha = 6.0 deg, thickness ratio 0.203 from the mask, chord 59 px; chosen among the
+  validation samples with 5 <= |alpha| <= 10 deg as a standard NACA section at a positive angle). Panels: mask with the
+  free-stream arrow (direction alpha) and "α = 6°", target p, v_x, v_y (normalised targets), each with its own
+  symmetric diverging scale and small horizontal colorbar; airfoil grey; one crop for all panels (data rows 22-122 =
+  x, columns 28-100 = y; transposed so the flow goes left to right). Fluid ranges: p −0.159 to +0.115, v_x −0.013 to
+  +0.700 (close to the free stream almost everywhere), v_y −0.082 to +0.404 (concentrated at the leading edge and around
+  the airfoil).
+- **`fig_tail_val.pdf`** (22.4 x 4.5 cm, 13 pt): sample `pfcm_6703_-2724.npz` (index 338, as before), p only:
+  target, B, M64; **seed 0 for both** (B = `night1/ep133_s0`, M64 = `night5/MDv64_s0`), fixed before the inference;
+  one symmetric scale ±0.413. Fresh inference (`predict_one`: model built from the run config, batch 1, CUDA) on this
+  sample only, run twice (this commit and the clean-commit regeneration). The MD8 fallback of the earlier entry is
+  superseded.
+- **`fig_block.tex`** redrawn for 16.2 x 6.0 cm (level boxes 0.36 cm high with a 0.40 cm level step, block row moved
+  up); text still 12 pt. Compiled with tectonic -> 16.20 x 5.99 cm.
+
+**Evidence.**
+- Sizes (`pdfinfo`): fig_level 22.40 x 6.00, fig_ablation 22.40 x 8.00, fig_sample 16.20 x 4.20, fig_tail_val
+  22.40 x 4.50, fig_block 16.20 x 5.99 cm. Fonts: Liberation Sans (TrueType) in the matplotlib PDFs; Helvetica (Nimbus
+  Sans L) plus CMSY10 for the × sign in fig_block. Rendered and inspected: no overlapping labels.
+- **rel_p of the fig_tail_val panels** (sample `pfcm_6703_-2724`, whole grid, sum |o − t| / sum |t| on p):
+  **B s0 182.4288 %, M64 s0 181.2781 %** (target: 0 by definition). Both equal the per-sample values already in the
+  explore cache from the earlier validation evaluations (|diff| 2.7e-10 and 9.1e-12 as fractions), so the fresh
+  inference reproduces the evaluation. Both models are about equally poor on this separated-flow sample; the figure
+  shows the shape of the miss, not a difference between the models.
+- fig_level / fig_ablation values unchanged (poster_numbers.csv byte-identical to `fc3324b`). Wallmap check unchanged
+  (not drawn).
+- No test file read; no new file under `~/runs` (the two inferences are not cached).
+
+**Open questions.** None.
