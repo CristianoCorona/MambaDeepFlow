@@ -4123,3 +4123,112 @@ validation descriptive. No change to training, split or evaluation runs.
 and stops only at the next check, `data/train_full` missing (it exists only on the VM). In a temporary worktree with one
 word of the pre-registered text changed and committed: refused ("the pre-registered text ... was changed (only appended
 amendments are allowed)", exit 1). Worktree removed.
+
+## 2026-10-20 Poster figures (validation only; test set closed, not read)
+
+**Context / why.** Figures for the DML poster (A2 portrait): vector PDFs at poster-column size (25 cm wide, <= 10 cm
+high, 18 pt tick labels, sans-serif, no titles; captions in LaTeX), one palette, poster names B, M64 (= MDv64), M64-loc
+(= MDv64-local), SA64, Conv64, M64-dec (= MDv64-dec), M8 / M16 / M32 (= MDv8 / 16 / 32). The test set is closed: no
+`evaluate.py` on test, no inference on test files; test numbers only from `docs/results/test-*`.
+
+**Action.**
+- `scripts/poster_figures.py` (new) -> `docs/figures/poster/`. Per-seed validation values from the explore cache
+  (cache hits only; a miss stops the script); intervals read from the CSVs (`ci2_lo` / `ci2_hi` = two-level
+  bootstrap), not recomputed. Font Liberation Sans (TrueType, Helvetica metrics); Nimbus Sans (OTF / CFF) was tried
+  first and rejected because matplotlib embeds it with a font-type mismatch (`pdffonts` warning). Palette: dataviz
+  reference blue / orange / aqua for M64 / M64-loc / M64-dec, greys for B and the rest (validator: all checks pass,
+  aqua below 3:1 contrast, so M64-dec is always labelled directly).
+  - `fig_level.pdf`: rel_vy vs encoder block level (M8 / M16 / M32 / M64), seeds and mean; B mean +- sd band; M64-dec
+    marker at 64. Same runs as `docs/results/val-ablation64-8seed` (8-seed reading).
+  - `fig_ablation.pdf`: forest plot, rel_vy − B with the two-level 95 % CI; open markers validation, filled markers test
+    (M64, M64-loc); band = M64 − B validation interval.
+  - `fig_tail_val.pdf`: fallback for the requested `fig_tail.pdf` (see below).
+- `docs/figures/poster/fig_block.tex` (hand-written TikZ standalone, Helvetica + sansmath): DfpNet as a U (128 ... 1,
+  channels), insertion points M64 (after layer1, 64x64) and M8 (8x8), deep path (layer4-6 / dlayer6-4, below 8x8)
+  shaded; residual block x + Mixer(LN(x)) with in_proj -> dw-conv 3x3 + SiLU -> 4-direction selective scan (dashed,
+  "removed in M64-loc (skip term D·u kept)") -> norm -> gating (x SiLU(z)) -> out_proj (zero-init). Compiled with
+  tectonic in a scratch conda prefix (no LaTeX on the system; mdf env untouched) -> `fig_block.pdf`, 23.1 x 9.95 cm.
+- Alternatives considered: recomputing the CIs with 8 seeds for every variant (rejected: the brief says not to, and the
+  intervals exist).
+
+**Evidence.**
+- Run (dirty tree on `03ad1ae`; the PDFs carry the creator line with that hash): all four matplotlib PDFs 25.00 cm
+  wide, heights 10.00 / 10.00 / 8.20 cm. No file under `~/runs` created today (no cache entry, no test file).
+- fig_level, rel_vy % mean (sd), n: B 6.0674 (0.2044) 8; M8 5.9792 (0.2235) 8; M16 5.8884 (0.0961) 5; M32 5.7306
+  (0.1603) 3; M64 5.3201 (0.0754) 8; M64-dec 5.7630 (0.1212) 5. All equal to `val-ablation64-8seed/t1_summary.csv`.
+- fig_ablation, rel_vy − B (points, two-level 95 % CI, seeds variant vs B):
+
+  | poster name | validation | source | test |
+  |---|---|---|---|
+  | M64 | −0.747 [−1.027, −0.495] (8 vs 8) | val-ablation64-8seed | −1.173 [−2.470, −0.431] (test-confirm-mdv64) |
+  | M64-loc | −0.667 [−0.977, −0.372] (8 vs 8) | val-final-mdv64local | −0.866 [−1.602, −0.347] (test-final) |
+  | SA64 | −0.614 [−0.859, −0.390] (5 vs 8) | val-ablation64-8seed | |
+  | M64-loc −gate / −out-norm / −pre-norm / −expansion / dense conv | −0.746 [−1.064, −0.448] / −0.688 [−0.987, −0.424] / −0.596 [−0.827, −0.394] / −0.590 [−0.881, −0.338] / −0.712 [−1.053, −0.393] (5 vs 8) | val-ablation64-8seed | |
+  | Conv64 | −0.116 [−0.316, +0.065] (5 vs 8) | val-ablation64-8seed | |
+  | M64-dec | −0.304 [−0.529, −0.102] (5 vs 8) | val-ablation64-8seed | |
+  | M16 | −0.179 [−0.420, +0.053] (5 vs 8) | val-ablation64-8seed | |
+  | B-large | −0.001 [−0.195, +0.171] (8 vs 8) | val-explore-8seed/a3_paired.csv | |
+
+- Differences from the notebook (no number contradicts it; reported as asked):
+  - Rounding: M64 − B upper bound −0.4955 is printed −0.496 in the 2026-10-16 entry and −0.495 on the figure;
+    M64-loc − B upper bound −0.3725 is −0.373 in the 2026-10-18 entry and −0.372 here.
+  - M64-dec − B and M16 − B are the 8-seed-reference values (−0.30 [−0.53, −0.10], −0.18 [−0.42, +0.05]); the notebook
+    quotes only the main reading with seeds 0-4 (−0.36 [−0.64, −0.13], −0.24 [−0.54, +0.04]). The forest plot mixes
+    8 vs 8 (M64, M64-loc, B-large) and 5 vs 8 (the others) comparisons, as the brief's sources do.
+  - The level curve uses 8 seeds for M8 and M64 (5.98 / 5.89 / 5.73 / 5.32); the night-8a entry quotes the 5-seed curve
+    5.88 / 5.89 / 5.73 / 5.33.
+  - B-large − B rel_vy is not quoted numerically in the 2026-10-16..18 entries; it comes from the night-3 validation
+    analysis (`val-explore-8seed`), same B runs, 8 vs 8.
+- **fig_wallmap NOT produced.** The cache stores only the sample-mean |error| map per run. The validation airfoils
+  are not aligned: of 402 samples only 4 cells are solid in every sample, 1047 are solid in some and fluid in others;
+  leading edge rows 32-33 (shared), trailing edge rows 89-96, airfoil columns 59-65 (first) to 65-81 (last), while the
+  wall band is 4 px; masks are identical within a profile (not rotated with alpha), so the suction side also changes
+  with the sign of alpha. A grid average would mix wall, interior and far-field cells. The per-sample wall-band
+  numbers already in `t3_region_diffs.csv` (computed with each sample's own mask) remain the evidence for the wall.
+- **fig_tail: requested version not possible from cached predictions.** No test cache entry keeps predictions
+  (`keep_idx` empty for every `__test__` entry); the original `md8_top3_samples.png` came from fresh CPU inference on
+  test samples (2026-10-14), which the closed test set now forbids, and no MDv64 entry (val or test) keeps predictions.
+  Fallback written as `fig_tail_val.pdf` (separate name so it is not mistaken for the test figure): validation sample
+  `pfcm_6703_-2724` (index 338), chosen among the six kept validation samples as the one with most reverse-flow cells
+  downstream of the trailing edge (1071; next `rae5214_8305_-3198` 620); p of target, B and MD8 (the 8x8 MD block of
+  the main analysis, not M8), each the lower-median seed on that sample by rel_p (B s4, MD8 s4), shared symmetric scale
+  ±0.429, flow left to right. Per-sample rel_p is ~175-188 % for every seed of both models on this sample (small |p|
+  target), so no error value is printed on the panels.
+
+**Open questions.** Whether to accept the validation / MD8 fallback for the tail figure or replace it with M64 on a
+validation sample (would need new validation inference of the MDv64 runs, allowed but not cached). A wall-region
+figure would need per-sample maps in a body-fitted frame (not in the cache).
+
+## 2026-10-20 Poster figures resized to the measured layout; poster_numbers.csv
+
+**Context / why.** The poster layout was measured (body text 16 pt, captions 9.4 pt; left column 16.2 cm, right
+column 22.4 cm). The figures of the previous entry (25 x 10 cm, 18 pt) do not fit. Same data, palette and rules: test
+set closed, no new inference.
+
+**Decision / action.**
+- `scripts/poster_figures.py`: per-figure sizes and font sizes. `fig_level.pdf` 22.4 x 6.5 cm, tick labels and
+  annotations 14 pt, axis labels 15 pt. `fig_ablation.pdf` 22.4 x 8.5 cm, row labels 13 pt, axis label 15 pt; all 12
+  rows kept, legend inside the plot area (lower left), "M64-loc dense conv" shortened to "M64-loc dense". Marker and
+  line sizes scaled down. New `docs/figures/poster/poster_numbers.csv`: every value shown on both figures (estimate,
+  CI / band low and high, interval type, n seeds of each side, source file), written only when both figures are drawn,
+  so the report table can use exactly these numbers. `fig_tail_val.pdf` is no longer drawn by default (`--only tail`;
+  its code keeps the 25 cm / 18 pt settings so it still reproduces the kept PDF), and was not regenerated.
+- `docs/figures/poster/fig_block.tex` redrawn for the left column at 16.2 x 6.3 cm, all text 12 pt (Helvetica without
+  the 0.95 `scaled` option, so 12 pt is 12 pt), included at `\linewidth` without scaling. Simplifications: boxes show
+  the map size only (channel counts and the s^2·c legend removed), "in" / "out" instead of the input / output
+  descriptions, the "removed in M64-loc" note inside the dashed scan box, "SS2D" as the mixer label, "gate" for the
+  gating branch. The note "skip term D·u kept" moved to the caption (comment in the .tex lists what the caption must
+  say). Compiled with tectonic (scratch conda prefix) -> `fig_block.pdf` 16.20 x 6.28 cm.
+- Alternatives considered: scaling the 25 cm versions in LaTeX (rejected: text would shrink to ~12-16 pt unevenly);
+  dropping fig_ablation rows (rejected by the brief).
+
+**Evidence.**
+- Sizes (`pdfinfo`): fig_level 22.40 x 6.50 cm, fig_ablation 22.40 x 8.50 cm, fig_block 16.20 x 6.28 cm,
+  fig_tail_val unchanged 25.00 x 8.20 cm. Rendered and inspected: no overlapping labels.
+- Values unchanged from the previous entry (same printout): e.g. M64 − B val −0.747 [−1.027, −0.495], test −1.173
+  [−2.470, −0.431]; M64-loc − B val −0.667 [−0.977, −0.372], test −0.866 [−1.602, −0.347]; level means B 6.0674,
+  M8 5.9792, M16 5.8884, M32 5.7306, M64 5.3201, M64-dec 5.7630. poster_numbers.csv: 58 rows (fig_level 6 means incl.
+  the B band + 37 per-seed values; fig_ablation 1 band + 12 validation + 2 test differences).
+- No cache miss, no file under `~/runs` written. PDFs regenerated from the clean commit in the next commit.
+
+**Open questions.** The tail figure decision (previous entry) is unchanged.

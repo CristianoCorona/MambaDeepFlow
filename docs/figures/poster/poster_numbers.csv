@@ -1,0 +1,59 @@
+figure,kind,poster_name,label,split,seed,unit,estimate,ci_lo,ci_hi,interval,n_seeds_var,n_seeds_ref,source
+fig_level,mean,B,B,val,,%,6.067445,5.863041,6.271849,"mean +- sd (ddof=1), band",8,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,B,B,val,0,%,5.928699,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,B,B,val,1,%,6.093768,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,B,B,val,2,%,5.953525,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,B,B,val,3,%,6.520164,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,B,B,val,4,%,6.140248,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,B,B,val,5,%,5.865758,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,B,B,val,6,%,5.974763,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,B,B,val,7,%,6.062636,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,mean,M8,MDv8,val,,%,5.979207,,,,8,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M8,MDv8,val,0,%,5.873939,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M8,MDv8,val,1,%,5.779954,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M8,MDv8,val,2,%,5.678765,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M8,MDv8,val,3,%,6.092543,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M8,MDv8,val,4,%,5.953994,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M8,MDv8,val,5,%,5.977161,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M8,MDv8,val,6,%,6.412621,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M8,MDv8,val,7,%,6.064676,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,mean,M16,MDv16,val,,%,5.888400,,,,5,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M16,MDv16,val,0,%,6.024543,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M16,MDv16,val,1,%,5.781983,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M16,MDv16,val,2,%,5.921902,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M16,MDv16,val,3,%,5.901120,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M16,MDv16,val,4,%,5.812451,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,mean,M32,MDv32,val,,%,5.730550,,,,3,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M32,MDv32,val,0,%,5.915320,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M32,MDv32,val,1,%,5.628712,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M32,MDv32,val,2,%,5.647619,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,mean,M64,MDv64,val,,%,5.320084,,,,8,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64,MDv64,val,0,%,5.378478,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64,MDv64,val,1,%,5.310649,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64,MDv64,val,2,%,5.309874,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64,MDv64,val,3,%,5.358738,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64,MDv64,val,4,%,5.268993,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64,MDv64,val,5,%,5.451147,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64,MDv64,val,6,%,5.205483,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64,MDv64,val,7,%,5.277308,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,mean,M64-dec,MDv64-dec,val,,%,5.762957,,,,5,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64-dec,MDv64-dec,val,0,%,5.641251,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64-dec,MDv64-dec,val,1,%,5.783433,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64-dec,MDv64-dec,val,2,%,5.869354,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64-dec,MDv64-dec,val,3,%,5.887324,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_level,seed,M64-dec,MDv64-dec,val,4,%,5.633422,,,,1,,"explore cache (val), runs of docs/results/val-ablation64-8seed/runs.csv"
+fig_ablation,band,M64,MDv64,val,,points,-0.747361,-1.026703,-0.495491,"two-level bootstrap 95 % (ci2), rel_vy - B",8,8,docs/results/val-ablation64-8seed/t2_paired.csv
+fig_ablation,diff,M64,MDv64,val,,points,-0.747361,-1.026703,-0.495491,"two-level bootstrap 95 % (ci2), rel_vy - B",8,8,docs/results/val-ablation64-8seed/t2_paired.csv
+fig_ablation,diff,M64,MDv64,test,,points,-1.172923,-2.469574,-0.431376,"two-level bootstrap 95 % (ci2), rel_vy - B",8,8,docs/results/test-confirm-mdv64/t2_paired.csv
+fig_ablation,diff,M64-loc,MDv64-local,val,,points,-0.667037,-0.977020,-0.372490,"two-level bootstrap 95 % (ci2), rel_vy - B",8,8,docs/results/val-final-mdv64local/t2_paired.csv
+fig_ablation,diff,M64-loc,MDv64-local,test,,points,-0.866259,-1.601957,-0.346678,"two-level bootstrap 95 % (ci2), rel_vy - B",8,8,docs/results/test-final/t2_paired.csv
+fig_ablation,diff,SA64,SA64,val,,points,-0.614284,-0.859363,-0.389994,"two-level bootstrap 95 % (ci2), rel_vy - B",5,8,docs/results/val-ablation64-8seed/t2_paired.csv
+fig_ablation,diff,M64-loc −gate,L-nogate,val,,points,-0.746178,-1.064472,-0.447889,"two-level bootstrap 95 % (ci2), rel_vy - B",5,8,docs/results/val-ablation64-8seed/t2_paired.csv
+fig_ablation,diff,M64-loc −out-norm,L-nonorm,val,,points,-0.687986,-0.986533,-0.424336,"two-level bootstrap 95 % (ci2), rel_vy - B",5,8,docs/results/val-ablation64-8seed/t2_paired.csv
+fig_ablation,diff,M64-loc −pre-norm,L-noprenorm,val,,points,-0.595992,-0.826968,-0.393998,"two-level bootstrap 95 % (ci2), rel_vy - B",5,8,docs/results/val-ablation64-8seed/t2_paired.csv
+fig_ablation,diff,M64-loc −expansion,L-noexp,val,,points,-0.590294,-0.880938,-0.337864,"two-level bootstrap 95 % (ci2), rel_vy - B",5,8,docs/results/val-ablation64-8seed/t2_paired.csv
+fig_ablation,diff,M64-loc dense,L-dense,val,,points,-0.712275,-1.052627,-0.392639,"two-level bootstrap 95 % (ci2), rel_vy - B",5,8,docs/results/val-ablation64-8seed/t2_paired.csv
+fig_ablation,diff,Conv64,Conv64,val,,points,-0.116117,-0.315702,0.065386,"two-level bootstrap 95 % (ci2), rel_vy - B",5,8,docs/results/val-ablation64-8seed/t2_paired.csv
+fig_ablation,diff,M64-dec,MDv64-dec,val,,points,-0.304488,-0.528776,-0.102500,"two-level bootstrap 95 % (ci2), rel_vy - B",5,8,docs/results/val-ablation64-8seed/t2_paired.csv
+fig_ablation,diff,M16,MDv16,val,,points,-0.179045,-0.419878,0.052644,"two-level bootstrap 95 % (ci2), rel_vy - B",5,8,docs/results/val-ablation64-8seed/t2_paired.csv
+fig_ablation,diff,B-large,B-large,val,,points,-0.001309,-0.194703,0.171221,"two-level bootstrap 95 % (ci2), rel_vy - B",8,8,docs/results/val-explore-8seed/a3_paired.csv
