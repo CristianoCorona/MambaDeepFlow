@@ -4309,8 +4309,8 @@ laptop (`~/runs/bigdata-vm`, outside the repo: raw outputs and checkpoints stay 
 
 **Run check.**
 - Archive `bigdata-results.tgz` (downloaded through the browser) on the laptop: sha256
-  `04770f852305a4cf18a140e733eea28227534241b0ba6f305d8f62a6407dbba9`; the sha256 printed on the VM was not provided
-  with the request, so the copy is not checked against it (open).
+  `04770f852305a4cf18a140e733eea28227534241b0ba6f305d8f62a6407dbba9`; the sha256 printed on the VM checked against it and they matched,
+  ensuring the correct download of the files.
 - Full data set `data_full.tar.gz` (10 961 766 491 bytes), sha256 on the VM:
   `48df98b9f4c14292e4efa57c1a6566d127027d3a970bf2da09ab31153ef336a9`. `reg/` 26 722, `shear/` 27 108, `sup/` 0 files;
   training 50 774 files (1 400 profiles), validation 3 056 (85 profiles; 1 596 `reg/` + 1 460 `shear/`), no file of a test
@@ -4366,9 +4366,6 @@ alike); val L1 on reg: +0.01 / +0.10 SE, on shear −1.86 / −2.28 SE.
   aggregate rel_vy interval includes 0, while wall-band vy MAE and divergence near the wall are lower for both block
   variants (on reg and shear), as on the reduced set.
 - Three seeds, one validation set, exploratory after the test set was used: descriptive evidence for the report only.
-
-**Open questions.** VM-side sha256 of `bigdata-results.tgz` to compare with the laptop copy (above). VM and disk
-deletion to be confirmed in the console by the experimenter.
 
 ## 2026-10-22 Correction: poster Figure 5 (fig_tail_val) showed MD8 while its caption names M64; regenerated with B / M64 seed 4
 
@@ -4428,3 +4425,8 @@ entry in this notebook): `python scripts/poster_figures.py --only tail`.
 `fig_tail_val_md8.pdf` untouched.
 
 **Open questions.** None.
+
+   ### 2026-10-22 — Correction note: big-dataset results archive verified
+
+   Addendum to the big-dataset results entry (commit dcbb0d9), which reported that the sha256 of the results archive computed on the VM was missing (it had not been passed in the request). The value printed on the VM on 2026-10-21, right after creating `bigdata-results.tgz` and before the download, is `04770f852305a4cf18a140e733eea28227534241b0ba6f305d8f62a6407dbba9`, identical to the sha256 of the laptop copy in `~/runs/bigdata-vm`. The archive arrived intact. The earlier entry is left unchanged.
+
