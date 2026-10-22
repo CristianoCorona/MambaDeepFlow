@@ -227,8 +227,7 @@ def figure(path_base, rel_vy_means):
     ax.set_xlim(-0.5, 1.5)
     ax.set_ylabel("validation rel. error $v_y$ (%)")
     ax.grid(axis="y", color="0.92", lw=0.5)
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2, frameon=False, handletextpad=0.3,
-              columnspacing=1.0)
+    ax.legend(loc="lower left", frameon=False, handletextpad=0.3)  # inside: the title sits above the axes
     for ext in ("pdf", "png"):
         fig.savefig(f"{path_base}.{ext}", dpi=300)
     plt.close(fig)
