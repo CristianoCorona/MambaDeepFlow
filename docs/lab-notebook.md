@@ -4369,3 +4369,48 @@ alike); val L1 on reg: +0.01 / +0.10 SE, on shear −1.86 / −2.28 SE.
 
 **Open questions.** VM-side sha256 of `bigdata-results.tgz` to compare with the laptop copy (above). VM and disk
 deletion to be confirmed in the console by the experimenter.
+
+## 2026-10-22 Correction: poster Figure 5 (fig_tail_val) showed MD8 while its caption names M64; regenerated with B / M64 seed 4
+
+**Context / why.** The poster's Figure 5 (`pfcm_6703_-2724`, validation, alpha −22.1 deg, separated flow) used the
+earlier `fig_tail_val.pdf` of `2e61a35`: target, B s4 and **MD8** s4 (cached predictions, fallback of the first poster
+entry). The poster caption says "B and M64 keep it attached": panel and caption did not match. The repository version
+of `ff6b9ce` / `146d021` already showed M64, but with seed 0, and was not the one on the poster. Decision of the
+experimenter: real MDv64 predictions with the same seed as the poster's B panel (seed 4), plus a variant with M64-loc.
+Validation only; the test set is not touched.
+
+**Action** (`scripts/poster_figures.py`, `docs/figures/poster/`):
+- Fresh inference (`predict_one`, batch 1, CUDA, model built from each run's `config.json`) on this ONE validation
+  sample with the final checkpoints of **B s4 = `night3/B_s4`, M64 s4 = `night7/MDv64_s4`, M64-loc s4 =
+  `night8a/MDv64-local_s4`** (configs checked: seed 4, 133 epochs, status finished; the runs of the analyses).
+  Normalised p, same preprocessing, crop and style as before.
+- `fig_tail_val.pdf` (22.4 x 4.5 cm): target, "B (s4)", "M64 (s4)". New `fig_tail_val_4p.pdf` (22.4 x 3.9 cm, same
+  width): plus "M64-loc (s4)". One symmetric colour scale for both files, the maximum |p| over the four panels:
+  ±0.422 (ticks ±0.3; the old figure had ±0.429).
+- The MD8 version is kept as `fig_tail_val_md8.pdf` (the `2e61a35` file, 25 x 8.2 cm, unchanged); the B s0 / M64 s0
+  version is superseded (in the history at `146d021`).
+- `separation()`: the A7 indicators of 2026-10-13 (`scripts/analyze_val.py`): fluid cells with vx < 0 downstream of the
+  trailing edge and within 8 px of the airfoil; plus the position of the p minimum (distance to the airfoil, rows behind
+  the trailing edge).
+
+**Evidence.**
+- rel_p on this sample (whole grid): **B s4 183.55 %, M64 s4 182.00 %, M64-loc s4 182.42 %**; each equals the cached
+  per-sample value of the earlier validation evaluation (|diff| <= 5e-8 percent).
+- Separation indicators:
+
+  | panel | vx < 0 downstream of TE | vx < 0 within 8 px | p min | p min: distance to airfoil / rows behind TE |
+  |---|---|---|---|---|
+  | target | **1071** | 215 | −0.413 | 12.6 px / +4 (behind the trailing edge) |
+  | B (s4) | 175 | 504 | −0.422 | 19.0 px / −29 (over mid-chord) |
+  | M64 (s4) | 204 | 514 | −0.399 | 21.0 px / −30 |
+  | M64-loc (s4) | 195 | 525 | −0.413 | 19.0 px / −30 |
+
+  Target 1071 as on 2026-10-13; B 175 at seed 4 (205-229 for B / MD8 / SA8 at seed 0 on 2026-10-13).
+- Reading: in the target the low-pressure vortex has left the airfoil (centre behind the trailing edge, a large
+  reverse-flow region in the wake, little near the wall). All three models put the vortex over the suction side at
+  mid-chord, with the reverse flow mostly along the wall and a small wake: the vortex stays attached. **The caption
+  "B and M64 keep it attached" is correct for the new panels** (and for M64-loc). The poster section 4 sentence
+  "separated flows at high angle, missed by all models" stays consistent (rel_p 182-184 % for all three).
+- The experimenter's uncommitted edit of the big-dataset entry (archive sha256) is not part of this commit.
+
+**Open questions.** None.

@@ -14,9 +14,11 @@ script); the only fresh inference is B s0 and MDv64 s0 on ONE validation sample 
                       the cached mean |error| maps average different airfoils; the check is printed)
   fig_sample.pdf      16.2 x 4.2 cm (left column). Data only: mask + free-stream arrow, target p, v_x, v_y of one
                       validation sample (SAMPLE_FILE), own colour scale each, common crop
-  fig_tail_val.pdf    22.4 x 4.5 cm. p of the separated-flow validation sample TAIL_FILE: target, B and M64 (same
-                      seed, fresh inference on this one sample, checked against the cached per-sample rel_p), one
-                      colour scale; rel_p printed (for the notebook), not drawn
+  fig_tail_val.pdf    22.4 x 4.5 cm. p of the separated-flow validation sample TAIL_FILE: target, B and M64 (seed
+                      TAIL_SEED for both, fresh inference on this one sample, checked against the cached per-sample
+                      rel_p), one colour scale; rel_p and separation indicators printed (for the notebook), not drawn
+  fig_tail_val_4p.pdf 22.4 x 3.9 cm, the same plus M64-loc (same seed, same colour scale)
+  fig_tail_val_md8.pdf  earlier B s4 / MD8 s4 version (2e61a35), kept; not produced by this script
 
 Sans-serif Liberation Sans (Helvetica metrics), text >= 13 pt. The TikZ block diagram is
 docs/figures/poster/fig_block.tex (16.2 x 6.0 cm, left column; hand-written, not generated here).
@@ -50,7 +52,7 @@ CM = 1 / 2.54
 
 # sizes measured on the poster layout (body 16 pt, captions 9.4 pt; columns 16.2 / 22.4 cm)
 SIZE_LEVEL, SIZE_ABLATION = (22.4 * CM, 6.0 * CM), (22.4 * CM, 8.0 * CM)
-SIZE_SAMPLE, SIZE_TAIL = (16.2 * CM, 4.2 * CM), (22.4 * CM, 4.5 * CM)
+SIZE_SAMPLE, SIZE_TAIL, SIZE_TAIL4 = (16.2 * CM, 4.2 * CM), (22.4 * CM, 4.5 * CM), (22.4 * CM, 3.9 * CM)
 RC_LEVEL = {"font.size": 14, "axes.labelsize": 15, "xtick.labelsize": 14, "ytick.labelsize": 14, "legend.fontsize": 14}
 RC_ABLATION = {"font.size": 13, "axes.labelsize": 15, "xtick.labelsize": 13, "ytick.labelsize": 13,
                "legend.fontsize": 13}
@@ -59,8 +61,8 @@ RC_SAMPLE = RC_TAIL = {"font.size": 13, "axes.labelsize": 13, "xtick.labelsize":
 # field figures: common crop (data rows x0:x1 = x, columns y0:y1 = y; airfoil rows 32-96, columns 59-81)
 CROP = (22, 122, 28, 100)
 SAMPLE_FILE = "naca643418_6676_702.npz"  # NACA 64(3)-418, alpha 6.0 deg (validation)
-TAIL_FILE, TAIL_SEED = "pfcm_6703_-2724.npz", 0  # separated flow (validation); seed fixed before inference
-TAIL_RUNS = {"B": "~/runs/night1/ep133_s0", "MDv64": "~/runs/night5/MDv64_s0"}
+TAIL_FILE, TAIL_SEED = "pfcm_6703_-2724.npz", 4  # separated flow (validation); seed 4 as the poster figure
+TAIL_RUNS = {"B": "~/runs/night3/B_s4", "MDv64": "~/runs/night7/MDv64_s4", "MDv64-local": "~/runs/night8a/MDv64-local_s4"}
 
 # one palette for every figure (dataviz reference palette, validated: blue / orange / aqua, light mode)
 C_M64, C_LOC, C_DEC = "#2a78d6", "#eb6834", "#1baf7a"
@@ -350,33 +352,57 @@ def rel_p(o, t):
     return float(np.abs(o[0] - t[0]).sum() / np.abs(t[0]).sum())
 
 
+def separation(f, mask):
+    """Separation indicators of one field (3, 128, 128), as A7 of 2026-10-13 (scripts/analyze_val.py): fluid cells with
+    vx < 0 downstream of the trailing edge and within 8 px of the airfoil; plus the position of the pressure minimum
+    (distance to the airfoil in px, rows downstream of the trailing edge: > 0 behind it)."""
+    te_r, _ = explore.trailing_edge(mask)
+    dist = explore.distance_to_airfoil(mask)
+    fluid = ~mask
+    down = fluid & (np.arange(mask.shape[0])[:, None] > te_r)
+    near = fluid & (dist <= 8)
+    pm = np.where(fluid, f[0], np.inf)
+    r, c = np.unravel_index(np.argmin(pm), pm.shape)
+    return {"vx_neg_down": int((f[1][down] < 0).sum()), "vx_neg_near": int((f[1][near] < 0).sum()),
+            "pmin": float(f[0][r, c]), "pmin_dist_px": float(dist[r, c]), "pmin_rows_behind_te": int(r - te_r)}
+
+
 def fig_tail(ds, out_dir):
-    """p of the separated-flow validation sample: target, B and M64 (same seed), one colour scale."""
+    """p of the separated-flow validation sample: target, B, M64 (fig_tail_val.pdf) and the same plus M64-loc
+    (fig_tail_val_4p.pdf); one seed for all models, one colour scale for both files."""
     i = ds.files.index(TAIL_FILE)
     t = ds.targets[i].numpy().astype(np.float64)
     mask = ds.inputs[i, 2].numpy() > 0.5
-    panels = [("target", t[0])]
-    print(f"fig_tail: {TAIL_FILE} (index {i}), seed {TAIL_SEED} for both models (fixed before inference)")
+    panels = [("target", t)]
+    print(f"fig_tail: {TAIL_FILE} (index {i}), seed {TAIL_SEED} for every model")
     for label, run in TAIL_RUNS.items():
         o = predict_one(run, ds, i)
         r = rel_p(o, t)
         ref = cached(run, ds)["rel_p"][i]  # per-sample value of the earlier evaluation (cache)
         print(f"  {POSTER_NAME[label]} ({run}): rel_p {100 * r:.4f} % (cache {100 * ref:.4f} %, |diff| "
               f"{100 * abs(r - ref):.2e})")
-        panels.append((POSTER_NAME[label], o[0]))
-    lim = max(np.abs(f[~mask]).max() for _, f in panels)
-    with plt.rc_context(RC_TAIL):
-        fig, axes = plt.subplots(1, 3, figsize=SIZE_TAIL, constrained_layout=True)
-        fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, wspace=0.02)
-        for ax, (name, f) in zip(axes, panels):
-            im = ax.imshow(crop(f, mask), origin="lower", cmap=DIVERGING, vmin=-lim, vmax=lim, interpolation="nearest")
-            field_axes(ax)
-            ax.text(0.03, 0.97, name, transform=ax.transAxes, ha="left", va="top")
-        cb = fig.colorbar(im, ax=axes, fraction=0.03, pad=0.01, ticks=sym_ticks(lim))
-        cb.set_label("$p$")
-        cb.outline.set_visible(False)
-        print(f"  colour range +-{lim:.3f}")
-        save(fig, out_dir, "fig_tail_val.pdf")
+        panels.append((f"{POSTER_NAME[label]} (s{TAIL_SEED})", o))
+    print("  separation: vx<0 cells downstream of TE / within 8 px; p min, its distance to the airfoil (px) and rows "
+          "behind the TE")
+    for name, f in panels:
+        sep = separation(f, mask)
+        print(f"    {name:14s} {sep['vx_neg_down']:5d} / {sep['vx_neg_near']:4d};  p min {sep['pmin']:+.3f} at "
+              f"{sep['pmin_dist_px']:.1f} px, {sep['pmin_rows_behind_te']:+d} rows")
+    lim = max(np.abs(f[0][~mask]).max() for _, f in panels)
+    print(f"  colour range +-{lim:.3f}")
+    for chosen, size, name in ((panels[:3], SIZE_TAIL, "fig_tail_val.pdf"), (panels, SIZE_TAIL4, "fig_tail_val_4p.pdf")):
+        with plt.rc_context(RC_TAIL):
+            fig, axes = plt.subplots(1, len(chosen), figsize=size, constrained_layout=True)
+            fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, wspace=0.02)
+            for ax, (title, f) in zip(axes, chosen):
+                im = ax.imshow(crop(f[0], mask), origin="lower", cmap=DIVERGING, vmin=-lim, vmax=lim,
+                               interpolation="nearest")
+                field_axes(ax)
+                ax.text(0.03, 0.97, title, transform=ax.transAxes, ha="left", va="top")
+            cb = fig.colorbar(im, ax=axes, fraction=0.03, pad=0.01, ticks=sym_ticks(lim))
+            cb.set_label("$p$")
+            cb.outline.set_visible(False)
+            save(fig, out_dir, name)
 
 
 def main():
