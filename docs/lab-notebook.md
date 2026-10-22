@@ -4300,3 +4300,72 @@ inference on `pfcm_6703_-2724`: B s0 rel_p 182.4288 %, M64 s0 181.2781 % (|diff|
 percent: GPU rounding, same values to 4 decimals). Wallmap refusal unchanged; no file under `~/runs` written.
 
 **Open questions.** None.
+
+## 2026-10-22 Big-dataset experiment: run check and pre-registered analysis (validation only; b78e4ec + Amendment 1)
+
+**Context / why.** The cloud queue (`queues/bigdata.txt`, launched at `03ad1ae`) has finished; results copied to the
+laptop (`~/runs/bigdata-vm`, outside the repo: raw outputs and checkpoints stay there). Analysis as pre-registered
+(`docs/preregistration-bigdata.md`, `b78e4ec`, Amendment 1 `e41de8c`: main validation = `reg/` files).
+
+**Run check.**
+- Archive `bigdata-results.tgz` (downloaded through the browser) on the laptop: sha256
+  `04770f852305a4cf18a140e733eea28227534241b0ba6f305d8f62a6407dbba9`; the sha256 printed on the VM was not provided
+  with the request, so the copy is not checked against it (open).
+- Full data set `data_full.tar.gz` (10 961 766 491 bytes), sha256 on the VM:
+  `48df98b9f4c14292e4efa57c1a6566d127027d3a970bf2da09ab31153ef336a9`. `reg/` 26 722, `shear/` 27 108, `sup/` 0 files;
+  training 50 774 files (1 400 profiles), validation 3 056 (85 profiles; 1 596 `reg/` + 1 460 `shear/`), no file of a test
+  profile; loader peak RSS 20.2 GiB (`inspect_full.py --load-ram`, 242 s).
+- **9 of 9 runs finished** (B, MDv64-local, MDv64; seeds 0-2): 133 epochs, 675 241 steps each, 133 metrics rows, no
+  NaN / Inf; all at commit `03ad1ae`, clean tree, NVIDIA L4, same training files (sha256 `5f07e568...`) and validation
+  (`34b1f5f8...`); peak RSS 21.5-21.9 GiB (VM g2-standard-8, 32 GB). No run failed, interrupted or repeated; none
+  missing. Queue 2026-10-19 14:02 to 2026-10-20 21:14 UTC (31.2 h), well before the cutoff (2026-10-21 17:26 UTC); then
+  `post_bigdata.py` (9 runs, ~15 min; training part loaded in 227 s) and automatic power-off. `queue.log`, `post.log`
+  and the evaluation logs contain no error.
+- Durations, real training wall vs smoke-test nominal estimate (est= in the queue was nominal x 1.15): B 114-122 min vs
+  128 min; MDv64-local 146-152 vs 155; MDv64 352-357 vs 473 (the short MDv64 check underestimated its it/s). Training
+  it/s: B 99-106, MDv64-local 79-81, MDv64 32.4-32.9 (laptop: 115 / 73.5 / 30.7). Evaluation 31-45 s per run.
+
+**Analysis.** `scripts/bigdata_analysis.py --full-root ~/runs/bigdata-vm/runs/bigdata` at `e0e7862` (clean tree; the
+only change since `03ad1ae` in this script: legend placement of the figure, committed before the final run) ->
+`docs/results/val-bigdata/`, `docs/figures/val-bigdata/bigdata_rel_vy.{pdf,png}`. Seeds 0-2 everywhere; reduced set =
+`night1/ep133_s0-2`, `night8a/MDv64-local_s0-2`, `night5/MDv64_s0-2` (402 validation files, all `reg/`).
+Consistency: post_val.npz vs eval CSV max |rel_vy| difference 3.1e-7.
+
+**Evidence** (validation rel_vy, %; differences in percentage points, two-level 95 % CI, 10 000 repetitions, seed 0):
+
+| | B | MDv64-local | MDv64 |
+|---|---|---|---|
+| reduced, 402 reg | 5.992 (0.089) | 5.501 (0.152) | 5.333 (0.039) |
+| **full, 1 596 reg (main)** | **4.687 (0.093)** | **4.464 (0.057)** | **4.435 (0.048)** |
+| full, 1 460 shear (descriptive) | 5.157 (0.006) | 4.925 (0.028) | 4.846 (0.063) |
+| full, all 3 056 (descriptive) | 4.911 (0.050) | 4.685 (0.036) | 4.631 (0.050) |
+
+| comparison | reduced (seeds 0-2) | **full-reg (main)** | full-shear | full-all |
+|---|---|---|---|---|
+| MDv64-local − B | −0.491 [−0.837, −0.155] | **−0.222 [−0.414, −0.035]** | −0.231 [−0.387, −0.071] | −0.227 [−0.362, −0.086] |
+| MDv64 − B | −0.659 [−0.956, −0.410] | **−0.252 [−0.442, −0.054]** | −0.311 [−0.469, −0.147] | −0.280 [−0.418, −0.137] |
+| MDv64-local − MDv64 | +0.168 [−0.066, +0.441] | **+0.030 [−0.119, +0.179]** | +0.080 [−0.065, +0.224] | +0.054 [−0.063, +0.171] |
+
+Descriptive, full-reg: MDv64-local − B median rel_vy −0.105 [−0.358, +0.087], aggregate rel_vy −0.047 [−0.253, +0.174],
+rel_all −0.005 [−0.094, +0.092], rel_p −0.294 [−0.877, +0.286]; wall-band vy MAE −0.535e-3 [−0.698, −0.365] (−6.1 % of
+B's 8.81e-3); divergence error wall −0.967e-3 [−1.097, −0.857] (−8.8 % of 11.02e-3), other −0.068e-3 [−0.085, −0.049].
+MDv64 − B: median −0.270 [−0.479, −0.023], aggregate −0.054 [−0.273, +0.194], wall-band vy MAE −0.695e-3
+[−0.849, −0.531] (−7.9 %), divergence wall −1.141e-3 [−1.388, −0.910]. MDv64-local − MDv64: wall-band vy MAE +0.160e-3
+[−0.020, +0.334]; on shear +0.228e-3 [+0.029, +0.453], divergence wall on shear +0.302e-3 [+0.141, +0.479].
+Verification 5a (eval mode, (mean_var − mean_B) / SE_Welch): train L1 MDv64-local −2.81 SE, MDv64 −3.42 SE (reg / shear
+alike); val L1 on reg: +0.01 / +0.10 SE, on shear −1.86 / −2.28 SE.
+
+**Reading (pre-registered: qualitative, no confirmatory conclusion).**
+- On validation, with the full data set, MDv64-local − B on rel_vy (reg, main) is −0.22 [−0.41, −0.04]: same sign as on
+  the reduced set with the same seeds (−0.49 [−0.84, −0.16]), but about half the size in points, and smaller relative
+  to B (−4.7 % vs −8.2 %). MDv64 − B the same: −0.25 [−0.44, −0.05] vs −0.66 [−0.96, −0.41] (−5.4 % vs −11.0 %). The gain
+  remains, smaller, while all models improve a lot with 8x more data (B 5.99 -> 4.69 on the reg validation; absolute
+  values of the two validation sets are not directly comparable, 402 vs 1 596 files).
+- MDv64-local − MDv64: not determined on either set (intervals include 0); no demonstrated difference, not equality.
+- The gain is specific to vy and to the wall band: whole-field rel_all and the val L1 on reg do not differ from B, the
+  aggregate rel_vy interval includes 0, while wall-band vy MAE and divergence near the wall are lower for both block
+  variants (on reg and shear), as on the reduced set.
+- Three seeds, one validation set, exploratory after the test set was used: descriptive evidence for the report only.
+
+**Open questions.** VM-side sha256 of `bigdata-results.tgz` to compare with the laptop copy (above). VM and disk
+deletion to be confirmed in the console by the experimenter.
