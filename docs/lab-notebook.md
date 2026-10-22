@@ -4414,3 +4414,17 @@ Validation only; the test set is not touched.
 - The experimenter's uncommitted edit of the big-dataset entry (archive sha256) is not part of this commit.
 
 **Open questions.** None.
+
+## 2026-10-22 Poster Figure 5 regenerated from the commit e2ac7d1
+
+**Context / why.** The two tail PDFs committed in `e2ac7d1` were drawn before that commit; regenerated from it.
+
+**Action.** At `e2ac7d1` (the only uncommitted change in the tree: the experimenter's own edit of the big-dataset
+entry in this notebook): `python scripts/poster_figures.py --only tail`.
+
+**Evidence.** Both PDFs carry the creator line `scripts/poster_figures.py @ e2ac7d1`; sizes unchanged (22.40 x 4.50,
+22.40 x 3.90 cm). Second fresh inference: rel_p B s4 183.5457 %, M64 s4 181.9995 %, M64-loc s4 182.4226 % (same to
+4 decimals; |diff| vs cache <= 7.4e-8 percent, GPU rounding); separation indicators identical to the previous entry.
+`fig_tail_val_md8.pdf` untouched.
+
+**Open questions.** None.
