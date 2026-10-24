@@ -4537,3 +4537,31 @@ that produced the results). The concept comes first; references to the notebook 
 values, which include a margin. Measured train + validation wall times (`queue_timing.json`): B 12.1-12.6 min
 (night 3), MDv64-local 18.7-18.9 min (nights 8a, 10), so 8 x (12.5 + 19) min = about 4.2 h. Corrected in
 `queues/README.md`.
+
+## 2026-10-24 New README; upstream README moved to docs/
+
+**Context / why.** The README was still the one of thunil/Deep-Flow-Prediction. After the cleanup (PR #2, merged
+into `master` as 87d9973) the repository gets a README that guides a reader through the project.
+
+**Decision or action.**
+- `README.md` -> `docs/upstream-README.md` (git mv), with a header saying what it is and the image paths changed to
+  `../resources/`; `resources/` is kept for it.
+- New `README.md`: summary and main result, the block figure, results by poster finding (test numbers from
+  `docs/results/test-mdv8`, `test-confirm-dr`, `test-confirm-mdv64`, `test-final`; validation from the poster),
+  repository layout, poster <-> code names, setup (environment, data, checks), how to use the final architecture
+  (`build_from_cfg({"variant": "MDv-local", "level": 64})`), how to reproduce the final comparison
+  (`queues/reproduce-final.txt` + `final_analysis.py`), documentation, credits and licenses.
+- `docs/figures/readme/`: `fig_block.png`, `fig_level.png`, `fig_ablation.png`, rendered from the poster PDFs in
+  `docs/figures/poster/` (pdftoppm, 200 dpi, flattened on white for GitHub's dark theme): GitHub does not render
+  PDF images in a README.
+- The README links `docs/report/report.pdf`, to be added with the report.
+
+**Evidence.** Every relative link of the README checked to exist (except the report). The commands and numbers in
+the README were checked on 2026-10-24 (entries above): snippet run on CPU with mamba_ssm unimportable; measured run
+times B 12.5 min, MDv64-local 19 min; `final_analysis.py` with B and MDv64-local only reproduces
+`docs/results/val-final-mdv64local` (MDv64-local - B on rel_vy -0.6670 [-0.9770, -0.3725]); test rel_vy B 6.64 %,
+MDv64 5.47 %, MDv64-local 5.78 % (`docs/results/test-final/t1_summary.csv`); M8 = MDv8 - B rel_all -0.0093
+[-0.3381, +0.2614] (`docs/results/test-mdv8`). `train/` and `data/` identical to upstream/master (`git diff --stat`
+empty).
+
+**Open questions.** None.
