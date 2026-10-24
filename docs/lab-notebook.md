@@ -4426,7 +4426,22 @@ entry in this notebook): `python scripts/poster_figures.py --only tail`.
 
 **Open questions.** None.
 
-   ### 2026-10-22 — Correction note: big-dataset results archive verified
+## 2026-10-22 — Correction note: big-dataset results archive verified
 
-   Addendum to the big-dataset results entry (commit dcbb0d9), which reported that the sha256 of the results archive computed on the VM was missing (it had not been passed in the request). The value printed on the VM on 2026-10-21, right after creating `bigdata-results.tgz` and before the download, is `04770f852305a4cf18a140e733eea28227534241b0ba6f305d8f62a6407dbba9`, identical to the sha256 of the laptop copy in `~/runs/bigdata-vm`. The archive arrived intact. The earlier entry is left unchanged.
+Addendum to the big-dataset results entry (commit dcbb0d9), which reported that the sha256 of the results archive computed on the VM was missing (it had not been passed in the request). The value printed on the VM on 2026-10-21, right after creating `bigdata-results.tgz` and before the download, is `04770f852305a4cf18a140e733eea28227534241b0ba6f305d8f62a6407dbba9`, identical to the sha256 of the laptop copy in `~/runs/bigdata-vm`. The archive arrived intact. The earlier entry is left unchanged.
 
+
+## 2026-10-24 Poster sources added to the repository
+
+**Context / why.** The poster (DML 2026, A2 portrait) is final; its text is also the main content of the report, so
+its sources belong next to the figures they use.
+
+**Decision or action.** `docs/poster/` committed: `poster.tex`, the course template files (`beamerposter.sty`,
+`beamerthemeZH.sty`), `bib.bib`, the figures in `img/` (copies of `docs/figures/poster/`) and the compiled
+`dml_poster.pdf`. LaTeX build files added to `.gitignore`. The group executing the project is Group 62 (Group 30 was
+the planning group); `poster.tex` already says so. Known: `poster.tex` points to `\bibliography{poster-template/bib}`,
+while the file in the repo is `docs/poster/bib.bib` (left unchanged: the compiled PDF is the reference).
+
+**Evidence.** Files as provided by the experimenter; no figure regenerated.
+
+**Open questions.** None.

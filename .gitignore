@@ -115,3 +115,15 @@ train/modelG*
 train/results_train/
 train/results_test/
 train/testout*.txt
+
+# LaTeX build files (docs/poster, docs/report)
+*.aux
+*.nav
+*.snm
+*.out
+*.toc
+*.synctex.gz
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
