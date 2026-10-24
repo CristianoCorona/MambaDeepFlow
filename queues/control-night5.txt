@@ -1,7 +1,0 @@
-# Control runs for the position experiment (2026-10-15): 17 epochs, seed 0, grouped split. Purpose: find faults only
-# (criteria of the 2026-10-12 control runs: no NaN / Inf, train L1 decreasing, final val L1 <= 1.15 x B at 17 epochs),
-# measure it/s and peak VRAM (MDv64: 4096 tokens, check it fits). Reference B = ~/runs/control-2026-10-12/B (linked as
-# B in the out root). Pre-registered in docs/lab-notebook.md (2026-10-15).
-MDv32      est=6m  --seed 0 --epochs 17 --variant MDv --level 32
-MDv64      est=10m --seed 0 --epochs 17 --variant MDv --level 64
-MDv8-16-32 est=8m  --seed 0 --epochs 17 --variant MDv --levels 8,16,32

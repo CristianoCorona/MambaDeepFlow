@@ -4445,3 +4445,50 @@ while the file in the repo is `docs/poster/bib.bib` (left unchanged: the compile
 **Evidence.** Files as provided by the experimenter; no figure regenerated.
 
 **Open questions.** None.
+
+## 2026-10-24 Repository cleanup for submission
+
+**Context / why.** The experiments are finished (poster final, report in preparation). The repository had collected
+many operational files that were needed to run the nights but do not help a reader: 11 night launchers, 4 single
+test sessions, several one-off checks and exploratory analyses, and queue files that were superseded or never
+launched. The repository is reorganised around what the poster and report need, plus what a reader needs to
+reproduce the final comparison or reuse the final architecture.
+
+**Decision or action.**
+- Tag `experiments-final` (annotated) on commit 357298f, before any removal: every path cited in this notebook can
+  still be retrieved there (`git show experiments-final:<path>`). Past entries are not rewritten.
+- Moved out of the repository into `archive/` (gitignored, kept on the local disk only, same relative paths):
+  - launchers and sessions: `scripts/launch_night{3,4,5,6,6b,7,8,8a,8b,9,10}.sh`, `scripts/test_session_*.sh`,
+    `scripts/analyze_final_val.sh`, `scripts/analyze_night8.sh`, `scripts/reevaluate.sh`,
+    `scripts/run_calibration.sh`, `scripts/run_parallel_test.sh`;
+  - one-off checks: `scripts/{airfoil_overlap,b_consistency,compare_runs,control_gates,night_summary,recheck_groups}.py`,
+    `scripts/cloud/fingerprint_report.py`;
+  - exploratory analyses not in the poster (decision of the experimenter: keep them locally, not in the public
+    repository): `scripts/{data_quantity,seen_unseen,seen_proxy,positions_figure,posttest_explore,pressure_analysis,calibration_summary}.py`
+    and `tests/test_seen_unseen.py`. Their committed outputs in `docs/results/` and `docs/figures/` stay. The local
+    copies got one `sys.path` line each so that they still import the helpers kept in `scripts/` (untracked change);
+    `archive/tests/test_seen_unseen.py` passes (4 tests);
+  - queues: `night6.txt` (replaced by night 6b, never run), `night8-full.txt`, `night8-cut.txt` and
+    `night9-sa64only.txt` (superseded, not used), `cv.txt` (prepared, not launched), `data-eff.txt` (its lines are
+    also in `night4.txt`, which ran them), and the 17-epoch `control-*.txt` (fault checks only, results not used
+    for comparisons).
+- Kept: the pipeline (`train.py`, `evaluate.py`, `run_queue.py`, `run_original.py`), the checks `check_env.py`,
+  `verify_loader.py`, `make_split.py`, the analyses behind the poster (`final_analysis.py`, `analyze_val.py`,
+  `train_fit.py`, `cost.py`, `microbench.py`, `bigdata_analysis.py`, `poster_figures.py`), `scripts/cloud/` (minus
+  `fingerprint_report.py`; `estimate_budget.py` stays because `smoke_test.sh` calls it), and the queues that produced
+  the reported runs. Their header comments are historical and still mention retired launchers; `queues/README.md`
+  says so.
+- New: `scripts/README.md` (index of the scripts), `queues/README.md` (queue -> configurations, seeds, poster finding,
+  results folder), `queues/reproduce-final.txt` (B and MDv64-local, seeds 0-7, 133 epochs, the same train.py
+  arguments as nights 1/3/8a/10, interleaved by seed).
+- `CLAUDE.md`: Group 62 (Group 30 was the planning group), "How to run" updated (grouped split, run_queue, no
+  compare_runs). `scripts/cloud/setup_vm.sh`: comment pointing to `fingerprint_report.py` now names the tag.
+  Alternatives considered: moving the retired scripts to a tracked `archive/` folder (rejected: the public
+  repository should show only what is needed), deleting them (rejected: the experimenter wants local copies).
+
+**Evidence.** Before: `pytest tests/` 223 passed, 6 skipped; `check_env.py --seed 0` OK. After: `pytest tests/`
+219 passed, 6 skipped (the 4 missing tests are those of `test_seen_unseen.py`, moved; they pass in `archive/`).
+`run_queue.parse_queue("queues/reproduce-final.txt")` -> 16 runs. `git grep` of the moved file names outside this
+notebook and the pre-registrations: only the historical queue headers.
+
+**Open questions.** None.

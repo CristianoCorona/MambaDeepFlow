@@ -1,8 +1,0 @@
-# Control runs for night 8 (docs/preregistration-night8.md, commit d65894c): 17 epochs, seed 0, grouped split.
-# Purpose: find faults only (no NaN / Inf, train L1 decreasing: last 3 epochs < first 3); the ratio of the final val L1
-# to the B control of 2026-10-12 (~/runs/control-2026-10-12/B, same split, linked as B) is reported, not a criterion.
-# Also measures it/s and peak VRAM for the night-8 duration estimates. Out root ~/runs/control-2026-10-16.
-MDv64-local  est=8m  --seed 0 --epochs 17 --variant MDv-local --level 64
-MDv64-dec    est=8m  --seed 0 --epochs 17 --variant MDv-dec --level 64
-MDv16        est=6m  --seed 0 --epochs 17 --variant MDv --level 16
-SA64         est=30m --seed 0 --epochs 17 --variant SA --level 64

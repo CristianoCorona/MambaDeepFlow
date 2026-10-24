@@ -1,5 +1,5 @@
 # Project
-Course project (Deep Machine Learning, Group 30): Mamba-augmented U-Nets for RANS airfoil flow prediction.
+Course project (Deep Machine Learning, Group 62; planned by Group 30): Mamba-augmented U-Nets for RANS airfoil flow prediction.
 Base code: thunil/Deep-Flow-Prediction (Apache-2.0), remote `upstream`. Keep LICENSE and attribution.
 
 # Environment
@@ -34,11 +34,15 @@ Full details (versions, checksums, measured numbers): docs/setup-log.md.
   (exits non-zero unless the `selective_scan_cuda` / `causal_conv1d_cuda` kernels are actually used; expect `OK`).
 - Original baseline: `cd train && python runTrain.py` then `python runTest.py` (~2 min train, ~440 MiB VRAM;
   random seed, so indicative only).
-- Controlled pipeline (fixed split `splits/val_seed0.txt`, runs in `~/runs/<id>/`, see docs/lab-notebook.md):
-  `python scripts/train.py --seed 0 --iterations 10000 [--out-dir DIR]`,
+- Controlled pipeline (fixed profile-disjoint split `splits/val_grouped_seed0.txt`, runs in `~/runs/<id>/`, see
+  docs/lab-notebook.md and scripts/README.md):
+  `python scripts/train.py --seed 0 --epochs 133 --variant MDv-local --level 64 [--out-dir DIR]`,
   `python scripts/evaluate.py --run-dir DIR --split val` (test split only for final results),
+  queues: `python scripts/run_queue.py queues/<name>.txt --out-root DIR` (see queues/README.md),
   original baseline with a seed: `python scripts/run_original.py --seed 0 [--out-dir DIR]`,
-  checks: `scripts/verify_loader.py`, `scripts/compare_runs.py {curves,groups}`.
+  check: `scripts/verify_loader.py`.
+- Repository layout for submission (2026-10-24): retired one-off scripts / queues live in `archive/` (gitignored,
+  local only) and at tag `experiments-final`. Do not re-add them to the repository.
 
 ## Lessons learned
 - `/tmp` is a tmpfs with a ~6 GB per-user quota. pip unpacks wheels there; the ~900 MB torch wheel plus
