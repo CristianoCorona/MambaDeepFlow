@@ -21,7 +21,7 @@ All runs use 133 epochs, batch 10, lr 6e-4 with the original decay and the fixed
 
 | File | Runs | Purpose |
 |---|---|---|
-| `reproduce-final.txt` | B, MDv64-local, seeds 0-7 | Reproduce the final comparison (B vs the final architecture U-Net + M64-loc). About 4.8 h on an RTX 4060. |
+| `reproduce-final.txt` | B, MDv64-local, seeds 0-7 | Reproduce the final comparison (B vs the final architecture U-Net + M64-loc). About 4.2 h on an RTX 4060 (measured: B 12.5 min, MDv64-local 19 min per run; est= adds a margin). |
 
 ## Queues behind the results
 

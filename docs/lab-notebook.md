@@ -4530,3 +4530,10 @@ that produced the results). The concept comes first; references to the notebook 
   its output equals B's at the same seed (`torch.allclose` True).
 
 **Open questions.** None.
+
+## 2026-10-24 Correction: duration of queues/reproduce-final.txt
+
+`queues/README.md` (commit 6ed517e) gave about 4.8 h for `queues/reproduce-final.txt`, i.e. the sum of the est=
+values, which include a margin. Measured train + validation wall times (`queue_timing.json`): B 12.1-12.6 min
+(night 3), MDv64-local 18.7-18.9 min (nights 8a, 10), so 8 x (12.5 + 19) min = about 4.2 h. Corrected in
+`queues/README.md`.
