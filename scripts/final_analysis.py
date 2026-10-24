@@ -1,0 +1,645 @@
+"""Pre-registered final analysis (docs/lab-notebook.md, 2026-10-14, "Decisions ... before looking at any metric of
+seeds 3-7", section 2), runnable on validation (exploratory) and, after the explicit go-ahead, on the test set.
+
+The test split is refused unless --split test --allow-test is given (mdf/explore.py guard). No strata here.
+
+Contents
+  T1  per configuration, mean +- std (ddof=1) over seeds of the per-run values: rel_all, rel_p, rel_vx, rel_vy,
+      aggregate rel_p (sum|e| / sum|t| over all samples), median rel_p, MAE in the fluid per channel
+  T2  paired comparisons var - ref: per-sample metric, two-level bootstrap (seeds + profiles, --n-boot repetitions),
+      also the one-level CI (profiles); metrics rel_all, rel_p, rel_vx, rel_vy and fluid MAE per channel
+      main: MD8 - B, MD8 - SA8, MD8 - B-large; exploratory: MD32 - MD8, SA32 - SA8, MD32 - SA32, CBAM8 - B;
+      second pass (if the label is loaded): MDv8 - MD8, MDv8 - B
+      position (night 5, exploratory, validation only; if the labels are loaded): MDv32 - MD32, MDv32 - B,
+      MDv64 - B, MDv8-16-32 - MDv8, MDv8-16-32 - B
+      confirm-mdv64 (only with --confirm-mdv64; pre-registration commit d46b279): MDv64 - B. Decision on rel_vy only:
+      "CONFIRMED" if the upper bound of the two-level 95 % interval (10 000 repetitions) is < 0, else "NOT CONFIRMED";
+      printed first in summary.md with the descriptive MDv64 - B rows of T2 / T2b / T3 (wall vy) / T4
+      deep-replace (night 6b, docs/preregistration-night6b.md; if the labels are loaded; runs with split mode
+      grouped-holdout): DRv11 - B-GH, TR - B-GH, DRv11 - TR; T1 / T2b also give vx aggregate and median for them
+      confirm-dr (only with --confirm-dr): DRv11 - B-GH, decision on rel_all: "IMPROVEMENT DEMONSTRATED" if the upper
+      bound of the two-level 95 % interval (10 000 repetitions) is < 0, "WORSENING DEMONSTRATED" if the lower bound
+      is > 0, else "NO DEMONSTRABLE DIFFERENCE"; printed first in summary.md with the descriptive rows (also TR)
+      ablation64 (night 8, docs/preregistration-night8.md; exploratory, validation only; if the labels are loaded):
+      MDv64-local - MDv64 / - B, SA64 - MDv64 / - B, MDv64-dec - MDv64 / - B, MDv16 - B, MDv16 - MDv64; section
+      "Ablations of MDv64" first in summary.md (rel_vy rows, wall-band vy, divergence) and the figure
+      ablation64_rel_vy.{pdf,png} (IEEE one column: rel_vy per variant, seeds and mean, B / MDv64 reference lines;
+      rel_vy against the MDv block level 8 / 16 / 32 / 64). Pairs with a missing label are skipped.
+      conv64 (night 8b, docs/preregistration-night8b.md; exploratory, validation only; if Conv64 is loaded):
+      Conv64 - B, Conv64 - MDv64-local, Conv64 - MDv64; section "Conv64" after the ablation section in summary.md;
+      Conv64 is added to panel (a) of ablation64_rel_vy. Appended after all other groups: earlier results unchanged.
+      ladder64 (night 9, docs/preregistration-night9.md; exploratory, validation only; if a ladder label is loaded):
+      L-nogate / L-nonorm / L-noprenorm / L-noexp / L-dense - MDv64-local and - B; section "Ladder" after the Conv64
+      section, with the reading of each comparison under the pre-registered rule; the ladder is added to panel (a) of
+      ablation64_rel_vy. Appended after all other groups: earlier results unchanged.
+      confirm-final (only with --confirm-final; docs/preregistration-final.md, commit 45dc422): MDv64-local - B,
+      decision on rel_vy only: "CONFIRMED" if the upper bound of the two-level 95 % interval (10 000 repetitions,
+      seed 0) is < 0, else "NOT CONFIRMED"; final-desc: MDv64-local - MDv64 (descriptive). Section printed first in
+      summary.md (and the decision on stdout) with the descriptive rows. Needs the labels MDv64-local, B and MDv64;
+      allowed on test. With this flag the validation-only groups ablation64 / conv64 / ladder64 and their figure are
+      not computed (the final pass loads MDv64-local but is not the night-8 analysis). Appended after all other groups.
+  T3  regions (descriptive): MAE per region and channel, differences with the two-level CI
+  T4  divergence (descriptive; mdf/explore.py DIV_MAPPING): mean |div pred|, mean |div target|,
+      mean |div pred - div target| in the wall band and in the other fluid cells; differences of the last one
+
+Per-sample values come from explore.cached_inference (batch 1, as evaluate.py); a consistency check against each
+run's eval_<split>_samples.csv is printed when that file exists.
+
+Usage:
+    python scripts/final_analysis.py --config B=GLOB [--config ...] [--seeds 0-7] [--split val]
+                                     [--out-dir DIR] [--fig-dir DIR] [--confirm-mdv64] [--confirm-dr]
+                                     [--confirm-final]
+All runs must share one split mode: grouped (all analyses up to night 6) or grouped-holdout (night 6b).
+"""
+
+import argparse
+import csv
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # repo root, for `mdf`
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # scripts/, for analyze_val helpers
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+
+import analyze_val as av
+from mdf import data as mdata
+from mdf import explore, runinfo
+
+REPO = Path(__file__).resolve().parent.parent
+MAIN = [("MD8", "B"), ("MD8", "SA8"), ("MD8", "B-large")]
+EXPLORATORY = [("MD32", "MD8"), ("SA32", "SA8"), ("MD32", "SA32"), ("CBAM8", "B")]
+SECOND_PASS = [("MDv8", "MD8"), ("MDv8", "B")]
+# position experiment (notebook 2026-10-15, pre-registration commit 72e5b1b; validation only)
+POSITION = [("MDv32", "MD32"), ("MDv32", "B"), ("MDv64", "B"), ("MDv8-16-32", "MDv8"), ("MDv8-16-32", "B")]
+# confirmatory test of MDv64 (notebook 2026-10-15, pre-registration commit d46b279; only with --confirm-mdv64)
+CONFIRM_MDV64 = [("MDv64", "B")]
+CONFIRM_METRIC, CONFIRM_N_BOOT, CONFIRM_BOOT_SEED = "rel_vy", 10000, 0
+# deep-path replacement (night 6b, pre-registration docs/preregistration-night6b.md; grouped-holdout runs)
+DEEP_REPLACE = [("DRv11", "B-GH"), ("TR", "B-GH"), ("DRv11", "TR")]
+CONFIRM_DR = [("DRv11", "B-GH")]
+CONFIRM_DR_METRIC = "rel_all"
+DR_LABELS = {"B-GH", "DRv11", "TR"}
+DR_GROUPS = ("deep-replace", "confirm-dr")
+DR_AGG_MEDIAN_CHANNELS = ("p", "vx", "vy")  # pre-registered descriptives of night 6b (vx added for these only)
+# ablations of MDv64 (night 8, docs/preregistration-night8.md; exploratory, validation only)
+ABLATION64 = [("MDv64-local", "MDv64"), ("MDv64-local", "B"), ("SA64", "MDv64"), ("SA64", "B"),
+              ("MDv64-dec", "MDv64"), ("MDv64-dec", "B"), ("MDv16", "B"), ("MDv16", "MDv64")]
+ABLATION64_LABELS = ("MDv64-local", "SA64", "MDv64-dec", "MDv16")
+# plain residual conv block at 64x64 (night 8b, docs/preregistration-night8b.md; exploratory, validation only)
+CONV64 = [("Conv64", "B"), ("Conv64", "MDv64-local"), ("Conv64", "MDv64")]
+CONV64_LABELS = ("Conv64",)
+# one-ingredient ablations of MDv64-local (night 9, docs/preregistration-night9.md; exploratory, validation only)
+LADDER64_LABELS = ("L-nogate", "L-nonorm", "L-noprenorm", "L-noexp", "L-dense")
+LADDER64 = [(v, ref) for v in LADDER64_LABELS for ref in ("MDv64-local", "B")]
+LADDER64_PARAMS = {"L-noexp": "fewer parameters (block used 3 648 vs 7 232)",
+                   "L-dense": "many more parameters (block used 43 520 vs 7 232)"}
+# final architecture B + MDv64-local (docs/preregistration-final.md, commit 45dc422; only with --confirm-final)
+CONFIRM_FINAL = [("MDv64-local", "B")]
+FINAL_DESC = [("MDv64-local", "MDv64")]
+CONFIRM_FINAL_PREREG = "45dc422"
+LEVEL_CURVE = (("MDv8", 8), ("MDv16", 16), ("MDv32", 32), ("MDv64", 64))
+ORDER = ["B", "MD8", "SA8", "B-large", "CBAM8", "MD32", "SA32", "MDv8", "MDv16", "MDv32", "MDv64", "MDv8-16-32",
+         "B-GH", "TR", "DRv11", "MDv64-local", "SA64", "MDv64-dec", "Conv64", *LADDER64_LABELS]
+SPLIT_MODES_OK = ("grouped", "grouped-holdout")
+CH = explore.CHANNEL_NAMES
+FLUID = ("wall", "wake", "rest")
+# aggregate and median ratios: p (pre-registered, commit 26b6e7f) and vy (addendum of 2026-10-14, decided after the
+# 8-seed validation analysis and before the test set was opened)
+AGG_MEDIAN_CHANNELS = ("p", "vy")
+
+
+def parse_args():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--config", action="append", required=True, help="LABEL=GLOB of run directories (repeatable)")
+    ap.add_argument("--seeds", default=None)
+    ap.add_argument("--split", default="val", choices=["val", "test"])
+    ap.add_argument("--allow-test", action="store_true", help="required with --split test (final results only)")
+    ap.add_argument("--out-dir", type=Path, required=True)
+    ap.add_argument("--fig-dir", type=Path, required=True)
+    ap.add_argument("--cache-dir", type=Path, default=Path.home() / "runs" / "explore-cache")
+    ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--n-boot", type=int, default=10000)
+    ap.add_argument("--boot-seed", type=int, default=0)
+    ap.add_argument("--confirm-mdv64", action="store_true",
+                    help="add the pre-registered confirmatory comparison MDv64 - B (decision on rel_vy)")
+    ap.add_argument("--confirm-dr", action="store_true",
+                    help="add the pre-registered confirmatory comparison DRv11 - B-GH (night 6b, decision on rel_all)")
+    ap.add_argument("--confirm-final", action="store_true",
+                    help="add the pre-registered final comparison MDv64-local - B (decision on rel_vy) and "
+                         "MDv64-local - MDv64 (descriptive); docs/preregistration-final.md")
+    args = ap.parse_args()
+    if args.confirm_dr and (args.n_boot, args.boot_seed) != (CONFIRM_N_BOOT, CONFIRM_BOOT_SEED):
+        ap.error(f"--confirm-dr is pre-registered with --n-boot {CONFIRM_N_BOOT} --boot-seed {CONFIRM_BOOT_SEED}")
+    if args.confirm_mdv64 and (args.n_boot, args.boot_seed) != (CONFIRM_N_BOOT, CONFIRM_BOOT_SEED):
+        ap.error(f"--confirm-mdv64 is pre-registered with --n-boot {CONFIRM_N_BOOT} --boot-seed {CONFIRM_BOOT_SEED}")
+    if args.confirm_final and (args.n_boot, args.boot_seed) != (CONFIRM_N_BOOT, CONFIRM_BOOT_SEED):
+        ap.error(f"--confirm-final is pre-registered with --n-boot {CONFIRM_N_BOOT} --boot-seed {CONFIRM_BOOT_SEED}")
+    return args
+
+
+def msd(x):
+    x = np.asarray(x, dtype=float)
+    return x.mean(), (x.std(ddof=1) if x.size > 1 else float("nan"))
+
+
+def fmt_msd(x, scale=100.0, nd=4):
+    m, s = msd(np.asarray(x) * scale)
+    return f"{m:.{nd}f} ({s:.{nd}f})"
+
+
+def per_sample_fluid_mae(r):
+    """(N, 3) per-sample mean |o - t| over the fluid cells."""
+    err = sum(r[f"reg_err_{g}"] for g in FLUID)
+    cnt = sum(r[f"reg_n_{g}"] for g in FLUID)
+    return err / cnt[:, None]
+
+
+def main():
+    args = parse_args()
+    runs = av.collect_runs(args.config, av.parse_seeds(args.seeds))
+    args._seeds = {l: [s for s, _, _ in lst] for l, lst in runs.items()}
+    labels = [l for l in ORDER if l in runs] + [l for l in runs if l not in ORDER]
+    if args.confirm_mdv64 and not {"MDv64", "B"} <= set(runs):
+        sys.exit("--confirm-mdv64 needs the labels MDv64 and B")
+    if args.confirm_dr and not {"DRv11", "B-GH"} <= set(runs):
+        sys.exit("--confirm-dr needs the labels DRv11 and B-GH")
+    if args.confirm_final and not {"MDv64-local", "B", "MDv64"} <= set(runs):
+        sys.exit("--confirm-final needs the labels MDv64-local, B and MDv64")
+    groups = [("main", MAIN), ("exploratory", EXPLORATORY), ("second pass", SECOND_PASS), ("position", POSITION)]
+    if args.confirm_mdv64:
+        groups.append(("confirm-mdv64", CONFIRM_MDV64))
+    groups.append(("deep-replace", DEEP_REPLACE))  # appended last: a fresh RNG per pair, earlier pairs unchanged
+    if args.confirm_dr:
+        groups.append(("confirm-dr", CONFIRM_DR))
+    ablation = bool(set(ABLATION64_LABELS) & set(runs)) and not args.confirm_final
+    if ablation:
+        if args.split != "val":
+            sys.exit("ablation64 (night 8) is pre-registered on validation only")
+        groups.append(("ablation64", ABLATION64))  # appended last: a fresh RNG per pair, earlier pairs unchanged
+    conv64 = bool(set(CONV64_LABELS) & set(runs)) and not args.confirm_final
+    if conv64:
+        if args.split != "val":
+            sys.exit("conv64 (night 8b) is pre-registered on validation only")
+        groups.append(("conv64", CONV64))  # appended last: a fresh RNG per pair, earlier pairs unchanged
+    ladder = bool(set(LADDER64_LABELS) & set(runs)) and not args.confirm_final
+    if ladder:
+        if args.split != "val":
+            sys.exit("ladder64 (night 9) is pre-registered on validation only")
+        groups.append(("ladder64", LADDER64))  # appended last: a fresh RNG per pair, earlier pairs unchanged
+    if args.confirm_final:
+        groups.append(("confirm-final", CONFIRM_FINAL))  # appended last: a fresh RNG per pair
+        groups.append(("final-desc", FINAL_DESC))
+    t1_channels = AGG_MEDIAN_CHANNELS + (("vx",) if DR_LABELS & set(runs) else ())
+    all_pairs = list(dict.fromkeys(pair for _, pairs in groups for pair in pairs))
+    split_modes = {cfg.get("split", {}).get("split_mode", "random") for lst in runs.values() for _, _, cfg in lst}
+    if len(split_modes) != 1 or not split_modes <= set(SPLIT_MODES_OK):
+        sys.exit(f"runs use different / non-grouped splits: {split_modes}")
+    (split_mode,) = split_modes
+    ds = explore.load_split(args.split, split_mode, allow_test=args.allow_test)
+    if args.split == "val":
+        shas = {cfg["split"]["val_files_sha256"] for lst in runs.values() for _, _, cfg in lst}
+        if shas != {mdata.file_list_sha256(ds.files)}:
+            sys.exit("validation file list differs from the one recorded in the runs")
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    args.fig_dir.mkdir(parents=True, exist_ok=True)
+    props = explore.sample_properties(ds)
+    profiles = [p["profile"] for p in props]
+    regions = explore.all_region_masks(ds, props)
+
+    res, run_rows, max_diff = {}, [], 0.0
+    for label in labels:
+        res[label] = []
+        for seed, d, cfg in runs[label]:
+            r, cached = explore.cached_inference(d, ds, regions, [], args.cache_dir, args.split, args.device)
+            res[label].append(r)
+            ev = d / f"eval_{args.split}_samples.csv"
+            diff = float("nan")
+            if ev.exists():
+                with open(ev) as fh:
+                    rows = list(csv.DictReader(fh))
+                assert [row["file"] for row in rows] == ds.files, f"{ev}: file order differs"
+                diff = max(float(np.max(np.abs(np.array([float(row[m]) for row in rows]) - r[m])))
+                           for m in av.METRICS)
+                max_diff = max(max_diff, diff)
+            run_rows.append({"label": label, "seed": seed, "run_dir": str(d).replace(str(Path.home()), "~"),
+                             "commit": cfg.get("git", {}).get("commit", "")[:7],
+                             "max_abs_diff_vs_eval_csv": diff})
+            print(f"{label} s{seed}: {'cache' if cached else 'inference'}; max |diff| vs eval CSV {diff:.3g}")
+    av.write_csv(args.out_dir / "runs.csv", run_rows)
+
+    def stack(label, key):
+        return np.stack([r[key] for r in res[label]])
+
+    md = [f"# Final analysis on split `{args.split}` (pre-registered plan, commit 26b6e7f)", "",
+          f"Generated by `scripts/final_analysis.py`, git {runinfo.git_info()}, {runinfo.utc_now()}. "
+          f"{len(ds)} samples, {len(set(profiles))} profiles. Bootstrap {args.n_boot} repetitions, seed "
+          f"{args.boot_seed}. Values in % unless stated.", "",
+          f"Consistency: max |recomputed - eval CSV| over all runs and {av.METRICS}: **{max_diff:.3g}** (ratios).", ""]
+
+    # --- T1 ---
+    t1 = []
+    for label in labels:
+        row = {"config": label, "seeds": len(res[label])}
+        for m in av.METRICS:
+            row[m] = fmt_msd(stack(label, m).mean(axis=1))
+        for c in t1_channels:
+            row[f"agg_rel_{c}"] = fmt_msd(stack(label, f"abs_err_{c}").sum(1) / stack(label, f"abs_tgt_{c}").sum(1))
+            row[f"median_rel_{c}"] = fmt_msd(np.median(stack(label, f"rel_{c}"), axis=1))
+        mae = np.stack([per_sample_fluid_mae(r).mean(0) for r in res[label]])  # (S, 3)
+        for i, c in enumerate(CH):
+            row[f"mae_fluid_{c} x1e-3"] = fmt_msd(mae[:, i], scale=1e3)
+        t1.append(row)
+    av.write_csv(args.out_dir / "t1_summary.csv", t1)
+    md += ["## T1 Mean (std over seeds) per configuration", "",
+           "rel_* = mean over samples of the per-sample ratio, then mean (std, ddof=1) over seeds; agg_rel_c = "
+           "sum|e_c| / sum|t_c| over all samples; median_rel_c = median over samples (c = p, vy); MAE in the fluid (normalised "
+           "fields, x1e-3) = per-sample mean |o - t| over fluid cells, mean over samples.", "",
+           av.md_table(t1, list(t1[0].keys())), ""]
+
+    # --- T2 ---
+    t2 = []
+    fluid_mae = {l: np.stack([per_sample_fluid_mae(r) for r in res[l]]) for l in labels}  # (S, N, 3)
+    for group, pairs in groups:
+        for v, ref in pairs:
+            if v not in res or ref not in res:
+                continue
+            metrics = [(m, stack(v, m), stack(ref, m), 100.0) for m in av.METRICS]
+            metrics += [(f"mae_fluid_{c} x1e-3", fluid_mae[v][..., i], fluid_mae[ref][..., i], 1e3)
+                        for i, c in enumerate(CH)]
+            for name, a, b, sc in metrics:
+                bs = explore.paired_bootstrap(a, b, profiles, args.n_boot, args.boot_seed)
+                t2.append({"group": group, "comparison": f"{v} - {ref}", "metric": name, "scale": sc, **bs})
+    av.write_csv(args.out_dir / "t2_paired.csv", t2)
+    t2b = []
+    for group, pairs in groups:
+        for v, ref in pairs:
+            if v not in res or ref not in res:
+                continue
+            for c in DR_AGG_MEDIAN_CHANNELS if group in DR_GROUPS else AGG_MEDIAN_CHANNELS:
+                tgt = res[ref][0][f"abs_tgt_{c}"]
+                assert np.allclose(tgt, res[v][0][f"abs_tgt_{c}"])
+                bs = explore.paired_bootstrap_agg_median(stack(v, f"abs_err_{c}"), stack(ref, f"abs_err_{c}"), tgt,
+                                                         stack(v, f"rel_{c}"), stack(ref, f"rel_{c}"), profiles,
+                                                         args.n_boot, args.boot_seed)
+                t2b.append({"group": group, "comparison": f"{v} - {ref}", "channel": c, **bs})
+    av.write_csv(args.out_dir / "t2_agg_median.csv", t2b)
+    rows_b = []
+    for r in t2b:
+        for k in ("agg", "median"):
+            rows_b.append({"group": r["group"], "comparison": r["comparison"], "metric": f"{k}_rel_{r['channel']}",
+                           "seeds": f"{r['seeds_var']}/{r['seeds_ref']}",
+                           "diff": f"{100 * r[k + '_diff']:+.4f}",
+                           "95% CI seeds+profiles": f"[{100 * r[k + '_ci2_lo']:+.4f}, {100 * r[k + '_ci2_hi']:+.4f}]",
+                           "95% CI profiles": f"[{100 * r[k + '_ci1_lo']:+.4f}, {100 * r[k + '_ci1_hi']:+.4f}]"})
+    rows_md = [{"group": r["group"], "comparison": r["comparison"], "metric": r["metric"],
+                "seeds": f"{r['seeds_var']}/{r['seeds_ref']}",
+                "mean diff": f"{r['scale'] * r['mean_diff']:+.4f}",
+                "95% CI seeds+profiles": f"[{r['scale'] * r['ci2_lo']:+.4f}, {r['scale'] * r['ci2_hi']:+.4f}]",
+                "95% CI profiles": f"[{r['scale'] * r['ci1_lo']:+.4f}, {r['scale'] * r['ci1_hi']:+.4f}]",
+                "median diff": f"{r['scale'] * r['median_diff']:+.4f}",
+                "profiles better": f"{r['frac_profiles_var_better']:.2f}"} for r in t2]
+    md += ["## T2 Paired comparisons (negative = variant has lower error)", "",
+           "Per-sample seed means, difference per sample; main interval: two-level bootstrap (seeds of each "
+           "configuration + profiles). rel_* in percentage points, MAE x1e-3. No correction for multiple "
+           "comparisons; descriptive.", "", av.md_table(rows_md, list(rows_md[0].keys())) if rows_md else "", "",
+           "### T2b Aggregate and median ratios (p pre-registered; vy added by the 2026-10-14 addendum)", "",
+           "agg diff = difference of sum|e| / sum|t| over all samples (seed-mean errors); median diff = difference of "
+           "the medians over samples of the seed-mean per-sample ratio; percentage points; bootstrap as T2 (a sample "
+           "counts as many times as its profile is drawn).", "",
+           av.md_table(rows_b, list(rows_b[0].keys())) if rows_b else "", ""]
+
+    # --- T3 regions ---
+    t3, t3d = [], []
+    reg_mae = {}
+    for label in labels:
+        for g in explore.REGIONS:
+            e = stack(label, f"reg_err_{g}") / np.maximum(stack(label, f"reg_n_{g}"), 1)[..., None]  # (S, N, 3)
+            reg_mae[(label, g)] = e
+            m = e.mean(axis=(0, 1))
+            t3.append({"config": label, "region": g, **{f"mae_{c} x1e-3": f"{1e3 * m[i]:.4f}" for i, c in enumerate(CH)}})
+    for v, ref in all_pairs:
+        if v not in res or ref not in res:
+            continue
+        for g in ("wall", "wake", "rest"):
+            for i, c in enumerate(CH):
+                bs = explore.paired_bootstrap(reg_mae[(v, g)][..., i], reg_mae[(ref, g)][..., i], profiles,
+                                              args.n_boot, args.boot_seed)
+                t3d.append({"comparison": f"{v} - {ref}", "region": g, "channel": c,
+                            "diff x1e-3": f"{1e3 * bs['mean_diff']:+.4f} [{1e3 * bs['ci2_lo']:+.4f}, "
+                                          f"{1e3 * bs['ci2_hi']:+.4f}]",
+                            "rel_change": f"{100 * bs['mean_diff'] / reg_mae[(ref, g)][..., i].mean():+.1f} %"})
+    av.write_csv(args.out_dir / "t3_regions.csv", t3)
+    av.write_csv(args.out_dir / "t3_region_diffs.csv", t3d)
+    cells = {g: np.mean([reg[g].sum() for reg in regions]) for g in explore.REGIONS}
+    md += ["## T3 Regions (descriptive; MAE x1e-3, normalised fields)", "",
+           f"wall = fluid cells 1-{explore.WALL_PX} px from the airfoil; wake = downstream of the trailing edge within "
+           f"{explore.WAKE_HALF_WIDTH} px of the free-stream line; rest = other fluid; interior = airfoil. Mean cells "
+           "per sample: " + ", ".join(f"{g} {cells[g]:.0f}" for g in explore.REGIONS) + ".", "",
+           av.md_table(t3, list(t3[0].keys())), "", "Differences, two-level 95% CI:", "",
+           av.md_table(t3d, list(t3d[0].keys())) if t3d else "", ""]
+
+    # --- T4 divergence ---
+    t4, t4d = [], []
+    for label in labels:
+        row = {"config": label, "seeds": len(res[label])}
+        for g in explore.DIV_REGIONS:
+            for k in ("pred", "tgt", "err"):
+                row[f"{g} |div {k}| x1e-3"] = fmt_msd(stack(label, f"div_{k}_{g}").mean(1), scale=1e3)
+        t4.append(row)
+    for v, ref in all_pairs:
+        if v not in res or ref not in res:
+            continue
+        for g in explore.DIV_REGIONS:
+            bs = explore.paired_bootstrap(stack(v, f"div_err_{g}"), stack(ref, f"div_err_{g}"), profiles,
+                                          args.n_boot, args.boot_seed)
+            t4d.append({"comparison": f"{v} - {ref}", "region": g,
+                        "diff |div pred - div tgt| x1e-3": f"{1e3 * bs['mean_diff']:+.4f} [{1e3 * bs['ci2_lo']:+.4f}, "
+                                                          f"{1e3 * bs['ci2_hi']:+.4f}]"})
+    av.write_csv(args.out_dir / "t4_divergence.csv", t4)
+    av.write_csv(args.out_dir / "t4_divergence_diffs.csv", t4d)
+    n_div = {g: float(np.mean(res[labels[0]][0][f"div_n_{g}"])) for g in explore.DIV_REGIONS}
+    md += ["## T4 Divergence (descriptive)", "",
+           f"Mapping {explore.DIV_MAPPING} (vx along array axis 0, same sign); v / |v_inf| units, per pixel, central "
+           "differences, fluid cells with 4 fluid neighbours. Per sample: mean over cells, then mean over samples, "
+           "mean (std) over seeds. Regions: wall = wall band, other = wake + rest. Mean valid cells per sample: "
+           + ", ".join(f"{g} {n_div[g]:.0f}" for g in explore.DIV_REGIONS)
+           + ". The target is not exactly divergence-free: compare with the target, not with 0.", "",
+           av.md_table(t4, list(t4[0].keys())), "", "Differences of mean |div pred - div target| (two-level CI):", "",
+           av.md_table(t4d, list(t4d[0].keys())) if t4d else "", ""]
+
+    # --- figure: per-seed values ---
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8), constrained_layout=True)
+    for ax, m in zip(axes, ["rel_all", "rel_p"]):
+        for j, label in enumerate(labels):
+            vals = 100 * stack(label, m).mean(axis=1)
+            ax.scatter(np.full(vals.size, j), vals, s=18, color="0.6", zorder=2)
+            ax.scatter([j], [vals.mean()], s=60, marker="_", color="k", linewidths=2, zorder=3)
+        ax.set_xticks(range(len(labels)), labels, fontsize=8)
+        ax.set_ylabel(f"{m} (%)")
+        ax.set_title(f"{m}: seeds (grey), mean (black)", fontsize=9)
+        ax.grid(axis="y", color="0.9")
+    fig.suptitle(f"Per-run {args.split} error per configuration", fontsize=9)
+    fig.savefig(args.fig_dir / "per_seed.png", dpi=120)
+    plt.close(fig)
+
+    if ablation or conv64 or ladder:
+        ablation64_figure(args, labels, lambda l: 100 * stack(l, "rel_vy").mean(axis=1))
+    if ablation:
+        md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
+            = ablation64_section(args, t1, rows_md, rows_b, t3d, t4d)
+    if conv64:
+        md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
+            = ablation64_section(args, t1, rows_md, rows_b, t3d, t4d, "conv64", CONV64, CONV64_LABELS,
+                                 "## Conv64: plain residual conv block at 64x64 (night 8b; EXPLORATORY, validation only; "
+                                 "docs/preregistration-night8b.md)", "conv64")
+    if ladder:
+        md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
+            = ladder64_section(args, t1, t2, rows_md, rows_b, t3d, t4d)
+    if args.confirm_mdv64:
+        md[md.index("## T1 Mean (std over seeds) per configuration"):md.index("## T1 Mean (std over seeds) per configuration")] \
+            = confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d)
+    if args.confirm_dr:
+        first = next(i for i, x in enumerate(md) if x.startswith("## CONFIRMATORY TEST") or
+                     x == "## T1 Mean (std over seeds) per configuration")
+        md[first:first] = confirm_dr_section(args, t2, rows_md, rows_b, t3d, t4d)
+    if args.confirm_final:
+        first = next(i for i, x in enumerate(md) if x.startswith("## CONFIRMATORY TEST") or
+                     x == "## T1 Mean (std over seeds) per configuration")
+        md[first:first] = confirm_final_section(args, t1, t2, rows_md, rows_b, t3d, t4d)
+    (args.out_dir / "summary.md").write_text("\n".join(md) + "\n")
+    print(f"Wrote {args.out_dir}/summary.md")
+
+
+def confirm_section(args, res, t2, rows_md, rows_b, t3d, t4d):
+    """Pre-registered decision (commit d46b279) and the descriptive MDv64 - B rows; also printed to stdout."""
+    comp = "MDv64 - B"
+    (r,) = [x for x in t2 if x["group"] == "confirm-mdv64" and x["metric"] == CONFIRM_METRIC]
+    confirmed = r["ci2_hi"] < 0
+    verdict = "CONFIRMED" if confirmed else "NOT CONFIRMED"
+    seeds = args._seeds
+    line = (f"{comp} {CONFIRM_METRIC}: {100 * r['mean_diff']:+.4f} points, two-level 95 % CI "
+            f"[{100 * r['ci2_lo']:+.4f}, {100 * r['ci2_hi']:+.4f}] ({CONFIRM_N_BOOT} repetitions, seed "
+            f"{CONFIRM_BOOT_SEED}); seeds MDv64 {seeds['MDv64']}, B {seeds['B']}; split {args.split}")
+    banner = "=" * 100
+    print(f"\n{banner}\nCONFIRMATORY TEST MDv64 vs B (pre-registered, commit d46b279): **{verdict}**\n{line}\n"
+          f"Rule: CONFIRMED only if the upper bound of the interval is < 0."
+          + ("" if args.split == "test" else "\nNOT THE TEST SET: functional check only, no decision.") + f"\n{banner}\n")
+    desc_t2 = [x for x in rows_md if x["group"] == "confirm-mdv64"]
+    desc_t2b = [x for x in rows_b if x["group"] == "confirm-mdv64"]
+    desc_t3 = [x for x in t3d if x["comparison"] == comp and x["region"] == "wall" and x["channel"] == "vy"]
+    desc_t4 = [x for x in t4d if x["comparison"] == comp]
+    out = [f"## CONFIRMATORY TEST: MDv64 vs B on rel_vy (pre-registered, commit d46b279) — **{verdict}**", "",
+           f"**{line}.** Rule: CONFIRMED only if the upper bound of the two-level 95 % interval is < 0; no other metric "
+           "decides." + ("" if args.split == "test" else " **Not the test set: functional check only, no decision.**"),
+           "", "Descriptive only (no decision), MDv64 - B:", "",
+           av.md_table(desc_t2, list(desc_t2[0].keys())), "", av.md_table(desc_t2b, list(desc_t2b[0].keys())), "",
+           "Wall band, vy MAE x1e-3:", "", av.md_table(desc_t3, list(desc_t3[0].keys())), "",
+           "Divergence error:", "", av.md_table(desc_t4, list(desc_t4[0].keys())), ""]
+    return out
+
+
+def confirm_final_section(args, t1, t2, rows_md, rows_b, t3d, t4d):
+    """Pre-registered decision of the final pass (docs/preregistration-final.md) on rel_vy of MDv64-local - B, then
+    the descriptive rows (MDv64-local - B and MDv64-local - MDv64); the decision is also printed to stdout."""
+    comp, comp_d = "MDv64-local - B", "MDv64-local - MDv64"
+    (r,) = [x for x in t2 if x["group"] == "confirm-final" and x["metric"] == CONFIRM_METRIC]
+    verdict = "CONFIRMED" if r["ci2_hi"] < 0 else "NOT CONFIRMED"
+    seeds = args._seeds
+    line = (f"{comp} {CONFIRM_METRIC}: {100 * r['mean_diff']:+.4f} points, two-level 95 % CI "
+            f"[{100 * r['ci2_lo']:+.4f}, {100 * r['ci2_hi']:+.4f}] ({CONFIRM_N_BOOT} repetitions, seed "
+            f"{CONFIRM_BOOT_SEED}); seeds MDv64-local {seeds['MDv64-local']}, B {seeds['B']}; split {args.split}")
+    (rd,) = [x for x in t2 if x["group"] == "final-desc" and x["metric"] == CONFIRM_METRIC]
+    line_d = (f"{comp_d} {CONFIRM_METRIC}: {100 * rd['mean_diff']:+.4f} points, two-level 95 % CI "
+              f"[{100 * rd['ci2_lo']:+.4f}, {100 * rd['ci2_hi']:+.4f}]; seeds MDv64 {seeds['MDv64']}")
+    not_test = "" if args.split == "test" else "\nNOT THE TEST SET: functional check only, no decision."
+    banner = "=" * 100
+    print(f"\n{banner}\nFINAL CONFIRMATORY TEST MDv64-local vs B (pre-registered, commit {CONFIRM_FINAL_PREREG}): "
+          f"**{verdict}**\n{line}\nRule: CONFIRMED only if the upper bound of the interval is < 0.{not_test}\n"
+          f"Descriptive (no decision): {line_d}\n{banner}\n")
+    t1v = [{k: x[k] for k in ("config", "seeds", "rel_vy", "agg_rel_vy", "median_rel_vy", "rel_all", "rel_p")}
+           for x in t1 if x["config"] in ("B", "MDv64", "MDv64-local")]
+    desc_t2 = [x for x in rows_md if x["group"] == "confirm-final"]
+    desc_t2b = [x for x in rows_b if x["group"] == "confirm-final"]
+    d_t2 = [x for x in rows_md if x["group"] == "final-desc"]
+    d_t2b = [x for x in rows_b if x["group"] == "final-desc"]
+    desc_t3 = [x for x in t3d if x["comparison"] in (comp, comp_d) and x["region"] == "wall" and x["channel"] == "vy"]
+    desc_t4 = [x for x in t4d if x["comparison"] in (comp, comp_d)]
+    tbl = lambda rows: av.md_table(rows, list(rows[0].keys()))
+    return [f"## CONFIRMATORY TEST (final pass): MDv64-local vs B on rel_vy (pre-registered, commit "
+            f"{CONFIRM_FINAL_PREREG}, docs/preregistration-final.md) — **{verdict}**", "",
+            f"**{line}.** Rule: CONFIRMED only if the upper bound of the two-level 95 % interval is < 0; no other metric "
+            "decides." + ("" if args.split == "test" else " **Not the test set: functional check only, no decision.**"),
+            "", "Per configuration (mean (std) over seeds, %):", "", tbl(t1v), "",
+            "Descriptive only (no decision), MDv64-local - B:", "", tbl(desc_t2), "", tbl(desc_t2b), "",
+            f"Descriptive only (no decision), {comp_d} (does the SSM add anything?): **{line_d}**. An interval "
+            "including 0 does not demonstrate equality.", "", tbl(d_t2), "", tbl(d_t2b), "",
+            "Wall band, vy MAE x1e-3:", "", tbl(desc_t3), "", "Divergence error:", "", tbl(desc_t4), ""]
+
+
+def ablation64_section(args, t1, rows_md, rows_b, t3d, t4d, group="ablation64", pairs=ABLATION64,
+                       expected=ABLATION64_LABELS,
+                       title="## Ablations of MDv64 (night 8; EXPLORATORY, validation only; docs/preregistration-night8.md)",
+                       name="ablation64"):
+    """Night-8 ablations (docs/preregistration-night8.md; with the other arguments the night-8b Conv64 group): primary
+    rel_vy rows first, then the descriptive ones."""
+    comps = [f"{v} - {r}" for v, r in pairs]
+    seeds = "; ".join(f"{l} {s}" for l, s in args._seeds.items())
+    prim = [x for x in rows_md if x["group"] == group and x["metric"] == "rel_vy"]
+    prim_b = [x for x in rows_b if x["group"] == group and x["metric"].endswith("_vy")]
+    desc = [x for x in rows_md if x["group"] == group and x["metric"] in ("rel_all", "rel_p")]
+    d3 = [x for x in t3d if x["comparison"] in comps and x["region"] == "wall" and x["channel"] == "vy"]
+    d4 = [x for x in t4d if x["comparison"] in comps]
+    t1v = [{k: r[k] for k in ("config", "seeds", "rel_vy", "agg_rel_vy", "median_rel_vy", "rel_all", "rel_p")}
+           for r in t1]
+    missing = [l for l in expected if l not in args._seeds]
+    print(f"\n{name} rel_vy (variant - reference, points; two-level 95 % CI):")
+    for x in prim:
+        print(f"  {x['comparison']:<22} {x['mean diff']}  {x['95% CI seeds+profiles']}  seeds {x['seeds']}")
+    return [title, "",
+            f"Seeds: {seeds}." + (f" **Missing configurations: {', '.join(missing)}.**" if missing else ""),
+            "Interpretation rules in the pre-registration: an interval including 0 does not demonstrate equality.", "",
+            "rel_vy per configuration (mean (std) over seeds, %):", "", av.md_table(t1v, list(t1v[0].keys())), "",
+            "Primary, rel_vy (points, negative = variant better):", "",
+            av.md_table(prim, list(prim[0].keys())) if prim else "(no pair available)", "",
+            av.md_table(prim_b, list(prim_b[0].keys())) if prim_b else "", "",
+            "Descriptive, rel_all and rel_p:", "", av.md_table(desc, list(desc[0].keys())) if desc else "", "",
+            "Descriptive, wall band vy MAE x1e-3:", "", av.md_table(d3, list(d3[0].keys())) if d3 else "", "",
+            "Descriptive, divergence error:", "", av.md_table(d4, list(d4[0].keys())) if d4 else "", "",
+            "Figure: `ablation64_rel_vy.pdf` in the figure directory.", ""]
+
+
+def ladder_reading(row):
+    """Pre-registered rule of night 9 on the two-level interval of variant - reference (rel_vy)."""
+    if row["ci2_lo"] > 0:
+        return "matters (worse without it)" if row["comparison"].endswith("MDv64-local") else "worse than B"
+    if row["ci2_hi"] < 0:
+        return "variant better than MDv64-local" if row["comparison"].endswith("MDv64-local") else "better than B"
+    return "not demonstrated (interval includes 0)"
+
+
+def ladder64_section(args, t1, t2, rows_md, rows_b, t3d, t4d):
+    """Night-9 ladder (docs/preregistration-night9.md): the ablation section for group ladder64, then the reading of
+    every rel_vy comparison under the pre-registered rule (parameter change of L-noexp / L-dense stated)."""
+    out = ablation64_section(args, t1, rows_md, rows_b, t3d, t4d, "ladder64", LADDER64, LADDER64_LABELS,
+                             "## Ladder: one-ingredient ablations of MDv64-local (night 9; EXPLORATORY, validation "
+                             "only; docs/preregistration-night9.md)", "ladder64")
+    reading = []
+    for r in t2:
+        if r["group"] == "ladder64" and r["metric"] == "rel_vy":
+            v = r["comparison"].split(" - ")[0]
+            reading.append({"comparison": r["comparison"], "seeds": f"{r['seeds_var']}/{r['seeds_ref']}",
+                            "rel_vy diff": f"{100 * r['mean_diff']:+.4f}",
+                            "95% CI seeds+profiles": f"[{100 * r['ci2_lo']:+.4f}, {100 * r['ci2_hi']:+.4f}]",
+                            "reading (pre-registered rule)": ladder_reading(r),
+                            "note": LADDER64_PARAMS.get(v, "")})
+    out[-1:-1] = ["Reading of the primary comparisons (rule of docs/preregistration-night9.md: an ingredient "
+                  "\"matters\" if the interval of variant - MDv64-local lies above 0; an interval including 0 is "
+                  "\"not demonstrated\", not \"does not matter\"):", "",
+                  av.md_table(reading, list(reading[0].keys())) if reading else "(no pair available)", ""]
+    return out
+
+
+def ablation64_figure(args, labels, rel_vy):
+    """IEEE one-column figure (3.5 in): (a) rel_vy per variant, seeds (grey) and mean (black), B and MDv64 means as
+    labelled reference lines; (b) rel_vy against the level of the MDv block (8, 16, 32, 64) with the B line."""
+    plt.rcParams.update({"font.size": 7, "axes.titlesize": 7, "axes.labelsize": 7, "xtick.labelsize": 6.5,
+                         "ytick.labelsize": 6.5, "pdf.fonttype": 42})
+    show = [l for l in ("B", "MDv64") + ABLATION64_LABELS + CONV64_LABELS + LADDER64_LABELS if l in labels]
+    curve = [(l, lv) for l, lv in LEVEL_CURVE if l in labels]
+    rotate = len(show) > 8  # night-9 ladder loaded: vertical tick labels, taller figure
+    fig, axes = plt.subplots(2, 1, figsize=(3.5, 4.6 if rotate else 3.9), constrained_layout=True,
+                             gridspec_kw={"height_ratios": [1.25, 1]})
+    ax = axes[0]
+    for name, ls in (("B", "--"), ("MDv64", "-")):
+        if name in labels:
+            m = rel_vy(name).mean()
+            ax.axhline(m, color="0.55", lw=0.8, ls=ls, zorder=1)
+            ax.annotate(f"{name} mean", (len(show) - 0.5, m), xytext=(0, 1.5), textcoords="offset points",
+                        ha="right", va="bottom", fontsize=6, color="0.35")
+    for j, l in enumerate(show):
+        v = rel_vy(l)
+        jit = (np.arange(v.size) - (v.size - 1) / 2) * 0.06
+        ax.scatter(j + jit, v, s=9, color="0.6", edgecolors="none", zorder=2)
+        ax.scatter([j], [v.mean()], s=90, marker="_", color="k", linewidths=1.6, zorder=3)
+    wrap = (lambda l: l.replace("-", "-\n", 1)) if len(show) > 5 else (lambda l: l)  # > 5 columns: avoid overlaps
+    if rotate:
+        ax.set_xticks(range(len(show)), [f"{l} (n={rel_vy(l).size})" for l in show], rotation=90, fontsize=6)
+    else:
+        ax.set_xticks(range(len(show)), [f"{wrap(l)}\n(n={rel_vy(l).size})" for l in show])
+    ax.set_xlim(-0.5, len(show) - 0.5)
+    ax.set_ylabel("rel. error $v_y$ (%)")
+    ax.set_title("(a) per variant: seeds (grey), mean (black)", loc="left")
+    ax.grid(axis="y", color="0.92", lw=0.5)
+    ax = axes[1]
+    if curve:
+        xs = [lv for _, lv in curve]
+        ms = [rel_vy(l).mean() for l, _ in curve]
+        for (l, lv), m in zip(curve, ms):
+            v = rel_vy(l)
+            ax.scatter(np.full(v.size, lv), v, s=9, color="0.6", edgecolors="none", zorder=2)
+        ax.plot(xs, ms, color="k", lw=1.0, marker="o", ms=3.5, zorder=3)
+        if "B" in labels:
+            ax.axhline(rel_vy("B").mean(), color="0.55", lw=0.8, ls="--", zorder=1)
+            ax.annotate("B mean", (64, rel_vy("B").mean()), xytext=(0, 1.5), textcoords="offset points",
+                        ha="right", va="bottom", fontsize=6, color="0.35")
+        ax.set_xscale("log", base=2)
+        ax.set_xticks([8, 16, 32, 64], ["8x8", "16x16", "32x32", "64x64"])
+        ax.minorticks_off()
+    ax.set_xlabel("feature-map size of the MDv block (encoder)")
+    ax.set_ylabel("rel. error $v_y$ (%)")
+    ax.set_title("(b) MDv block level: seeds (grey), mean (line)", loc="left")
+    ax.grid(axis="y", color="0.92", lw=0.5)
+    for ext in ("pdf", "png"):
+        fig.savefig(args.fig_dir / f"ablation64_rel_vy.{ext}", dpi=300)
+    plt.close(fig)
+    plt.rcParams.update(plt.rcParamsDefault)
+
+
+def dr_verdict(lo, hi):
+    """Three outcomes of the night-6b pre-registration (lower error = better)."""
+    if hi < 0:
+        return "IMPROVEMENT DEMONSTRATED"
+    if lo > 0:
+        return "WORSENING DEMONSTRATED"
+    return "NO DEMONSTRABLE DIFFERENCE"
+
+
+def confirm_dr_section(args, t2, rows_md, rows_b, t3d, t4d):
+    """Pre-registered decision DRv11 - B-GH on rel_all (docs/preregistration-night6b.md) and the descriptive rows of
+    DRv11 - B-GH and of the TR control (TR - B-GH, DRv11 - TR); also printed to stdout."""
+    comp = "DRv11 - B-GH"
+    (r,) = [x for x in t2 if x["group"] == "confirm-dr" and x["metric"] == CONFIRM_DR_METRIC]
+    verdict = dr_verdict(r["ci2_lo"], r["ci2_hi"])
+    seeds = args._seeds
+    line = (f"{comp} {CONFIRM_DR_METRIC}: {100 * r['mean_diff']:+.4f} points, two-level 95 % CI "
+            f"[{100 * r['ci2_lo']:+.4f}, {100 * r['ci2_hi']:+.4f}] ({CONFIRM_N_BOOT} repetitions, seed "
+            f"{CONFIRM_BOOT_SEED}); seeds DRv11 {seeds['DRv11']}, B-GH {seeds['B-GH']}; split {args.split}")
+    rule = ("Rule: IMPROVEMENT DEMONSTRATED if the upper bound < 0; WORSENING DEMONSTRATED if the lower bound > 0; "
+            "otherwise NO DEMONSTRABLE DIFFERENCE (estimate and interval reported).")
+    not_test = "" if args.split == "test" else "NOT THE TEST SET: functional check only, no decision."
+    banner = "=" * 100
+    print(f"\n{banner}\nCONFIRMATORY TEST DRv11 vs B-GH (pre-registered, docs/preregistration-night6b.md): "
+          f"**{verdict}**\n{line}\n{rule}" + (f"\n{not_test}" if not_test else "") + f"\n{banner}\n")
+    groups = {"confirm-dr": "Descriptive only (no decision), DRv11 - B-GH:",
+              "deep-replace": "TR control (descriptive, no decision; interpretation fixed in the pre-registration):"}
+    out = [f"## CONFIRMATORY TEST: DRv11 vs B-GH on rel_all (pre-registered, docs/preregistration-night6b.md) — "
+           f"**{verdict}**", "", f"**{line}.** {rule}" + (f" **{not_test}**" if not_test else ""), ""]
+    for g, title in groups.items():
+        keep = (lambda x: x["group"] == g) if g == "confirm-dr" else \
+            (lambda x: x["group"] == g and x["comparison"] != comp)
+        d2, d2b = [x for x in rows_md if keep(x)], [x for x in rows_b if keep(x)]
+        out += [title, "", av.md_table(d2, list(d2[0].keys())) if d2 else "", "",
+                av.md_table(d2b, list(d2b[0].keys())) if d2b else "", ""]
+    comps = ("DRv11 - B-GH", "TR - B-GH", "DRv11 - TR")
+    d3 = [x for x in t3d if x["comparison"] in comps and x["region"] == "wall"]
+    d4 = [x for x in t4d if x["comparison"] in comps]
+    out += ["Wall band, MAE x1e-3 (descriptive):", "", av.md_table(d3, list(d3[0].keys())) if d3 else "", "",
+            "Divergence error (descriptive):", "", av.md_table(d4, list(d4[0].keys())) if d4 else "", ""]
+    return out
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,22 @@
+# Reproduction of the final comparison (poster finding 3, "Final architecture"): baseline B vs the final architecture
+# U-Net + M64-loc (variant MDv-local at level 64), seeds 0-7, 133 epochs, grouped (profile-disjoint) split.
+# Same train.py arguments as the original runs (B: queues/night1.txt / night3.txt; MDv64-local: night8a.txt /
+# night10.txt), interleaved by seed so that a partial queue still gives paired seeds. est= = measured wall time on
+# an RTX 4060 Laptop GPU (train + validation evaluation) plus a margin.
+# Usage: python scripts/run_queue.py queues/reproduce-final.txt --out-root ~/runs/reproduce --cutoff YYYY-MM-DDTHH:MM
+B_s0             est=15m --seed 0 --epochs 133 --variant B
+MDv64-local_s0   est=21m --seed 0 --epochs 133 --variant MDv-local --level 64
+B_s1             est=15m --seed 1 --epochs 133 --variant B
+MDv64-local_s1   est=21m --seed 1 --epochs 133 --variant MDv-local --level 64
+B_s2             est=15m --seed 2 --epochs 133 --variant B
+MDv64-local_s2   est=21m --seed 2 --epochs 133 --variant MDv-local --level 64
+B_s3             est=15m --seed 3 --epochs 133 --variant B
+MDv64-local_s3   est=21m --seed 3 --epochs 133 --variant MDv-local --level 64
+B_s4             est=15m --seed 4 --epochs 133 --variant B
+MDv64-local_s4   est=21m --seed 4 --epochs 133 --variant MDv-local --level 64
+B_s5             est=15m --seed 5 --epochs 133 --variant B
+MDv64-local_s5   est=21m --seed 5 --epochs 133 --variant MDv-local --level 64
+B_s6             est=15m --seed 6 --epochs 133 --variant B
+MDv64-local_s6   est=21m --seed 6 --epochs 133 --variant MDv-local --level 64
+B_s7             est=15m --seed 7 --epochs 133 --variant B
+MDv64-local_s7   est=21m --seed 7 --epochs 133 --variant MDv-local --level 64

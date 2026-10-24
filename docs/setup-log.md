@@ -229,3 +229,10 @@ Note: in test mode `dataset.py` first loads only 10 training files (prints `Numb
 before replacing them with all files from `data/test`; the evaluation is on 90 samples.
 
 No fixes were needed: both original scripts ran unmodified with torch 2.10 / numpy 2.5.3 / pillow 12.3.0.
+
+## 7. Test dependency (2026-10-12)
+
+`pytest` added for the unit tests of the mixing blocks (`tests/`):
+`TMPDIR=$HOME/.cache/pip-tmp pip install pytest==9.1.1` inside `mdf`, after `pip install --dry-run pytest`
+showed only `iniconfig-2.3.1 pluggy-1.6.0 pytest-9.1.1` would be installed (torch unchanged, 2.10.0+cu128).
+`environment/pip-freeze.txt` updated with these three pins.

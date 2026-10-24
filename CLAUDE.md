@@ -1,5 +1,5 @@
 # Project
-Course project (Deep Machine Learning, Group 30): Mamba-augmented U-Nets for RANS airfoil flow prediction.
+Course project (Deep Machine Learning, Group 62; planned by Group 30): Mamba-augmented U-Nets for RANS airfoil flow prediction.
 Base code: thunil/Deep-Flow-Prediction (Apache-2.0), remote `upstream`. Keep LICENSE and attribution.
 
 # Environment
@@ -16,6 +16,8 @@ Base code: thunil/Deep-Flow-Prediction (Apache-2.0), remote `upstream`. Keep LIC
 - DfpNet expo=5: 128 -> 64 -> 32 -> 16 -> 8 -> 4 -> 2 -> 1 (bottleneck 1x1); channels 32/64/64/128/256/256/256.
 - Candidate global-mixer positions: 8x8, 16x16, 32x32 (optionally 64x64).
 - Repo defaults: 10k iterations, batch 10, lr 6e-4; paper: 80k iterations, lr 4e-4.
+- Budget calibration (validation, docs/lab-notebook.md 2026-10-11): rule outcome 133 epochs
+  (`--iterations 80000`, ~12 min/run); protocols are named by epochs (17 / 67 / 133).
 
 # How to run
 Full details (versions, checksums, measured numbers): docs/setup-log.md.
@@ -32,6 +34,15 @@ Full details (versions, checksums, measured numbers): docs/setup-log.md.
   (exits non-zero unless the `selective_scan_cuda` / `causal_conv1d_cuda` kernels are actually used; expect `OK`).
 - Original baseline: `cd train && python runTrain.py` then `python runTest.py` (~2 min train, ~440 MiB VRAM;
   random seed, so indicative only).
+- Controlled pipeline (fixed profile-disjoint split `splits/val_grouped_seed0.txt`, runs in `~/runs/<id>/`, see
+  docs/lab-notebook.md and scripts/README.md):
+  `python scripts/train.py --seed 0 --epochs 133 --variant MDv-local --level 64 [--out-dir DIR]`,
+  `python scripts/evaluate.py --run-dir DIR --split val` (test split only for final results),
+  queues: `python scripts/run_queue.py queues/<name>.txt --out-root DIR` (see queues/README.md),
+  original baseline with a seed: `python scripts/run_original.py --seed 0 [--out-dir DIR]`,
+  check: `scripts/verify_loader.py`.
+- Repository layout for submission (2026-10-24): retired one-off scripts / queues live in `archive/` (gitignored,
+  local only) and at tag `experiments-final`. Do not re-add them to the repository.
 
 ## Lessons learned
 - `/tmp` is a tmpfs with a ~6 GB per-user quota. pip unpacks wheels there; the ~900 MB torch wheel plus
@@ -42,3 +53,13 @@ Full details (versions, checksums, measured numbers): docs/setup-log.md.
   from source: system nvcc 12.6 needs GCC <= 13 but the system has GCC 16; no wheels exist for Python 3.14
   or torch >= 2.11 (hence Python 3.12 + torch 2.10). `pip install --dry-run` first to make sure torch/triton are not replaced.
 - Large downloads can fail mid-way: use `pip install --resume-retries 20`.
+- `conda run` does not forward stdin: `conda run -n mdf python - <<EOF` runs nothing and prints nothing (silence is
+  not a pass). Write the script to a file, or call the env's python directly (`$(conda run -n mdf which python)`).
+
+## Lab notebook (standing rule)
+- Keep docs/lab-notebook.md as a chronological log (newest entry last). Add an entry for every decision, experiment, change of plan or notable finding, BEFORE committing the related code, and commit it together with the code.
+- Entry format: date (YYYY-MM-DD) and title; Context / why; Decision or action (with alternatives considered); Evidence (commands, key numbers, run IDs, commit hash); Open questions.
+- Record negative results and abandoned approaches, with the reason.
+- Never rewrite past entries; add a correction entry instead.
+- English only. The repo is public: no personal paths, names or credentials.
+- docs/setup-log.md remains the environment record; the notebook links to it.

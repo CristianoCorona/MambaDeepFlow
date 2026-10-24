@@ -1,0 +1,20 @@
+# Night 2 (2026-10-12/13): variants at 133 epochs, grouped split. Pre-registered in docs/lab-notebook.md.
+# Order fixed. est= = 133-epoch estimate from the control runs (+~10 % margin); B is not re-run.
+MD8_s0      est=17m --seed 0 --epochs 133 --variant MD --level 8
+SA8_s0      est=14m --seed 0 --epochs 133 --variant SA --level 8
+B-large_s0  est=18m --seed 0 --epochs 133 --variant B-large
+CBAM8_s0    est=14m --seed 0 --epochs 133 --variant CBAM --level 8
+MD8_s1      est=17m --seed 1 --epochs 133 --variant MD --level 8
+SA8_s1      est=14m --seed 1 --epochs 133 --variant SA --level 8
+B-large_s1  est=18m --seed 1 --epochs 133 --variant B-large
+CBAM8_s1    est=14m --seed 1 --epochs 133 --variant CBAM --level 8
+MD8_s2      est=17m --seed 2 --epochs 133 --variant MD --level 8
+SA8_s2      est=14m --seed 2 --epochs 133 --variant SA --level 8
+B-large_s2  est=18m --seed 2 --epochs 133 --variant B-large
+CBAM8_s2    est=14m --seed 2 --epochs 133 --variant CBAM --level 8
+MD32_s0     est=24m --seed 0 --epochs 133 --variant MD --level 32
+SA32_s0     est=27m --seed 0 --epochs 133 --variant SA --level 32
+MD32_s1     est=24m --seed 1 --epochs 133 --variant MD --level 32
+SA32_s1     est=27m --seed 1 --epochs 133 --variant SA --level 32
+MD32_s2     est=24m --seed 2 --epochs 133 --variant MD --level 32
+SA32_s2     est=27m --seed 2 --epochs 133 --variant SA --level 32

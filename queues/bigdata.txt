@@ -1,0 +1,17 @@
+# Big-dataset experiment (exploratory, validation only; docs/preregistration-bigdata.md): B, MDv64-local, MDv64 on the
+# full 53.8k set, split mode grouped-full (validation = all files of the 85 grouped validation profiles, test profiles
+# excluded), 133 epochs, the same arguments as the reduced-set runs apart from --split-mode. Priority order: B and
+# MDv64-local alternate by seed, MDv64 last (launched only if it fits the budget; the cutoff stops the queue).
+# Runs on the cloud VM only: launch with scripts/cloud/launch_bigdata.sh (never by hand), out root ~/runs/bigdata.
+# est= are placeholders from the laptop throughput (RTX 4060: B 115, MDv64-local 73.5, MDv64 30.7 it/s) for ~50k
+# training files (~665k steps) x 1.3; launch_bigdata.sh replaces them with the smoke-test estimates
+# (scripts/cloud/estimate_budget.py --est-json) in an effective copy of this queue, arguments unchanged.
+B_s0             est=125m --seed 0 --epochs 133 --split-mode grouped-full
+MDv64-local_s0   est=200m --seed 0 --epochs 133 --split-mode grouped-full --variant MDv-local --level 64
+B_s1             est=125m --seed 1 --epochs 133 --split-mode grouped-full
+MDv64-local_s1   est=200m --seed 1 --epochs 133 --split-mode grouped-full --variant MDv-local --level 64
+B_s2             est=125m --seed 2 --epochs 133 --split-mode grouped-full
+MDv64-local_s2   est=200m --seed 2 --epochs 133 --split-mode grouped-full --variant MDv-local --level 64
+MDv64_s0         est=470m --seed 0 --epochs 133 --split-mode grouped-full --variant MDv --level 64
+MDv64_s1         est=470m --seed 1 --epochs 133 --split-mode grouped-full --variant MDv --level 64
+MDv64_s2         est=470m --seed 2 --epochs 133 --split-mode grouped-full --variant MDv --level 64

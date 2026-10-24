@@ -1,0 +1,7 @@
+comparison,region,diff |div pred - div tgt| x1e-3
+DRv11 - B-GH,wall,"-0.5528 [-1.0859, -0.0197]"
+DRv11 - B-GH,other,"-0.0737 [-0.1222, -0.0193]"
+TR - B-GH,wall,"+0.2323 [-0.1201, +0.5447]"
+TR - B-GH,other,"+0.7376 [+0.6754, +0.8037]"
+DRv11 - TR,wall,"-0.7851 [-1.2531, -0.2912]"
+DRv11 - TR,other,"-0.8114 [-0.8905, -0.7353]"

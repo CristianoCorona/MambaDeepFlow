@@ -1,0 +1,47 @@
+# Night 9 (Saturday 2026-10-17 afternoon -> Sunday 2026-10-18): one queue, ladder first, then SA64.
+#  - Ladder of one-ingredient ablations of MDv64-local (docs/preregistration-night9.md, commit 4f1d86a; exploratory,
+#    validation only): L-nogate, L-nonorm, L-noprenorm, L-noexp, L-dense, seeds 0-4, in seed order.
+#  - SA64 seeds 0-4 (docs/preregistration-night8.md, commit d65894c; amendment b60cdb0 "SA64 in the same queue as the
+#    night-9 ladder", content unchanged).
+# Grouped split, 133 epochs, validation only. Out root ~/runs/night9, cutoff 13:00 (Sunday 2026-10-18): no run starts
+# after it. Runs not done by the cutoff are completed the following night by re-launching this same queue (finished
+# runs are skipped); no seed is added. Launch: scripts/launch_night9.sh (never by hand). Replaces the SA64-only queue,
+# kept unused as queues/night9-sa64only.txt.
+# Totals: ladder nominal 439.5 min (7.3 h), worst case 510 min (8.5 h); SA64 nominal 978 min (16.3 h), worst case
+# 1055 min (17.6 h); whole queue nominal 1417.5 min (23.6 h), worst case 1565 min (26.1 h).
+# Estimates, same method as nights 8 / 8b: nominal = 0.98 x linear extrapolation of the per-epoch times to 133 epochs +
+# start-up + evaluation; est= (worst case, used by run_queue.py for the cutoff) = 1.05 x that + evaluation + 1 min,
+# rounded up. Ladder: control runs of 2026-10-17 (~/runs/control-2026-10-17, 17 epochs, notebook entry "Night 9:
+# control runs"); SA64: control run of 2026-10-16 (notebook entry "Night 8: control runs"). After the first run of a
+# configuration run_queue.py uses its real duration.
+# A failed run is repeated identically once (re-run this queue), otherwise declared missing.
+L-nogate_s0     est=21m  --seed 0 --epochs 133 --variant L-nogate --level 64     # nominal=17.7m
+L-nonorm_s0     est=21m  --seed 0 --epochs 133 --variant L-nonorm --level 64     # nominal=17.9m
+L-noprenorm_s0  est=20m  --seed 0 --epochs 133 --variant L-noprenorm --level 64  # nominal=17.7m
+L-noexp_s0      est=18m  --seed 0 --epochs 133 --variant L-noexp --level 64      # nominal=15.3m
+L-dense_s0      est=22m  --seed 0 --epochs 133 --variant L-dense --level 64      # nominal=19.3m
+L-nogate_s1     est=21m  --seed 1 --epochs 133 --variant L-nogate --level 64     # nominal=17.7m
+L-nonorm_s1     est=21m  --seed 1 --epochs 133 --variant L-nonorm --level 64     # nominal=17.9m
+L-noprenorm_s1  est=20m  --seed 1 --epochs 133 --variant L-noprenorm --level 64  # nominal=17.7m
+L-noexp_s1      est=18m  --seed 1 --epochs 133 --variant L-noexp --level 64      # nominal=15.3m
+L-dense_s1      est=22m  --seed 1 --epochs 133 --variant L-dense --level 64      # nominal=19.3m
+L-nogate_s2     est=21m  --seed 2 --epochs 133 --variant L-nogate --level 64     # nominal=17.7m
+L-nonorm_s2     est=21m  --seed 2 --epochs 133 --variant L-nonorm --level 64     # nominal=17.9m
+L-noprenorm_s2  est=20m  --seed 2 --epochs 133 --variant L-noprenorm --level 64  # nominal=17.7m
+L-noexp_s2      est=18m  --seed 2 --epochs 133 --variant L-noexp --level 64      # nominal=15.3m
+L-dense_s2      est=22m  --seed 2 --epochs 133 --variant L-dense --level 64      # nominal=19.3m
+L-nogate_s3     est=21m  --seed 3 --epochs 133 --variant L-nogate --level 64     # nominal=17.7m
+L-nonorm_s3     est=21m  --seed 3 --epochs 133 --variant L-nonorm --level 64     # nominal=17.9m
+L-noprenorm_s3  est=20m  --seed 3 --epochs 133 --variant L-noprenorm --level 64  # nominal=17.7m
+L-noexp_s3      est=18m  --seed 3 --epochs 133 --variant L-noexp --level 64      # nominal=15.3m
+L-dense_s3      est=22m  --seed 3 --epochs 133 --variant L-dense --level 64      # nominal=19.3m
+L-nogate_s4     est=21m  --seed 4 --epochs 133 --variant L-nogate --level 64     # nominal=17.7m
+L-nonorm_s4     est=21m  --seed 4 --epochs 133 --variant L-nonorm --level 64     # nominal=17.9m
+L-noprenorm_s4  est=20m  --seed 4 --epochs 133 --variant L-noprenorm --level 64  # nominal=17.7m
+L-noexp_s4      est=18m  --seed 4 --epochs 133 --variant L-noexp --level 64      # nominal=15.3m
+L-dense_s4      est=22m  --seed 4 --epochs 133 --variant L-dense --level 64      # nominal=19.3m
+SA64_s0         est=211m --seed 0 --epochs 133 --variant SA --level 64           # nominal=195.6m
+SA64_s1         est=211m --seed 1 --epochs 133 --variant SA --level 64           # nominal=195.6m
+SA64_s2         est=211m --seed 2 --epochs 133 --variant SA --level 64           # nominal=195.6m
+SA64_s3         est=211m --seed 3 --epochs 133 --variant SA --level 64           # nominal=195.6m
+SA64_s4         est=211m --seed 4 --epochs 133 --variant SA --level 64           # nominal=195.6m

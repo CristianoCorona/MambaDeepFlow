@@ -1,0 +1,15 @@
+# Night 5 (position experiment, EXPLORATORY, validation only): PREPARED, NOT LAUNCHED. Composition decided by the team;
+# the pre-registration entry must be committed before scripts/launch_night5.sh is run.
+# Configurations: MDv32 (faithful SS2D at 32x32), MDv64 (at 64x64, 4096 tokens), MDv8-16-32 (one MDv block at each of
+# 8x8, 16x16, 32x32). 133 epochs, grouped split, seeds 0-2, in seed order (s0 of all, then s1, then s2).
+# est= = 133-epoch estimate from the 2026-10-15 control runs (25.5 / 45.7 / 31.0 min) + ~5 %. Out root ~/runs/night5,
+# cutoff 08:30.
+MDv32_s0       est=27m --seed 0 --epochs 133 --variant MDv --level 32
+MDv64_s0       est=48m --seed 0 --epochs 133 --variant MDv --level 64
+MDv8-16-32_s0  est=33m --seed 0 --epochs 133 --variant MDv --levels 8,16,32
+MDv32_s1       est=27m --seed 1 --epochs 133 --variant MDv --level 32
+MDv64_s1       est=48m --seed 1 --epochs 133 --variant MDv --level 64
+MDv8-16-32_s1  est=33m --seed 1 --epochs 133 --variant MDv --levels 8,16,32
+MDv32_s2       est=27m --seed 2 --epochs 133 --variant MDv --level 32
+MDv64_s2       est=48m --seed 2 --epochs 133 --variant MDv --level 64
+MDv8-16-32_s2  est=33m --seed 2 --epochs 133 --variant MDv --levels 8,16,32

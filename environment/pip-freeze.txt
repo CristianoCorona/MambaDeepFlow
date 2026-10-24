@@ -22,6 +22,7 @@ httpcore2==2.13.1
 httpx2==2.13.1
 huggingface_hub==2.2.0
 idna==3.20
+iniconfig==2.3.1
 Jinja2==3.1.6
 kiwisolver==1.5.1
 mamba-ssm @ https://github.com/state-spaces/mamba/releases/download/v2.3.2.post1/mamba_ssm-2.3.2.post1%2Bcu12torch2.10cxx11abiTRUE-cp312-cp312-linux_x86_64.whl#sha256=7a67070c1e7e99c95abd1319623f044e8a1b3fb46f774bfdea949f0a4fc79638
@@ -55,10 +56,12 @@ nvidia-nvshmem-cu12==3.4.5
 nvidia-nvtx-cu12==12.8.90
 packaging==26.3
 pillow==12.3.0
+pluggy==1.6.0
 protobuf==7.36.2
 psutil==7.2.2
 Pygments==2.21.0
 pyparsing==3.3.3
+pytest==9.1.1
 python-dateutil==2.9.0.post0
 PyYAML==6.0.3
 quack-kernels==0.6.5

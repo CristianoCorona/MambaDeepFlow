@@ -1,0 +1,10 @@
+# Night 10 (Sunday 2026-10-18 night): MDv64-local seeds 5-7 for the final confirmatory test pass
+# (docs/preregistration-final.md, commit 45dc422). Same arguments as night 8a (~/runs/night8a/MDv64-local_s0-4/
+# config.json: --seed k --epochs 133 --variant MDv-local --level 64, grouped split; lines as in queues/night8a.txt).
+# Out root ~/runs/night10, cutoff 2026-10-19T08:00. Launch: scripts/launch_night10.sh (never by hand).
+# nominal = real night-8a duration (train 1120-1127 s + eval 3 s, ~18.8 min) rounded up to 19 min; est= (worst case,
+# used by run_queue.py for the cutoff) as night 8a. Totals: nominal 57 min, worst case 63 min.
+# A failed run is repeated identically once (re-run this queue), otherwise declared missing before the test pass.
+MDv64-local_s5   est=21m --seed 5 --epochs 133 --variant MDv-local --level 64 # nominal=19m
+MDv64-local_s6   est=21m --seed 6 --epochs 133 --variant MDv-local --level 64 # nominal=19m
+MDv64-local_s7   est=21m --seed 7 --epochs 133 --variant MDv-local --level 64 # nominal=19m

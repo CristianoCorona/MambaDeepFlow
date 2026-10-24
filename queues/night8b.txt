@@ -1,0 +1,13 @@
+# Night 8b (Saturday 2026-10-17, early morning): Conv64, plain residual conv block at 64x64 (docs/preregistration-night8b.md,
+# commit 31a57ae; exploratory, validation only). Seeds 0-4, grouped split, 133 epochs. Out root ~/runs/night8b,
+# cutoff 12:00 (2026-10-17). Launch: scripts/launch_night8b.sh (never by hand).
+# Totals: nominal 68.5 min (1.1 h), worst case 80 min (1.3 h).
+# Estimates from the control run of 2026-10-17 (~/runs/control-2026-10-17/Conv64, 17 epochs, 99.4 it/s; notebook entry
+# "Night 8b: control run"), same method as night 8: nominal = 0.98 x linear extrapolation to 133 epochs + evaluation;
+# est= (worst case, used by run_queue.py for the cutoff) = 1.05 x that + evaluation + 1 min, rounded up.
+# A failed run is repeated identically once (re-run this queue), otherwise declared missing.
+Conv64_s0   est=16m --seed 0 --epochs 133 --variant Conv --level 64 # nominal=13.7m
+Conv64_s1   est=16m --seed 1 --epochs 133 --variant Conv --level 64 # nominal=13.7m
+Conv64_s2   est=16m --seed 2 --epochs 133 --variant Conv --level 64 # nominal=13.7m
+Conv64_s3   est=16m --seed 3 --epochs 133 --variant Conv --level 64 # nominal=13.7m
+Conv64_s4   est=16m --seed 4 --epochs 133 --variant Conv --level 64 # nominal=13.7m

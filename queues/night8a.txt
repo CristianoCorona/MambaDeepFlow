@@ -1,0 +1,24 @@
+# Night 8a (Friday 2026-10-16 night): ablations of MDv64 without SA64 (docs/preregistration-night8.md, commit d65894c,
+# amendment "SA64 in a separate night"; supersedes queues/night8-full.txt / night8-cut.txt, kept but not used).
+# MDv64-local, MDv64-dec, MDv16, seeds 0-4, grouped split, 133 epochs, validation only; order by seed (s0 of the three,
+# then s1, ...). Out root ~/runs/night8a, cutoff 12:00 (2026-10-17). Launch: scripts/launch_night8a.sh (never by hand).
+# Totals: nominal 390 min (6.5 h), worst case 440 min (7.3 h).
+# Estimates from the control runs of 2026-10-16 (~/runs/control-2026-10-16, 17 epochs; notebook entry "Night 8: control
+# runs"): nominal = 0.98 x linear extrapolation to 133 epochs + evaluation; est= (worst case, used by run_queue.py for the
+# cutoff) = 1.05 x that + evaluation + 1 min. After the first run of a configuration run_queue.py uses its real duration.
+# A failed run is repeated identically once (re-run this queue), otherwise declared missing.
+MDv64-local_s0   est=21m --seed 0 --epochs 133 --variant MDv-local --level 64 # nominal=18.5m
+MDv64-dec_s0     est=49m --seed 0 --epochs 133 --variant MDv-dec --level 64   # nominal=44.3m
+MDv16_s0         est=18m --seed 0 --epochs 133 --variant MDv --level 16       # nominal=15.3m
+MDv64-local_s1   est=21m --seed 1 --epochs 133 --variant MDv-local --level 64 # nominal=18.5m
+MDv64-dec_s1     est=49m --seed 1 --epochs 133 --variant MDv-dec --level 64   # nominal=44.3m
+MDv16_s1         est=18m --seed 1 --epochs 133 --variant MDv --level 16       # nominal=15.3m
+MDv64-local_s2   est=21m --seed 2 --epochs 133 --variant MDv-local --level 64 # nominal=18.5m
+MDv64-dec_s2     est=49m --seed 2 --epochs 133 --variant MDv-dec --level 64   # nominal=44.3m
+MDv16_s2         est=18m --seed 2 --epochs 133 --variant MDv --level 16       # nominal=15.3m
+MDv64-local_s3   est=21m --seed 3 --epochs 133 --variant MDv-local --level 64 # nominal=18.5m
+MDv64-dec_s3     est=49m --seed 3 --epochs 133 --variant MDv-dec --level 64   # nominal=44.3m
+MDv16_s3         est=18m --seed 3 --epochs 133 --variant MDv --level 16       # nominal=15.3m
+MDv64-local_s4   est=21m --seed 4 --epochs 133 --variant MDv-local --level 64 # nominal=18.5m
+MDv64-dec_s4     est=49m --seed 4 --epochs 133 --variant MDv-dec --level 64   # nominal=44.3m
+MDv16_s4         est=18m --seed 4 --epochs 133 --variant MDv --level 16       # nominal=15.3m

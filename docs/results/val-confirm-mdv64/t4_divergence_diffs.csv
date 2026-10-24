@@ -1,0 +1,3 @@
+comparison,region,diff |div pred - div tgt| x1e-3
+MDv64 - B,wall,"-1.0848 [-1.3818, -0.7116]"
+MDv64 - B,other,"-0.1226 [-0.1447, -0.1007]"

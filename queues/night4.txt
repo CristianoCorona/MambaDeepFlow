@@ -1,0 +1,32 @@
+# Night 4 (2026-10-14/15), single queue, pre-registered in docs/lab-notebook.md (2026-10-14, "Night 4: queue ...").
+# 1) MDv8 (faithful SS2D, entry "Pre-registered ablation: faithful SS2D (MDv8)"): seeds 0-7, 133 epochs, grouped split,
+#    in seed order. est= = control-run estimate (15.1 min) + ~5 %.
+# 2) Data-quantity experiment (EXPLORATORY; lines identical to queues/data-eff.txt): seeds 0-2; per seed B, MD8, SA8 at
+#    fraction 0.25, then at 0.5; 79 667 steps.
+# Out root ~/runs/night4, cutoff 08:30. Validation only; nothing here touches the test set.
+MDv8_s0     est=16m --seed 0 --epochs 133 --variant MDv --level 8
+MDv8_s1     est=16m --seed 1 --epochs 133 --variant MDv --level 8
+MDv8_s2     est=16m --seed 2 --epochs 133 --variant MDv --level 8
+MDv8_s3     est=16m --seed 3 --epochs 133 --variant MDv --level 8
+MDv8_s4     est=16m --seed 4 --epochs 133 --variant MDv --level 8
+MDv8_s5     est=16m --seed 5 --epochs 133 --variant MDv --level 8
+MDv8_s6     est=16m --seed 6 --epochs 133 --variant MDv --level 8
+MDv8_s7     est=16m --seed 7 --epochs 133 --variant MDv --level 8
+B_f25_s0     est=13m --seed 0 --variant B --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f25_s0   est=16m --seed 0 --variant MD --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f25_s0   est=14m --seed 0 --variant SA --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+B_f50_s0     est=13m --seed 0 --variant B --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f50_s0   est=16m --seed 0 --variant MD --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f50_s0   est=14m --seed 0 --variant SA --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+B_f25_s1     est=13m --seed 1 --variant B --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f25_s1   est=16m --seed 1 --variant MD --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f25_s1   est=14m --seed 1 --variant SA --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+B_f50_s1     est=13m --seed 1 --variant B --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f50_s1   est=16m --seed 1 --variant MD --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f50_s1   est=14m --seed 1 --variant SA --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+B_f25_s2     est=13m --seed 2 --variant B --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f25_s2   est=16m --seed 2 --variant MD --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f25_s2   est=14m --seed 2 --variant SA --level 8 --train-fraction 0.25 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+B_f50_s2     est=13m --seed 2 --variant B --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+MD8_f50_s2   est=16m --seed 2 --variant MD --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599
+SA8_f50_s2   est=14m --seed 2 --variant SA --level 8 --train-fraction 0.50 --total-steps 79667 --lr-ref-epochs 133 --log-every 599

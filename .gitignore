@@ -108,9 +108,26 @@ venv.bak/
 # Local data (symlinks to ~/data/dfp), never committed
 data/train
 data/test
+data/train_full
 
 # Outputs of train/runTrain.py and train/runTest.py
 train/modelG*
 train/results_train/
 train/results_test/
 train/testout*.txt
+
+# LaTeX build files (docs/poster, docs/report)
+*.aux
+*.nav
+*.snm
+*.out
+*.toc
+*.synctex.gz
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+
+# Local archive of retired operational / exploratory scripts (kept on disk, not in the repository;
+# the tracked versions are at tag experiments-final)
+archive/
