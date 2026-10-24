@@ -1,9 +1,46 @@
-"""Model registry and factory. "dfpnet" / variant "B" is the unmodified original TurbNetG from train/DfpNet.py;
-the other variants (build_from_cfg) add one global-mixing block from mdf/blocks.py.
+"""Model factory: the baseline DfpNet and every variant with an extra block.
 
-The original modules in train/ are imported by appending train/ at the END of sys.path,
-so they can never shadow other modules (train/ contains generic names such as
-dataset.py and utils.py).
+Entry point: build_from_cfg({"variant": ..., "level": ...}) returns an initialised nn.Module. Variant "B" is the
+unmodified TurbNetG of train/DfpNet.py; the others add a block from mdf/blocks.py (or mdf/ablation.py), or change
+the deep path (mdf/deep_replace.py). Variant names: see mdf/__init__.py.
+
+The U-Net (TurbNetG, 32 base channels; input and output 3 x 128 x 128). Each encoder layer halves the map with a
+stride-2 convolution (layer1: the convolution alone; layer2..layer6: LeakyReLU, convolution, BatchNorm), each
+decoder layer doubles it again (ReLU, bilinear upsampling, convolution, BatchNorm). Each decoder layer receives the
+previous decoder output concatenated with the encoder output of the same size (skip connection):
+
+  output map size   encoder layer  channels   decoder layer   block position ("level" in the configs)
+                    (output at that size)     (same size)
+  64 x 64           layer1         32         dlayer2         64  (after layer1; MDv-dec: after dlayer2)
+  32 x 32           layer2         64         dlayer2b        32  (after layer2)
+  16 x 16           layer2b        64         dlayer3         16  (after layer2b)
+   8 x  8           layer3         128        dlayer4          8  (after layer3)
+   4 x  4           layer4         256        dlayer5         -   (the "deep path": layer4..layer6,
+   2 x  2           layer5         256        dlayer6         -    dlayer6..dlayer4; 79 % of the weights,
+   1 x  1           layer6         256        -               -    receptive field = the whole domain)
+
+layer1 is a single convolution applied to the input, so at 64x64 the field is barely processed before it is
+passed on; this is where the extra block helps most (poster, finding 2).
+
+Inserting a block at a level (TurbNetGMixer): the block output REPLACES the output of that encoder layer, so the
+mixed features go both down the encoder and across the skip connection to the decoder:
+
+      x -> layer1 -> [block] -> layer2 -> ... -> layer6
+                        |
+                        +--------- skip -------------> cat -> dlayer1 -> output
+
+Fair comparison by construction. For a given seed, every variant must start from the same U-Net weights as B, so
+that differences between B and a variant come from the block and not from a different random initialisation:
+  - the U-Net skeleton is built and initialised with the original weights_init FIRST, which consumes the random
+    number generator exactly as for B;
+  - only then the block is created, with its own initialisation (weights_init is never applied to it);
+  - the block's output projection is zero-initialised, so y = x + 0 at the start: the variant IS B at step 0.
+Tests check these properties: test_zero_init_equals_B and test_weights_init_does_not_touch_block
+(tests/test_blocks.py), and fingerprints of the initial weights of every variant (tests/test_multilevel.py,
+test_existing_variants_unchanged).
+
+The original modules in train/ are imported by appending train/ at the END of sys.path, so they can never shadow
+other modules (train/ contains generic names such as dataset.py and utils.py).
 """
 
 import math
@@ -56,7 +93,8 @@ def build_dfpnet(expo=5, dropout=0.0):
     return net
 
 
-# name -> builder(expo) -> nn.Module with weights already initialised.
+# name -> builder(expo) -> nn.Module with weights already initialised. Legacy interface of the first runs
+# (train.py --model dfpnet --expo 5, before the variants existed); new code uses build_from_cfg.
 MODELS = {
     "dfpnet": build_dfpnet,
 }
@@ -73,6 +111,15 @@ def count_params(net):
 
 
 # --- Variants with a global-mixing block (docs/lab-notebook.md, 2026-10-12) ---
+# The registry grew experiment by experiment: each new experiment appended its names and left the existing ones
+# alone, so that the configurations of earlier runs keep meaning the same thing. In summary:
+#   VARIANTS              every name accepted by --variant
+#   DEEP_REPLACE_VARIANTS no level: they change the deep path (mdf/deep_replace.py)
+#   ABLATION_VARIANTS,    defined at 64x64 only (mdf/ablation.py)
+#   CONV_VARIANTS,
+#   LADDER_VARIANTS
+#   MAMBA_VARIANTS        variants whose config records a mamba_impl ("cuda" kernels or the "ref" PyTorch path)
+#   LEVEL_LAYER           level -> (encoder layer after which the block sits, channel multiplier of that layer)
 
 B_PARAMS = 2332035  # TurbNetG, 32 base channels
 VARIANTS = ("B", "B-large", "CBAM", "SA", "MD", "MDv")  # MDv: faithful SS2D (notebook 2026-10-14)
@@ -225,7 +272,18 @@ def levels_tag(levels):
 
 def normalize_cfg(cfg):
     """Fill defaults and check a model configuration {variant, level, channels, mamba_impl}; with several levels
-    {variant, level: None, levels, channels, mamba_impl} (the key `levels` exists only for multi-level models)."""
+    {variant, level: None, levels, channels, mamba_impl} (the key `levels` exists only for multi-level models).
+
+    The normalised dict is what config.json stores and what evaluate.py rebuilds the model from, so every run's
+    model is fully determined by it. Rules, in the order they are applied:
+      - TR / DRv11: no level, 32 base channels; mamba_impl only for DRv11 (TR has no block).
+      - B-large: 33 base channels (the only width allowed); B and B-large have no block, hence no level.
+      - MDv-dec, Conv, L-*: a single block at 64x64; level defaults to 64 and any other level is refused.
+      - levels (several levels, one block of the same kind at each): only for variants with a block, not
+        together with level.
+      - otherwise one block at `level` (default 8, the first position explored). This includes MDv-local, which
+        accepts any level like MDv: the final architecture needs level=64 given explicitly.
+    mamba_impl is recorded only for variants that contain a Mamba-type block (default "cuda")."""
     variant = cfg.get("variant", "B")
     if variant not in VARIANTS + TEST_VARIANTS:
         raise ValueError(f"unknown variant {variant!r}; available {VARIANTS}")
@@ -305,6 +363,7 @@ def model_cfg_from_run_config(run_cfg):
 
 
 def block_params(net):
+    """Trainable parameters of the added block(s) only (0 for B / B-large / TR)."""
     mixers = getattr(net, "mixers", None)
     if mixers is not None:
         return count_params(mixers)

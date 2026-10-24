@@ -1,4 +1,25 @@
-"""Ablations of MDv64 (night 8, docs/lab-notebook.md 2026-10-16; docs/preregistration-night8.md).
+"""Ablations of MDv64: which part of the 64x64 Mamba block gives the gain? (poster, finding 3)
+
+MDv64 lowers the v_y error, but it changes several things at once: a global scan, a gate, normalisations, a channel
+expansion and a local 3x3 depthwise convolution. Each variant here removes or replaces ONE of them:
+
+  MDv-local  (M64-loc)  the scan removed: no information travels along the sequence, every pixel only sees its 3x3
+                        neighbourhood. Most of the gain stays, so the gain does NOT need the state space model.
+                        This is the FINAL ARCHITECTURE (U-Net + M64-loc: +7 k parameters, 1.6x training time).
+  MDv-dec    (M64-dec)  the unchanged MDv block on the decoder side at 64x64 instead of the encoder.
+  Conv       (Conv64)   a plain residual conv block of a similar size (control: is any extra local layer enough?).
+  L-*                   one-ingredient removals from MDv-local (gate, norms, expansion, depthwise -> dense conv).
+
+How the scan is removed. In SS2DVMamba each direction computes y = SelectiveScan(u) + D * u, where the D term is a
+per-channel skip that bypasses the state (see the Mamba equations in mdf/blocks.py). MDv-local keeps only D * u: in
+row-major order this is D_k * x at the same pixel for every direction k, so the block becomes
+
+      (xi, z) = in_proj(LN(x))
+      y = x + out_proj( LN( (sum_k D_k) * SiLU(dwconv3x3(xi)) ) * SiLU(z) )
+
+i.e. a gated, normalised, depthwise-convolutional block: a 3x3 receptive field and no long-range path.
+
+Details of each variant (night 8, docs/lab-notebook.md 2026-10-16; docs/preregistration-night8.md):
 
 Each variant differs from MDv64 (SS2DVMamba after layer1, 32 channels, 64x64) in one thing only:
 
@@ -49,6 +70,8 @@ import torch.nn.functional as F
 
 from mdf import blocks
 
+# Scan parameters that MDv-local inherits from SS2DVMamba but never uses (kept so that the state dict and the
+# random initialisation match MDv's; excluded from the "used" parameter count, 7232 instead of 20800 at 32 channels).
 UNUSED_LOCAL = ("x_proj_weight", "dt_projs_weight", "dt_projs_bias", "A_logs")
 
 

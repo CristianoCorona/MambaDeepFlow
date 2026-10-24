@@ -1,9 +1,36 @@
 """Float32 data loading, fixed train/validation split and normalisation.
 
-Re-implements the preprocessing of train/dataset.py (LoaderNormalizer with its default
-switches fixedAirfoilNormalization = makeDimLess = removePOffset = True) without
-float64 dataset-sized arrays: each .npz file (stored as float64) is cast to float32
-as soon as it is read, and all normalisation steps run on float32 arrays.
+The data (Thuerey et al. 2020; generated with OpenFOAM by data/dataGen.py). Each sample is one RANS simulation of
+one airfoil at one free stream, resampled on a 128 x 128 grid around the airfoil and stored as a 6 x 128 x 128
+array in "<airfoil>_<fsX>_<fsY>.npz":
+  inputs   0  free-stream vx (constant in the fluid,      targets  3  pressure p
+              0 inside the airfoil)                                4  velocity vx
+           1  free-stream vy (same)                                5  velocity vy
+           2  airfoil mask (1 inside the airfoil)                  (all targets 0 inside the airfoil)
+The 6.4k set has 6400 training samples (1456 airfoil profiles, several free streams each) and a test set of 90
+samples on 30 airfoils that never appear in training.
+
+Normalisation (normalize_, identical in order and formulas to the original loader):
+  1. remove the pressure offset (p minus its mean; 0 inside the airfoil);
+  2. make the targets dimensionless with the free-stream speed |v|: p / |v|^2, vx / |v|, vy / |v|;
+  3. divide by fixed maxima (MAX_INPUTS, MAX_TARGETS), so that every channel is of order 1.
+The network learns this normalised field; errors are measured on it (scripts/evaluate.py).
+
+Splits (split_files_for; the validation lists are committed in splits/ and checked on every load):
+  random          the original rule (last min(20 %, 400) files of a shuffled list) with a constant seed. The same
+                  airfoil then appears in training and validation, which flatters the validation error.
+  grouped         profile-disjoint: whole airfoils go to validation (402 samples, 85 profiles). The default for
+                  all reported runs: validation, like the test set, measures generalisation to unseen shapes.
+  grouped-holdout grouped, plus a second validation of 400 seen shapes taken out of training (seen- vs unseen-shape
+                  experiment, night 6 / 6b).
+  kfold           profile-disjoint folds of data/train (prepared for cross-validation, not used in the results).
+  grouped-full    the full 53.8k data set with the same 85 validation profiles (big-dataset experiment).
+The split seed is a constant (SPLIT_SEED); it is never tied to the training seed, so all runs share one split.
+
+Implementation: re-implements the preprocessing of train/dataset.py (LoaderNormalizer with its default switches
+fixedAirfoilNormalization = makeDimLess = removePOffset = True) without float64 dataset-sized arrays: each .npz file
+(stored as float64) is cast to float32 as soon as it is read, and all normalisation steps run on float32 arrays
+(checked against the original by scripts/verify_loader.py).
 
 Deviations from the original are declared in docs/lab-notebook.md (D1, D2, D8).
 """

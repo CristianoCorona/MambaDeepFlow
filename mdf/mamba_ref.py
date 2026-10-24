@@ -8,6 +8,12 @@ case used by Mamba. It is copied rather than imported because that module import
 `mamba_forward_ref` repeats the non-fused path of `Mamba.forward` (mamba_ssm/modules/mamba_simple.py) with the
 module's own parameters, using the PyTorch nn.Conv1d instead of causal_conv1d and the reference scan above.
 Same parameters, so the state_dict is shared with the CUDA path.
+
+Reading guide: the `for i in range(L)` loop in selective_scan_ref is the recursion of mdf/blocks.py written out,
+    x = exp(delta_i * A) * x + delta_i * B_i * u_i      (deltaA, deltaB_u precomputed for all positions)
+    y_i = C_i . x                                        (+ D * u_i and the optional SiLU(z) gate at the end)
+with the state x of shape (batch, channels, d_state). The CUDA kernel computes the same values with a parallel scan;
+tests/test_blocks.py checks that the two paths agree.
 """
 
 import torch

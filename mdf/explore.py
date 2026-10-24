@@ -1,4 +1,19 @@
-"""Exploratory per-sample / per-region analysis helpers (docs/lab-notebook.md, 2026-10-13).
+"""Per-sample / per-region analysis helpers: the statistics behind every comparison in the poster and report.
+
+Three ideas:
+  1. Per-sample errors. A trained run is evaluated sample by sample (run_inference): for each sample and channel,
+     the relative L1 error sum|o - t| / sum|t| (as train/runTest.py), plus the same sums restricted to flow regions.
+     Results are cached on disk (cached_inference), keyed by the checkpoint's sha256, so analyses can be rerun
+     without a GPU.
+  2. Regions. Where in the flow does a model improve? Every fluid cell is assigned to one region: the wall band
+     (1-4 px from the airfoil, a proxy of the boundary layer; the poster's "within 4 px of the airfoil"), the wake
+     behind the trailing edge, or the rest.
+  3. Paired, two-level bootstrap (paired_bootstrap). Two configurations are compared on the SAME samples with the
+     SAME seeds (paired). The uncertainty has two sources: which airfoils happen to be in the evaluation set, and
+     which training seeds were run. Each bootstrap repetition resamples both: the profiles (all samples of an
+     airfoil together, since they are not independent) and, per configuration, the seeds. The 2.5 / 97.5
+     percentiles of the repeated differences give the 95 % intervals in the poster; a pre-registered improvement
+     is CONFIRMED only if the whole interval lies below 0.
 
 Reusable for any split, but the test split is final-results-only: `load_split("test", ...)` refuses unless
 allow_test=True, and every loader path goes through `assert_files_allowed`, which asserts that no file of
@@ -45,6 +60,8 @@ DIV_MAPPING = (0, 1, 1)  # vx along axis 0 (rows), same sign: mean |div target| 
 
 
 # --- test-set guard ---
+# The test set is opened only for pre-registered final comparisons; everything exploratory uses validation. These
+# checks make an accidental read of data/test fail loudly instead of silently leaking test information.
 
 def assert_files_allowed(directory, files, split):
     """Explicit guard: for splits 'val' and 'train' every file must be read from data/train, never from data/test."""
@@ -350,6 +367,10 @@ def paired_bootstrap(m_var, m_ref, profiles, n_boot=10000, seed=0, two_level=Tru
     samples of the resampled profiles, i.e. sample-weighted as the metric itself).
     Two levels: at each repetition the seeds of each configuration are also resampled with replacement.
     Returns point estimate, CIs, median per-sample difference, fraction of profiles / samples where var < ref.
+
+    Implementation: profile membership is a one-hot matrix g (N samples x P profiles), so "sum of the differences
+    of the resampled profiles" is a matrix product, and all n_boot repetitions are computed at once without a loop.
+    ci1_* = one-level interval, ci2_* = two-level interval (the one reported).
     """
     m_var, m_ref = np.atleast_2d(m_var), np.atleast_2d(m_ref)
     if subset is not None:

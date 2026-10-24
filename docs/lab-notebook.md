@@ -4492,3 +4492,41 @@ reproduce the final comparison or reuse the final architecture.
 notebook and the pre-registrations: only the historical queue headers.
 
 **Open questions.** None.
+
+## 2026-10-24 Educational comments in mdf/ (documentation only)
+
+**Context / why.** `mdf/` holds the architectures explored in the project, but its docstrings were written as a
+record for the experimenters (night numbers, commit hashes) and assumed that the reader knew the plan. Before
+submission they are rewritten so that someone who has never seen the code can follow it.
+
+**Decision or action.** Docstrings and `#` comments only; the executable code is unchanged (decision of the
+experimenter; a refactoring of the variant registry was considered and rejected because it would touch the code
+that produced the results). The concept comes first; references to the notebook remain as pointers. Added:
+- `mdf/__init__.py`: map of the modules and table of poster names <-> code names (B, B-large, M8..M64, M64-dec,
+  M64-loc = MDv-local at level 64 = final architecture, SA64, Conv64, TR, DRv11).
+- `mdf/models.py`: table of the U-Net levels (layer, channels, decoder layer), where a block is inserted, why the
+  skeleton is initialised before the block (same RNG, paired comparison, network = B at step 0), the rules of
+  `normalize_cfg` (note: `MDv-local` without `level` defaults to 8; the final architecture needs `level=64`).
+- `mdf/blocks.py`: why a global mixer, the selective-scan equations, the SS2D scan orders on a 3x3 example, the data
+  flow and tensor shapes of `SS2DVMamba`, one docstring per block.
+- `mdf/ablation.py`: what each ablation removes and why keeping only the D-skip term removes the scan
+  (MDv-local = gated depthwise-conv block, 3x3 receptive field).
+- `mdf/deep_replace.py`: diagram of B / TR / DRv11 and the test result of finding 1.
+- `mdf/data.py`: the data channels, the normalisation steps, the split modes.
+- `mdf/explore.py`: per-sample errors, regions (wall band = "within 4 px"), the paired two-level bootstrap behind the
+  95 % intervals.
+- `mdf/mamba_ref.py`: how the reference loop maps to the equations.
+
+**Evidence.**
+- AST of every `mdf/*.py` with docstrings removed identical to tag `experiments-final` (scratchpad script comparing
+  `ast.dump`): 9/9 files "same".
+- `pytest tests/`: 219 passed, 6 skipped. Smoke run `scripts/train.py --seed 0 --epochs 1 --variant MDv-local
+  --level 64` + `evaluate.py --split val`: val L1 0.0182 after 1 epoch, 68.5 it/s, peak VRAM 266 MiB.
+- Facts in the new comments checked on the code / data: deep path = 1 838 720 of 2 332 035 parameters (78.8 %);
+  6400 training files on 1456 profiles, 90 test files on 30 profiles, no overlap; CBAM at initialisation scales its
+  input by a median 0.25 (5-95 % 0.18-0.33); DRv11 / TR / B test numbers from `docs/results/test-confirm-dr`; the
+  reported interval is the two-level `ci2` ("95% CI seeds+profiles").
+- MDv-local runs on the CPU with `mamba_ssm` made unimportable (the scan is never called), and at initialisation
+  its output equals B's at the same seed (`torch.allclose` True).
+
+**Open questions.** None.

@@ -1,4 +1,18 @@
-"""Replacement of DfpNet's deep path with Mamba blocks (docs/lab-notebook.md, 2026-10-15, night 6b).
+"""Replacement of DfpNet's deep path with Mamba blocks (poster, finding 1; docs/lab-notebook.md 2026-10-15, night 6b).
+
+Question. One Mamba block at 8x8 did not improve the U-Net. Is that because global mixing is useless, or because
+the U-Net already mixes globally? Below 8x8 the U-Net continues to 4x4, 2x2 and 1x1 (the "deep path", 79 % of the
+weights), and at 1x1 every feature depends on the whole input. Test: remove the deep path, and replace it with
+Mamba blocks that work at 8x8.
+
+      B      ... layer3 (8x8) -> layer4 -> layer5 -> layer6 (1x1) -> dlayer6 -> dlayer5 -> dlayer4 -> dlayer3 ...
+      TR     ... layer3 (8x8) ------------------------------------------------------------------> dlayer3 ...
+      DRv11  ... layer3 (8x8) -> [MDv block] x 11 (all at 8x8, 128 channels) ---------------------> dlayer3 ...
+
+(the skip connections of the kept levels, 64 / 32 / 16 / 8, are unchanged). Result on test (rel_all, 5 seeds,
+split grouped-holdout; docs/results/test-confirm-dr): B 2.90 %, TR 3.47 %, DRv11 2.79 %. DRv11 is 0.69 points
+better than TR (95 % CI [0.26, 1.10]) and shows no demonstrated difference from B: Mamba blocks can do the deep
+path's job (global context), which is why one more global block at 8x8 has little left to add.
 
   TR     control: TurbNetG (32 base channels) truncated at 8x8. Kept unchanged: layer1, layer2, layer2b, layer3 and
          dlayer3, dlayer2b, dlayer2, dlayer1. Removed: layer4, layer5, layer6, dlayer6, dlayer5, dlayer4.
@@ -62,4 +76,5 @@ def make_turbnet_truncated():
 
 
 def build(variant, channels=32, mamba_impl="cuda"):
+    """TR (no block) or DRv11 (11 blocks), weights initialised; called by models.build_from_cfg."""
     return make_turbnet_truncated()(N_BLOCKS[variant], channels, mamba_impl or "cuda")
