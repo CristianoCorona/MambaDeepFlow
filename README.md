@@ -188,7 +188,7 @@ Not needed to use or reproduce the code, but kept as evidence of how the results
 - [`docs/setup-log.md`](docs/setup-log.md): environment and data set installation, with checksums.
 - The one-off scripts used while running the experiments (night launchers, single test sessions, exploratory
   analyses) are not in the repository any more; the notebook refers to them by path, and they are at the git tag
-  `experiments-final`. The submitted version is the tag `v1.0-submission`.
+  `experiments-final`. The submitted version is the tag `v1.1-submission`.
 
 ## Credits and license
 

@@ -4653,3 +4653,16 @@ or to tag this commit separately is left to the experimenter.
 else.
 
 **Open questions.** Tag of the submitted version (see above).
+
+## 2026-10-26 Tag of the submitted version: v1.1-submission
+
+**Context / why.** `v1.0-submission` (pushed, commit 66fac46) contains the report PDF compiled before the last
+edits; moving a published tag needs a force push, which the experimenter chose not to do.
+
+**Decision or action.** New annotated tag `v1.1-submission` on the commit of this entry (recompiled report, 097f40a,
+plus this entry and the README line). `v1.0-submission` is left unchanged; the README now names `v1.1-submission` as
+the submitted version.
+
+**Evidence.** `git ls-remote origin v1.1-submission` after the push (see the commit following this entry).
+
+**Open questions.** None.
