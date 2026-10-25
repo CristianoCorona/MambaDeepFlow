@@ -4636,3 +4636,20 @@ working material stays in the delivered repository.
 to tag `experiments-final`; `pytest tests/` result in the commit message of this entry.
 
 **Open questions.** report.pdf must be recompiled from the edited `main.tex` (Overleaf) and committed.
+
+## 2026-10-26 Report recompiled; repository footnote dropped
+
+**Context / why.** The previous entry edited `docs/report/main.tex` without recompiling `report.pdf`. The
+experimenter recompiled the report on Overleaf.
+
+**Decision or action.** New `docs/report/report.pdf` (4 pages) and `docs/report/main.tex` committed together. The
+DR-M time correction (2.9x) is kept. The footnote with the repository URL is dropped (decision of the experimenter;
+the poster carries the repository QR code); the header comment names the figure script relative to `docs/report/`.
+The tag `v1.0-submission` (pushed with commit 66fac46) still points to the commit with the old PDF; whether to move it
+or to tag this commit separately is left to the experimenter.
+
+**Evidence.** `pdftotext report.pdf`: Table I shows `2.9×` for DR-M; no "github" string in the PDF, matching
+`main.tex` (no `\footnote`). `git diff` of `main.tex` vs 66fac46: the footnote removed and the comment path, nothing
+else.
+
+**Open questions.** Tag of the submitted version (see above).

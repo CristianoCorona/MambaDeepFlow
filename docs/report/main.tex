@@ -5,7 +5,7 @@
 %  Sources of every number: docs/lab-notebook.md and docs/results/*.
 %  Figures: img/fig_block.pdf (Fig. 1, the poster's TikZ figure) and
 %  img/fig_results.pdf (Fig. 2, matplotlib at column width from the
-%  numbers of Tab. I; docs/report/make_fig_results.py).
+%  numbers of Tab. I; make_fig_results.py).
 % =====================================================================
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
@@ -84,8 +84,7 @@ mechanisms can overcome this mismatch: self-attention~\cite{vaswani2017} relates
 We ask whether a Mamba block improves DfpNet, where in the network it helps,
 and which of its components is responsible: we insert one residual block at
 one resolution at a time, then remove parts of it, and confirm the main
-findings with pre-registered tests on unseen airfoils.\footnote{Code, results and lab notebook:
-\url{https://github.com/CristianoCorona/MambaDeepFlow}.}
+findings with pre-registered tests on unseen airfoils.
 
 % =====================================================================
 \section{Background}
