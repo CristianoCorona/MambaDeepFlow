@@ -14,7 +14,7 @@ Mamba-style block without its scan), adds 7 k parameters, trains 1.6x slower tha
 v_y error by 13 % on the test set (pre-registered, confirmed).
 
 **Report:** [`docs/report/report.pdf`](docs/report/report.pdf) gives the full treatment of the project and the results.
-**Poster:** [`docs/poster/dml_poster.pdf`](docs/poster/dml_poster.pdf).
+**Poster:** [`docs/poster/poster.pdf`](docs/poster/poster.pdf).
 
 ![DfpNet with the two main insertion points and the SS2D block](docs/figures/readme/fig_block.png)
 
@@ -68,18 +68,19 @@ train/, data/     the original Deep-Flow-Prediction code (unmodified reference b
 
 The original README of Deep-Flow-Prediction is in [`docs/upstream-README.md`](docs/upstream-README.md).
 
-### Names used in the poster and in the code
+### Names used in the report, the poster and the code
 
-| Poster | `--variant` (`--level`) | Description |
-|---|---|---|
-| B | `B` | original DfpNet (2.33 M parameters) |
-| B-large | `B-large` | DfpNet with 33 base channels (capacity control, no block) |
-| M8 ... M64 | `MDv` (`8` ... `64`) | one SS2D Mamba block (VMamba version) in the encoder |
-| M64-dec | `MDv-dec` | the same block in the decoder at 64 x 64 |
-| **M64-loc** | **`MDv-local` (`64`)** | **M64 without the scan: the final architecture** |
-| SA64 | `SA` (`64`) | self-attention block at 64 x 64 |
-| Conv64 | `Conv` (`64`) | plain residual convolutional block at 64 x 64 |
-| TR / DRv11 | `TR` / `DRv11` | deep path removed / replaced by 11 Mamba blocks at 8 x 8 |
+| Report | Poster | `--variant` (`--level`) | Description |
+|---|---|---|---|
+| B | B | `B` | original DfpNet (2.33 M parameters) |
+| B-large | B-large | `B-large` | DfpNet with 33 base channels (capacity control, no block) |
+| M<sup>sh</sup><sub>8</sub> | - | `MD` (`8`) | first Mamba version: one 1-D Mamba layer shared by the 4 scan directions |
+| M<sub>8</sub> ... M<sub>64</sub> | M8 ... M64 | `MDv` (`8` ... `64`) | one SS2D Mamba block (VMamba version) in the encoder |
+| M<sup>dec</sup><sub>64</sub> | M64-dec | `MDv-dec` | the same block in the decoder at 64 x 64 |
+| **M<sup>loc</sup><sub>64</sub>** | **M64-loc** | **`MDv-local` (`64`)** | **M64 without the scan: the final architecture** |
+| SA<sub>64</sub> | SA64 | `SA` (`64`) | self-attention block at 64 x 64 |
+| Conv<sub>64</sub> | Conv64 | `Conv` (`64`) | plain residual convolutional block at 64 x 64 |
+| TR / DR-M | Truncated / DRv11 | `TR` / `DRv11` | deep path removed / replaced by 11 Mamba blocks at 8 x 8 |
 
 ## Setup
 
@@ -170,15 +171,24 @@ The full-data-set experiment ran on a cloud VM: see [`docs/cloud-guide.md`](docs
 
 ## Documentation
 
-- [`docs/report/report.pdf`](docs/report/report.pdf): the report.
+- [`docs/report/report.pdf`](docs/report/report.pdf): the report (LaTeX source `main.tex`; Fig. 2 from
+  `make_fig_results.py`).
+- [`docs/poster/poster.pdf`](docs/poster/poster.pdf): the poster (source `poster.tex`).
+- `docs/results/`, `docs/figures/`: all numbers and figures, as written by the scripts.
+
+### Process record
+
+Not needed to use or reproduce the code, but kept as evidence of how the results were obtained (the report's
+"pre-registered" and "executed once" claims can be checked here):
+
 - [`docs/lab-notebook.md`](docs/lab-notebook.md): chronological record of every decision, experiment and result,
   including negative results and corrections.
-- [`docs/preregistration-*.md`](docs/): the pre-registered test comparisons.
+- [`docs/preregistration-*.md`](docs/): pre-registrations of the later experiments and test passes (the earlier
+  ones are entries of the notebook), each committed before the runs or the test pass it fixes.
 - [`docs/setup-log.md`](docs/setup-log.md): environment and data set installation, with checksums.
-- `docs/results/`, `docs/figures/`: all numbers and figures, as written by the scripts.
 - The one-off scripts used while running the experiments (night launchers, single test sessions, exploratory
   analyses) are not in the repository any more; the notebook refers to them by path, and they are at the git tag
-  `experiments-final`.
+  `experiments-final`. The submitted version is the tag `v1.0-submission`.
 
 ## Credits and license
 
@@ -197,3 +207,7 @@ L. Prantl and X. Hu (Apache-2.0; [`LICENSE`](LICENSE)). The original training co
 The Mamba blocks use [mamba-ssm](https://github.com/state-spaces/mamba) (Gu and Dao, Apache-2.0);
 `mdf/mamba_ref.py` adapts its reference selective scan. `SS2DVMamba` re-implements the SS2D module of
 [VMamba](https://github.com/MzeroMiko/VMamba) (Liu et al. 2024, MIT).
+
+**AI assistance.** The code, the analyses and the documentation of this repository were developed with the help of
+an AI coding assistant (Claude Code), under the direction and review of the authors. The research questions, the
+experimental design, the decisions recorded in the lab notebook and the conclusions are the authors'.

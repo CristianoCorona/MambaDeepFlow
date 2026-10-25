@@ -1,4 +1,4 @@
-# Sourced by the scripts in scripts/cloud/: TMPDIR on the disk (CLAUDE.md) and PY = python of the conda env "mdf"
+# Sourced by the scripts in scripts/cloud/: TMPDIR on the disk (docs/setup-log.md) and PY = python of the conda env "mdf"
 # (~/miniforge3 on the VM, created by setup_vm.sh; ~/miniconda3 on the laptop; or `conda run`).
 export TMPDIR="${TMPDIR_MDF:-$HOME/.cache/pip-tmp}"
 mkdir -p "$TMPDIR"

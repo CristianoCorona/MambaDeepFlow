@@ -169,7 +169,7 @@ The symlinks and the training/test outputs are listed in `.gitignore`.
 ## 6. Original baseline smoke test (indicative)
 
 > **Indicative only: single run, random seed** (the original `runTrain.py` draws a random seed and prints it;
-> CLAUDE.md requires an explicit `--seed`, which the unmodified script does not support).
+> the project rules (docs/lab-notebook.md, 2026-10-26) require an explicit `--seed`, which the unmodified script does not support).
 > Numbers below are not suitable for model comparison.
 
 Measurement conditions:

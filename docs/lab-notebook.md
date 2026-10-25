@@ -4565,3 +4565,74 @@ MDv64 5.47 %, MDv64-local 5.78 % (`docs/results/test-final/t1_summary.csv`); M8 
 empty).
 
 **Open questions.** None.
+
+## 2026-10-26 Report added; final consistency check of the report against code and results; CLAUDE.md out of the repository
+
+**Context / why.** The report (IEEEtran, 4 pages) is final. Before submission: (1) check that every number and
+every description of the method in the report agrees with the code and the committed results; (2) decide what of the
+working material stays in the delivered repository.
+
+**Decision or action.**
+- `docs/report/` committed: `main.tex`, `references.bib`, `report.pdf`, `img/fig_block.pdf`, `img/fig_results.pdf`,
+  and `make_fig_results.py` (the script that draws Fig. 2 from hard-coded numbers; it was only in the Overleaf
+  export). The poster PDF was renamed by the experimenter: `docs/poster/dml_poster.pdf` -> `docs/poster/poster.pdf`
+  (correction to the entry "Poster sources added", which names the old file).
+- Consistency check (read-only, every value compared with its source):
+  - Table I, test column: MD8, MDv8, DRv11, TR, MDv64, MDv64-local (rel_all, rel_vy) from `docs/results/test`,
+    `test-mdv8`, `test-confirm-dr`, `test-confirm-mdv64`, `test-final` (two-level `ci2` intervals): all equal.
+    Text: MDv64 aggregate -0.55 [-1.19, -0.01], median -0.50 [-1.25, +0.03], rel_p -1.79 [-5.40, +0.09], median rel_p
+    -0.01 [-1.43, +0.92]; MDv64-local rel_p -1.37 [-3.38, -0.12]; MDv64-local - MDv64 +0.31 [-0.15, +1.11];
+    profiles improving 87 % / 90 %; wall band vy -11.0 % / -9.8 %: all equal.
+  - Validation column and text: `val-final`, `val-mdv8`, `val-confirm-dr`, `val-ablation64-8seed`,
+    `val-final-mdv64local`, `val-explore-8seed` (B-large - B -0.00 [-0.20, +0.17]); the five one-ingredient
+    ablations -0.59 ... -0.75, all intervals below 0, none distinguishable from MDv64-local; Fig. 2 values
+    (6.07, 5.98, 5.89, 5.73, 5.32, MDv64-dec 5.76): all equal.
+  - Parameters from the code (`models.build_from_cfg`, `ablation.used_param_count`): +116,736 / +169,216 / +147,720 /
+    +22,656 / -1,838,720 / +20,800 / +7,232 / +4,288 / +6,956 / +55,936, ladder 3,648-43,520 used parameters: all
+    equal. Training time vs B from `it_per_s_train` of the 133-epoch runs: all equal after rounding except DR-M
+    (2.86x vs B, 2.88x vs B-GH; the table said 2.8x).
+  - Other facts: receptive field 4 -> 46 px, deep path 78.8 % of the weights, 79,667 iterations, Adam betas
+    (0.5, 0.999) and the LR schedule (`train/utils.py` computeLR), 5,998 / 402 files on 1,371 / 85 airfoils,
+    390 / 400 random-split overlap, test / validation 1.14 vs 1.50, channel weights 0.046 / 0.825 / 0.129, MDv8
+    training L1 -16 %, p tail (2.5 % of samples, 14.8 % of rel_p), full set 53,830 = 50,774 + 3,056 files,
+    MDv64-local - B -0.222 [-0.414, -0.035] (-4.7 % vs -8.2 %), angle range +-22.5 deg (`data/dataGen.py`, pi/8):
+    all agree. The descriptions of SS2D, of the shared-layer MD, of MDv64-local (scan replaced by D x), of Conv64,
+    of the zero initialisation and of the parameter-matched DR-M agree with `mdf/`.
+- `docs/report/main.tex` edited (report.pdf NOT recompiled here, no LaTeX on this machine; the experimenter
+  recompiles it): DR-M time 2.8x -> 2.9x; footnote with the repository URL in the Introduction; header comment
+  points to `docs/report/make_fig_results.py`.
+- Delivered repository (decisions of the experimenter): the lab notebook and the pre-registrations stay (they are
+  the evidence for the report's "pre-registered" and "executed once"), presented in the README as a "Process
+  record" after the user documentation. `CLAUDE.md` (the instruction file of the AI coding assistant: working rules,
+  local paths, environment lessons) is removed from the repository and ignored; it stays on the local disk. The
+  README states that an AI coding assistant was used. Alternative considered: a "showcase" release without notebook
+  and pre-registrations (rejected: the report's claims would no longer be checkable from the delivered repository).
+- The header of this notebook and some past entries refer to `CLAUDE.md`. Its project rules, as they stood on
+  2026-10-26, are recorded here verbatim:
+
+  Rules:
+  - Do NOT modify train/DfpNet.py, runTrain.py, runTest.py, dataset.py (reference baseline). New code goes in new files.
+  - Data lives outside the repo (symlinked into data/); never commit data, checkpoints, results.
+  - Every run: explicit --seed, same seeds across models, log config + git commit hash.
+  - Report evidence (command output, numbers), not just "done".
+
+  Lab notebook (standing rule):
+  - Keep docs/lab-notebook.md as a chronological log (newest entry last). Add an entry for every decision, experiment,
+    change of plan or notable finding, BEFORE committing the related code, and commit it together with the code.
+  - Entry format: date (YYYY-MM-DD) and title; Context / why; Decision or action (with alternatives considered);
+    Evidence (commands, key numbers, run IDs, commit hash); Open questions.
+  - Record negative results and abandoned approaches, with the reason.
+  - Never rewrite past entries; add a correction entry instead.
+  - English only. The repo is public: no personal paths, names or credentials.
+  - docs/setup-log.md remains the environment record; the notebook links to it.
+- README: names table with a "Report" column (M^sh_8 = `MD`, DR-M = `DRv11`, ...), poster link updated,
+  "Process record" section, "AI assistance" statement. `mdf/__init__.py`: the same report names in its table
+  (docstring only). Tag `v1.0-submission` on the commit of this entry.
+
+- Comments that pointed to `CLAUDE.md` outside this notebook now point to the notebook / setup log:
+  `docs/setup-log.md` (seed note), `docs/figures/poster/fig_block.tex` (comment), `scripts/cloud/env.sh` (comment).
+
+**Evidence.** Sources listed above; `make_fig_results.py` runs (`ok`). AST of `mdf/*.py` without docstrings identical
+to tag `experiments-final`; `pytest tests/` result in the commit message of this entry.
+
+**Open questions.** report.pdf must be recompiled from the edited `main.tex` (Overleaf) and committed.
