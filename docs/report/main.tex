@@ -78,7 +78,7 @@ the mean flow affordably.
 
 A neural network trained on RANS solutions can replace the numerical solver when a design loop requires thousands of solutions, mapping geometry and flow conditions to the solution in a single forward pass. Thuerey et al.~\cite{thuerey2020} showed
 that a convolutional U-Net, DfpNet, predicts pressure and velocity around
-airfoils with a combined relative error (Sec.~\ref{sec:metrics}) below 3\%. While convolutions operate locally, requiring a U-Net to repeatedly reduce resolution to span the entire domain, pressure is governed by an elliptic Poisson equation, making its local values globally dependent on the entire flow field. Global mixing
+airfoils with a combined relative error (Sec.~\ref{sec:metrics}) below 3\%. While convolutions operate locally, requiring a U-Net to repeatedly reduce resolution to span the whole domain, pressure is governed by an elliptic Poisson equation, making its local values dependent on the entire flow field. Global mixing
 mechanisms can overcome this mismatch: self-attention~\cite{vaswani2017} relates all pairs of tokens at quadratic cost, while Mamba~\cite{gu2024mamba}, a selective state-space model (SSM), propagates information at linear cost, and VMamba~\cite{liu2024vmamba} extends it to images.
 
 We ask whether a Mamba block improves DfpNet, where in the network it helps,
@@ -97,15 +97,16 @@ For turbulent flows at high Reynolds number ($\mathrm{Re}\in[0.5,5]\times10^6$
 in our data), the RANS approach decomposes velocity and pressure into a mean and a
 fluctuating part, $u_i=\bar u_i+u_i'$ and $p=\bar p+p'$, with
 $\overline{u_i'}=0$; the smoother mean fields can thus be computed on much coarser grids. For a steady, incompressible flow, averaging the continuity and momentum equations yields equations for $\bar u_i$ and $\bar p$ in which the nonlinear convective term produces the Reynolds stresses $\overline{u_i'u_j'}$, new unknowns that leave the system unclosed. In the
-training data~\cite{thuerey2020}, the system is completed with the Boussinesq hypothesis, which expresses the stresses through a turbulent viscosity, obtained from the one-equation Spalart--Allmaras model~\cite{spalart1992}. Taking the divergence of the averaged momentum equation and using continuity ($\partial_i\bar u_i=0$), the mean pressure satisfies a Poisson equation ($\rho$: density; repeated indices summed)
+training data~\cite{thuerey2020}, the system is completed with the Boussinesq hypothesis, which expresses the stresses through a turbulent viscosity, obtained from the one-equation Spalart--Allmaras model~\cite{spalart1992}. Taking the divergence of the averaged momentum equation and using continuity ($\partial_i\bar u_i=0$), the mean pressure satisfies a Poisson equation ($\rho$: density; repeated indices are summed)
+
 \begin{equation}
   \nabla^2 \bar p = -\rho\,\partial_i\partial_j
     \big(\bar u_i\bar u_j + \overline{u_i'u_j'}\big),
   \label{eq:poisson}
 \end{equation}
-which is elliptic: the pressure at any point depends on the source over the
-whole domain (\emph{global coupling}). The mean fields $\bar p$, $\bar u_x$,
-$\bar u_y$ are the targets of the network, denoted  by $p$, $v_x$, $v_y$ below.
+which is elliptic, meaning the pressure at any point depends on the source over the whole domain. The mean fields $\bar p$, $\bar u_x$, $\bar u_y$ are the targets of the network, denoted  by $p$, $v_x$, $v_y$ below.
+
+%(\emph{global coupling})
 
 \subsection{U-Net and receptive field}
 \label{sec:unet}
@@ -117,9 +118,8 @@ maps from the encoder to the decoder. DfpNet~\cite{thuerey2020}
 is trained with an L1 loss. Its first layer is a single convolution, so the
 $64\times64$ skip features undergo minimal processing; the receptive field
 grows with depth, from 4\,px at $64\times64$ to 46\,px at $8\times8$, while
-the deeper stages (79\% of the weights) extend it to the whole domain. Thus,
-the U-Net already covers the whole domain, but does little processing at high
-resolution.
+the deeper stages (79\% of the weights) extend it to the entire domain. Thus,
+the U-Net already has global coverage, but lacks adequate representation capacity at high spatial resolution.
 
 %A U-Net~\cite{ronneberger2015} uses skip connections to concatenate feature maps from the encoder to the decoder. In particular, DfpNet~\cite{thuerey2020} is symmetric, and its encoder employs seven stride-2 convolutions to reduce spatial dimensions from $128\times128$ down to $1\times1$ while increasing channel depth from 32 to 256. With 2.33 M parameters, the network is trained using an L1 loss. Its first layer comprises a single convolution, meaning the $64\times64$ features passed to the decoder via the skip connection undergo minimal processing; receptive field expansion relies instead on network depth. Specifically, the receptive field grows from 4\,px at a resolution of $64\times64$ to 46\,px at $8\times8$, while the deeper stages below (accounting for roughly 79\% of the model's weights) extend it across the entire domain. Thus, while the U-Net already achieves global coverage, it lacks adequate representation capacity at high spatial resolutions.
 
@@ -131,21 +131,22 @@ For global mixing, a feature map at spatial resolution $H \times W$ is reshaped 
   \mathrm{Attn}(X) = \mathrm{softmax}\left(QK^{\top}/\sqrt{d}\right)V,
   \label{eq:attn}
 \end{equation}
-where $Q$, $K$, $V$ are linear projections of $X$: all locations interact
+where $Q$, $K$, $V$ are linear projections of $X$. All locations interact
 directly, at cost $\mathcal{O}(L^2)$ ($1.7 \times 10^7$ pairs at $64 \times 64$).
 
 Conversely, a state-space model (SSM) maps an input sequence $x(t)$ to an
-output $y(t)$ through a hidden state $h(t)$, via $h'(t) = A h(t) + B x(t)$,
-$y(t) = C h(t) + D x(t)$. Discretized with a step size $\Delta$ using a zero-order hold assumption ($\bar{A} = \exp(\Delta A)$, $\bar{B} \approx \Delta B$), it
-reduces to the linear recurrence~\cite{gu2022s4}
+output $y(t)$ through a hidden state $h(t)$ via $h'(t) = A h(t) + B x(t)$,
+$y(t) = C h(t) + D x(t)$. Discretized with a step size $\Delta$ using a Zero-Order Hold assumption ($\bar{A} = \exp(\Delta A)$, $\bar{B} \approx \Delta B$), the relation reduces to the linear recurrence~\cite{gu2022s4}
 \begin{equation}
   \mathbf{h}_t = \bar{A}\mathbf{h}_{t-1} + \bar{B}\mathbf{x}_t, \qquad \mathbf{y}_t = C\mathbf{h}_t + D\mathbf{x}_t,
   \label{eq:ssm}
 \end{equation}
-where $D$ is a per-channel skip term; each token influences all later ones at
-a linear cost $\mathcal{O}(L)$. Mamba~\cite{gu2024mamba} makes the SSM
-\emph{selective}: $\Delta$, $B$ and $C$ are computed from $\mathbf{x}_t$, so
-each token controls how much of the state is kept; since the recursion can be written using an associative operator, it is computed by a hardware-aware parallel scan rather than
+where $D$ is a per-channel skip term. Through this formulation, each token influences all later ones at
+a linear cost $\mathcal{O}(L)$. 
+
+Mamba~\cite{gu2024mamba} makes the SSM
+\emph{selective} by conditioning $\Delta$, $B$ and $C$ on the input $\mathbf{x}_t$, so
+each token controls how much of the state is kept. Moreover, since the recursion can be written using an associative operator, it is computed by a hardware-aware parallel scan rather than
 token by token.
 
 VMamba~\cite{liu2024vmamba} brings this to images with the SS2D block
@@ -153,7 +154,7 @@ VMamba~\cite{liu2024vmamba} brings this to images with the SS2D block
 into two branches of width $E$; one passes through a $3\times3$ depthwise
 convolution and SiLU, is flattened in four orders (rows and columns, forward
 and backward) and scanned by four SSMs with separate parameters; their outputs
-are mapped back to 2-D, summed, normalised by a LayerNorm and gated by the
+are then mapped back to 2D, summed, normalised by a LayerNorm and gated by the
 SiLU of the other branch, before an output projection back to $n_c$ channels.
 MambaOut~\cite{yu2025mambaout} found
 that the same block without the SSM (a Gated CNN) suffices for ImageNet
@@ -181,31 +182,31 @@ components and the binary airfoil mask, while targets ($p$, $v_x$, $v_y$) are
 normalized using $|\mathbf{v}_\infty|^2$ or $|\mathbf{v}_\infty|$ alongside
 fixed maximum values. We train on the reduced set (6,400 samples across 1,456
 airfoils) and evaluate on the official test set (90 samples, 30 unseen
-airfoils). In the repository's default validation split, 390 of the 400 files
+airfoils). 
+
+In the repository's default validation split, 390 of the 400 files
 share airfoils with the training set, thus measuring unseen flow conditions on
 known geometries. To validate on unseen shapes, we re-split strictly by
-airfoil (5,998 training / 402 validation files across 1,371 / 85 airfoils):
-the validation \relall{} of \B{} increases by $1.31\times$ and gets closer to
-the test level (test/validation ratio 1.14, vs.\ 1.50 with the random split).
+airfoil (5,998 training / 402 validation files across 1,371 / 85 airfoils), causing the validation \relall{} of baseline \B{} to increase by $1.31\times$ and get closer to the test level (test/validation ratio 1.14, vs.\ 1.50 with the random split).
 For \DR{} and \TR{} ($^{\dagger}$ in Table~\ref{tab:main}), 400 more files, one
 per training airfoil, were held out as a seen-shape validation: they train on
-5,598 files and are compared with \B{} retrained on the same split.
+5,598 files and are compared with \B{}, retrained on the same split.
 
 \subsection{Metrics and composition of the error}
 \label{sec:metrics}
 
 As in the official repository, the relative error of sample $s$ and channel
 $c \in \{p, v_x, v_y\}$ is $\mathrm{rel}_c(s) = \sum_i|o_{c,i}-t_{c,i}| /
-\sum_i|t_{c,i}|$, where $o$ and $t$ are prediction and target and $i$ runs over
-the $128\times128$ cells; it is averaged over samples, in percent. \relall{}
-pools all channels, which makes it a weighted mean:
+\sum_i|t_{c,i}|$, where $o$ and $t$ are prediction and target, and $i$ runs over
+the $128\times128$ cells. The aggregate metric \relall{}
+pools all channels via a weighted mean:
 \begin{equation}
   \mathrm{rel}_{\mathrm{all}}(s) = \sum_c w_c(s)\,\mathrm{rel}_c(s), \quad
   w_c(s) = \frac{\sum_i|t_{c,i}|}{\sum_{c'}\sum_i|t_{c',i}|}.
   \label{eq:relall}
 \end{equation}
-Validation weights average $0.046$ ($p$), $0.825$ ($v_x$) and $0.129$
-($v_y$): $v_x$ is mostly free stream, so $\mathrm{rel}_{\mathrm{all}} \approx
+Validation weights average $0.046$ for $p$, $0.825$ for $v_x$, and $0.129$
+for $v_y$: $v_x$ is mostly freestream, so $\mathrm{rel}_{\mathrm{all}} \approx
 \mathrm{rel}_{v_x}$, and one point gained on $v_y$ moves \relall{} by only
 0.13. Since a mean of ratios is
 dominated by samples with a small target signal (e.g.\ $v_y$ and $p$ at
@@ -249,7 +250,12 @@ only.}
 \subsection{Configurations}
 \label{sec:configs}
 
-\begin{figure}[t]
+Each configuration adds one residual block,
+$\mathbf{y} = \mathbf{x} + \mathrm{Mixer}(\mathrm{LN}(\mathbf{x}))$, after an
+encoder layer, feeding both the subsequent layer and the skip connection
+(Fig.~\ref{fig:arch}); the mixer is SS2D (following the official VMamba implementation, with $E=2n_c$ and state dimension $N=16$), self-attention, or scan-free SS2D, depending on the configuration. In addition, zero-initializing the output projection ensures exact identity with baseline \B{} at the start (for matched random seeds).
+
+\begin{figure}[H]
 \centering
 \includegraphics[width=\columnwidth]{img/fig_block.pdf}
 \caption{\textbf{Top:} DfpNet with level resolutions and insertion points
@@ -259,45 +265,35 @@ with the SS2D mixer; in \Mloc{} (M64-loc) the scan is replaced by $D\mathbf{x}$.
 \label{fig:arch}
 \end{figure}
 
-Each configuration adds one residual block,
-$\mathbf{y} = \mathbf{x} + \mathrm{Mixer}(\mathrm{LN}(\mathbf{x}))$, after an
-encoder layer, feeding both the subsequent layer and the skip connection
-(Fig.~\ref{fig:arch}); the mixer is SS2D, self-attention or scan-free SS2D,
-depending on the configuration. Zero-initializing the output projection
-ensures exact identity with \B{} at initialization (for matched random seeds).
-The SS2D mixer follows the official VMamba implementation, with $E=2n_c$ and
-state dimension $N=16$.
-
 Configurations \M{l} and \Mdec{} insert the block at resolution $l \times l$
-in the encoder and decoder, respectively. \Msh{8} is an earlier simplification: the four scans share one complete
-1-D Mamba layer (projections, gate and its own short convolution, no output
-norm), and their outputs are summed. \SA{64} uses 4-head self-attention. For
+in the encoder and decoder, respectively; \Msh{8} is an earlier simplification, where the four scans share one complete
+1D Mamba layer (projections, gate and its own short convolution, no output
+norm) and their outputs are summed; \SA{64} uses 4-head self-attention. For
 deep-path analysis, \TR{} truncates DfpNet below $8\times8$, while \DR{}
 replaces the pruned layers with 11 SS2D blocks, parameter-matched to B.
 
-To isolate the scan, \Mloc{} replaces each scan path with its skip term
+To isolate non-sequential effects, \Mloc{} replaces each scan path with its skip term
 $D\mathbf{x}$~\eqref{eq:ssm}. This block is close to the local Gated CNN of MambaOut~\cite{yu2025mambaout}, with no spatial
 propagation beyond $3\times3$. Five ablations remove one component at a time
 (gating, output/input norm, expansion, or a dense convolution). As controls,
 \Conv{} uses two $3\times3$ convolutions (similar parameter count, no norm or
-gating), and \Blarge{} widens \B{} to 33 base channels, adding about as many
-parameters as the $8\times8$ blocks without a new block. Additional variants
+gating), and \Blarge{} widens \B{} to 33 base channels, adding approximately as many parameters as the $8\times8$ blocks without a new block. Additional variants
 ($32\times32$ insertion, multi-block placement) yield consistent findings.
 
 \subsection{Protocol and statistics}
 \label{sec:protocol}
 
-All models follow the repository's training protocol: Adam optimizer
+All models follow the repository's training protocol for a fair comparison: Adam optimizer
 ($\text{lr}=6\times10^{-4}$, $\beta=(0.5,0.999)$), L1 loss, batch size 10,
 evaluation of the final checkpoint. The learning rate is constant for the
 first half of training, then decays towards $0.1\,\text{lr}$; as this schedule
 is defined in epochs, we fix 133 epochs (79,667 iterations), the longest of
 three budgets (17, 67, 133) whose validation gain over the previous one
 exceeded the seed-to-seed noise, a rule set before the runs. To account for
-non-deterministic CUDA kernels, we use 8 seeds for \B{} and primary models, 5
+non-deterministic CUDA kernels, we used 8 seeds for baseline \B{} and primary models, 5
 for ablations and \DR/\TR, and 3 for the full dataset.
 
-Comparisons use the sample-wise mean of seed-averaged differences relative to
+Performance comparisons use the sample-wise mean of seed-averaged differences relative to
 \B, with 95\% confidence intervals (CI) from a two-level
 bootstrap~\cite{efron1993}: each of 10,000 repetitions resamples the seeds of
 each configuration (training variability) and the airfoils with all their
@@ -329,13 +325,12 @@ representations: on the training set, \M{8} achieves a 16\% lower L1 loss than
 training fit.
 
 As hypothesized (Sec.~\ref{sec:unet}), the deep path provides sufficient
-global receptive field. On the 5,598-file split (Sec.~\ref{sec:data}),
+global receptive field. On the filtered split (Sec.~\ref{sec:data}),
 truncating it (\TR) is clearly worse on validation (\relall{} $+0.73$
 \ci{+0.58}{+0.89}), while on the test set the interval touches zero ($+0.57$
 \ci{-0.01}{+1.03}). Replacing the pruned layers with 11 SS2D blocks (\DR)
 recovers the loss (\DR$-$\TR{} $-0.69$ \ci{-1.10}{-0.26} on test) and is not
-distinguishable from \B{} ($-0.12$ \ci{-0.51}{+0.29}). Hence global context is
-necessary and SSM blocks can provide it, but the U-Net already captures it
+distinguishable from \B{} ($-0.12$ \ci{-0.51}{+0.29}). Hence, while global context is necessary and SSM blocks can provide it, the U-Net already captures it
 (though \TR{} also removes 79\% of the parameters).
 
 \subsection{The gain is at the highest resolution}
@@ -343,7 +338,7 @@ necessary and SSM blocks can provide it, but the U-Net already captures it
 
 Moving Mamba blocks to higher encoder resolutions progressively improves
 validation \relvy{} (Fig.~\ref{fig:abl}a), from 5.98\% at $8\times8$ to 5.32\% at $64\times64$
-(baseline 6.07\%); in the decoder the block helps less. On the test set, \M{64}
+(vs. baseline 6.07\%); in the decoder the block helps less. On the test set, \M{64}
 confirms the pre-registered hypothesis, reducing \relvy{} by $-1.17$
 \ci{-2.47}{-0.43} points (18\% relative, with 87\% of the airfoils improving)
 and lowering the aggregate ratio ($-0.55$ \ci{-1.19}{-0.01}) and, almost
@@ -356,7 +351,7 @@ $3.7\times$ the training time.
 
 Fig.~\ref{fig:abl}b shows that removing the spatial scan (\Mloc) retains most
 validation gains ($-0.67$ \ci{-0.98}{-0.37} vs.\ \B; $+0.08$ \ci{-0.07}{+0.25}
-vs.\ \M{64}): long-range mixing is not strictly required. The gain is not
+vs.\ \M{64}), indicating long-range mixing is not strictly required. The gain is not
 specific to Mamba: self-attention (\SA{64}) is not distinguishable from
 \M{64} ($+0.13$ \ci{-0.07}{+0.35}), but requires $17\times$ the training time. Not every
 block helps, though: \Conv{} shows no demonstrated gain over \B{} ($-0.12$
@@ -381,7 +376,7 @@ Band: validation CI of \M{64}.}
 Our final architecture combines \B{} with \Mloc{} (+7,232 parameters, +7\%
 FLOPs, $1.6\times$ training time). On the test set, its pre-registered
 hypothesis is confirmed: \relvy{} drops by $-0.87$ points \ci{-1.60}{-0.35}
-(13\% relative), with 90\% of airfoils improving. This is about three quarters
+(13\% relative reduction), with 90\% of airfoils improving. This is about three quarters
 of the gain of \M{64} ($-0.87$ vs.\ $-1.17$); the direct comparison
 \Mloc$-$\M{64} ($+0.31$ \ci{-0.15}{+1.11}) shows no demonstrated difference in
 either direction, so the contribution of the SSM remains undetermined. Unlike
@@ -392,7 +387,7 @@ to be required here.
 \label{sec:why}
 
 We expected gains on $p$ (Eq.~\eqref{eq:poisson}) and found them on $v_y$.
-Our untested reading: the smooth, long-range part of $p$ is already captured
+Our untested reading is that the smooth, long-range part of $p$ is already captured
 by the U-Net, which works like a multigrid V-cycle~\cite{he2019mgnet}, while residual $p$ errors concentrate in severe
 separation tails missed by all models (2.5\% of validation samples account for
 15\% of total \relp). On the test set the mean \relp{} decreases for both
@@ -402,7 +397,7 @@ change sits in a few samples, and $p$ was not a pre-registered hypothesis.
 
 The gains are instead local: within a 4-pixel wall band, the $v_y$ error drops
 by 11\% (\M{64}) and 10\% (\Mloc). Since $v_y$ is mostly induced by the
-airfoil, this shows in \relvy, whereas the free stream dilutes it in $v_x$ and
+airfoil geometry, this improvement shows in \relvy, while the freestream dilutes it in $v_x$ and
 \relall.
 
 \subsection{More data and limitations}
@@ -410,25 +405,24 @@ airfoil, this shows in \relvy, whereas the free stream dilutes it in $v_x$ and
 
 On the full dataset (53,830 samples, including sheared airfoils; validation
 only, 3 seeds, after the test passes) all models improve markedly and the gain
-halves: \Mloc$-$\B{} is $-0.22$ \ci{-0.41}{-0.04} on regular validation files
+halves: \Mloc achieves a difference to \B{} of $-0.22$ \ci{-0.41}{-0.04} on regular validation files
 ($-4.7\%$ vs.\ $-8.2\%$ on the reduced set, same seeds), concentrated near the
 wall (wall-band $v_y$ MAE  $-6\%$), with no demonstrated change in the aggregate ratio.
 
-Key limitations are a test suite of 30 airfoils, five test passes, a single
+Finally, key limitations include a test suite of 30 airfoils, five test passes, a single
 optimizer for all architectures, and separated flows at high angles, which
-every model misses and whose steady RANS targets may not be fully converged
-(not checked).
+every model misses and whose steady RANS targets may not be fully converged. Addressing these limitations is left for future work.
 
 % =====================================================================
-\section{Conclusion and Future Work}
+\section{Conclusion}
 
 Mamba blocks bring no benefit at deep U-Net levels, where global context is
-already established. At high resolution they reduce the $v_y$ error by 18\% on
-the test set, a gain concentrated near the airfoil and due mostly to the local
-block design: without the SSM (\Mloc) it is 13\% at $1.6\times$ the training
-time, consistent with MambaOut; eight times more data halves it. Future work:
-why \Conv{} fails, the share of the SSM, several scan-free blocks at high
-resolution, lift and drag.
+already established. Instead, at high resolution they reduce the $v_y$ error by 18\% on
+the test set, a gain concentrated near the airfoil and mostly due to the local
+block design: without the SSM (\Mloc) it becomes 13\% at $1.6\times$ the training
+time, consistent with MambaOut; eight times more data halves it. 
+
+%Future work: why \Conv{} fails, the share of the SSM, several scan-free blocks at high resolution, lift and drag.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
